@@ -18,11 +18,12 @@ export interface DSLOptions {
  * This eliminates shared mutable state across async interleaving.
  */
 export interface TaskDSL {
-  play(note: string | number, opts?: Record<string, number>): Promise<void>
+  play(note: string | number, opts?: Record<string, number>): Promise<{ nodeId: number } | void>
   sleep(beats: number): Promise<void>
   sample(name: string, opts?: Record<string, number>): Promise<void>
   cue(name: string, ...args: unknown[]): void
   sync(name: string): Promise<unknown[]>
+  control(nodeRef: { nodeId: number }, opts: Record<string, number>): void
   use_synth(name: string): void
   use_bpm(bpm: number): void
   rrand(min: number, max: number): number
@@ -30,6 +31,8 @@ export interface TaskDSL {
   choose<T>(arr: T[]): T
   dice(sides: number): number
   use_random_seed(seed: number): void
+  tick(name?: string): number
+  look(name?: string): number
   ring: typeof ring
   spread: typeof spread
   chord: typeof chord
@@ -58,18 +61,31 @@ export function createDSLContext(options: DSLOptions) {
   /**
    * Create a full set of DSL functions bound to a specific task.
    */
+  // Per-task tick counters (reset each loop iteration)
+  const tickCounters = new Map<string, Map<string, number>>()
+
+  function getTickMap(taskId: string): Map<string, number> {
+    let m = tickCounters.get(taskId)
+    if (!m) { m = new Map(); tickCounters.set(taskId, m) }
+    return m
+  }
+
+  let nextNodeRef = 1
+
   function makeTaskDSL(taskId: string): TaskDSL {
-    async function play(note: string | number, opts?: Record<string, number>): Promise<void> {
+    async function play(note: string | number, opts?: Record<string, number>): Promise<{ nodeId: number }> {
       const task = scheduler.getTask(taskId)!
       const midi = noteToMidi(note)
       const freq = midiToFreq(midi)
+      const nodeId = nextNodeRef++
       scheduler.emitEvent({
         type: 'synth',
         taskId,
         virtualTime: task.virtualTime,
         audioTime: task.virtualTime,
-        params: { synth: task.currentSynth, note: midi, freq, ...opts },
+        params: { synth: task.currentSynth, note: midi, freq, _nodeRef: nodeId, ...opts },
       })
+      return { nodeId }
     }
 
     async function sleep(beats: number): Promise<void> {
@@ -84,6 +100,17 @@ export function createDSLContext(options: DSLOptions) {
         virtualTime: task.virtualTime,
         audioTime: task.virtualTime,
         params: { name, ...opts },
+      })
+    }
+
+    function control(nodeRef: { nodeId: number }, opts: Record<string, number>): void {
+      const task = scheduler.getTask(taskId)!
+      scheduler.emitEvent({
+        type: 'control',
+        taskId,
+        virtualTime: task.virtualTime,
+        audioTime: task.virtualTime,
+        params: { _nodeRef: nodeRef.nodeId, ...opts },
       })
     }
 
@@ -109,6 +136,7 @@ export function createDSLContext(options: DSLOptions) {
       sample,
       cue,
       sync,
+      control,
       use_synth,
       use_bpm,
       rrand: (min: number, max: number) => getRandom(taskId).rrand(min, max),
@@ -116,6 +144,15 @@ export function createDSLContext(options: DSLOptions) {
       choose: <T>(arr: T[]) => getRandom(taskId).choose(arr),
       dice: (sides: number) => getRandom(taskId).dice(sides),
       use_random_seed: (seed: number) => getRandom(taskId).reset(seed),
+      tick: (name: string = '__default') => {
+        const m = getTickMap(taskId)
+        const v = (m.get(name) ?? -1) + 1
+        m.set(name, v)
+        return v
+      },
+      look: (name: string = '__default') => {
+        return getTickMap(taskId).get(name) ?? 0
+      },
       ring,
       spread,
       chord,
@@ -136,6 +173,8 @@ export function createDSLContext(options: DSLOptions) {
   function live_loop(name: string, asyncFn: (ctx: TaskDSL) => Promise<void>): void {
     const taskDSL = makeTaskDSL(name)
     const wrappedFn = async () => {
+      // Reset tick counters each iteration (Sonic Pi behavior)
+      tickCounters.delete(name)
       await asyncFn(taskDSL)
     }
     scheduler.registerLoop(name, wrappedFn)

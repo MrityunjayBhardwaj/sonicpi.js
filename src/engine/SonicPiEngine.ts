@@ -68,6 +68,8 @@ export class SonicPiEngine implements LiveCodingEngine {
   private captureScheduler = new CaptureScheduler()
   private bridgeOptions: SuperSonicBridgeOptions
   private schedAheadTime: number
+  /** Maps DSL nodeRef → SuperSonic nodeId for control messages */
+  private nodeRefMap = new Map<number, number>()
 
   constructor(options?: {
     bridge?: SuperSonicBridgeOptions
@@ -263,11 +265,14 @@ export class SonicPiEngine implements LiveCodingEngine {
           for (const [k, v] of Object.entries(event.params)) {
             if (typeof v === 'number') params[k] = v
           }
+          const nodeRef = event.params._nodeRef as number | undefined
           this.bridge.triggerSynth(
             event.params.synth as string ?? 'beep',
             audioTime,
             params
-          ).catch(err => {
+          ).then(realNodeId => {
+            if (nodeRef) this.nodeRefMap.set(nodeRef, realNodeId)
+          }).catch(err => {
             this.runtimeErrorHandler?.(
               err instanceof Error ? err : new Error(String(err))
             )
@@ -289,6 +294,26 @@ export class SonicPiEngine implements LiveCodingEngine {
               err instanceof Error ? err : new Error(String(err))
             )
           })
+        } else if (event.type === 'control') {
+          const nodeRef = event.params._nodeRef as number | undefined
+          if (nodeRef) {
+            const realNodeId = this.nodeRefMap.get(nodeRef)
+            if (realNodeId) {
+              const controlParams: Record<string, number> = {}
+              for (const [k, v] of Object.entries(event.params)) {
+                if (k !== '_nodeRef' && typeof v === 'number') controlParams[k] = v
+              }
+              // Convert note names to MIDI if present
+              if (controlParams['note']) {
+                controlParams['freq'] = midiToFreq(controlParams['note'])
+              }
+              const paramList: (string | number)[] = []
+              for (const [k, v] of Object.entries(controlParams)) {
+                paramList.push(k, v)
+              }
+              this.bridge.send?.('/n_set', realNodeId, ...paramList)
+            }
+          }
         }
       }
 

@@ -374,6 +374,14 @@ function transpileLine(line: string, insideLoop: boolean = true): string {
     return `await ctx.sample(${args})`
   }
 
+  // --- control node, opts ---
+  const controlMatch = line.match(/^control\s+(\w+)\s*,\s*(.+)$/)
+  if (controlMatch) {
+    const nodeVar = controlMatch[1]
+    const args = transpileArgs(controlMatch[2])
+    return `ctx.control(${nodeVar}, ${args})`
+  }
+
   // --- sync :name ---
   const syncMatch = line.match(/^sync\s+:(\w+)\s*$/)
   if (syncMatch) {
@@ -441,10 +449,14 @@ function transpileExpression(expr: string): string {
   // Without parens: ring 1, 2, 3
   result = result.replace(/^(ring|spread)\s+([^(].+)$/, 'ctx.$1($2)')
 
-  // rrand, choose, dice, rrand_i → ctx.*
+  // rrand, choose, dice, rrand_i, tick, look → ctx.*
   result = result.replace(/\b(rrand_i|rrand|choose|dice)\s*\(/g, 'ctx.$1(')
   // Without parens: rrand 0, 1
   result = result.replace(/\b(rrand_i|rrand)\s+([^(].+)$/, 'ctx.$1($2)')
+
+  // Standalone tick/look (as function call, not method)
+  result = result.replace(/\btick\s*\(/g, 'ctx.tick(')
+  result = result.replace(/\blook\s*\(/g, 'ctx.look(')
 
   // .tick → .tick()
   result = result.replace(/\.tick(?!\()/g, '.tick()')

@@ -263,6 +263,11 @@ export class SuperSonicBridge {
     return nodeId
   }
 
+  /** Send raw OSC message to SuperSonic. */
+  send(address: string, ...args: (string | number)[]): void {
+    this.sonic?.send(address, ...args)
+  }
+
   freeNode(nodeId: number): void {
     this.sonic?.send('/n_free', nodeId)
   }
