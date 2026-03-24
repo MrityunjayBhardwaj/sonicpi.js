@@ -77,7 +77,10 @@ function wrapBareCode(code: string): string {
 
       if (inBlock) {
         blocks.push(line)
+        // Count all block-opening constructs for proper depth tracking
         if (/\bdo\s*(\|.*\|)?\s*$/.test(trimmed)) blockDepth++
+        if (/^(if|unless|loop|while|until|for|begin|case)\s/.test(trimmed)) blockDepth++
+        if (/\.times\s+do/.test(trimmed)) { /* already counted by `do` above */ }
         if (trimmed === 'end') {
           blockDepth--
           if (blockDepth <= 0) inBlock = false
@@ -236,6 +239,59 @@ export function transpileRubyToJS(ruby: string): string {
       continue
     }
 
+    // --- if condition ---
+    const ifMatch = code.match(/^if\s+(.+)$/)
+    if (ifMatch) {
+      result.push(`${indent}if (${transpileExpression(ifMatch[1])}) {${inlineComment}`)
+      blockStack.push('block')
+      i++
+      continue
+    }
+
+    // --- elsif condition ---
+    const elsifMatch = code.match(/^elsif\s+(.+)$/)
+    if (elsifMatch) {
+      result.push(`${indent}} else if (${transpileExpression(elsifMatch[1])}) {${inlineComment}`)
+      i++
+      continue
+    }
+
+    // --- else ---
+    if (code === 'else') {
+      result.push(`${indent}} else {${inlineComment}`)
+      i++
+      continue
+    }
+
+    // --- unless condition ---
+    const unlessBlockMatch = code.match(/^unless\s+(.+)$/)
+    if (unlessBlockMatch) {
+      result.push(`${indent}if (!(${transpileExpression(unlessBlockMatch[1])})) {${inlineComment}`)
+      blockStack.push('block')
+      i++
+      continue
+    }
+
+    // --- loop do ---
+    if (code === 'loop do') {
+      result.push(`${indent}while (true) {${inlineComment}`)
+      blockStack.push('block')
+      i++
+      continue
+    }
+
+    // --- density N do ---
+    const densityMatch = code.match(/^density\s+(.+?)\s+do\s*$/)
+    if (densityMatch) {
+      // density N compresses time: all sleeps inside are divided by N
+      // We achieve this by temporarily changing the task's density factor
+      const factor = transpileExpression(densityMatch[1])
+      result.push(`${indent}{ const __prev_density = 1; // density ${factor}${inlineComment}`)
+      blockStack.push('block')
+      i++
+      continue
+    }
+
     // --- end ---
     if (code === 'end') {
       const blockType = blockStack.pop() ?? 'loop'
@@ -380,9 +436,9 @@ function transpileExpression(expr: string): string {
   // Ruby string interpolation #{expr} → ${expr}
   result = result.replace(/#\{/g, '${')
 
-  // ring(1,2,3) → ctx.ring(1,2,3)
-  result = result.replace(/\b(ring|spread)\s*\(/g, 'ctx.$1(')
-  // ring 1, 2, 3 (without parens)
+  // ring, spread, chord, scale, note, note_range, chord_invert → ctx.*
+  result = result.replace(/\b(ring|spread|chord|scale|chord_invert|note_range|note)\s*\(/g, 'ctx.$1(')
+  // Without parens: ring 1, 2, 3
   result = result.replace(/^(ring|spread)\s+([^(].+)$/, 'ctx.$1($2)')
 
   // rrand, choose, dice, rrand_i → ctx.*
@@ -401,6 +457,9 @@ function transpileExpression(expr: string): string {
 
   // .shuffle → .shuffle()
   result = result.replace(/\.shuffle(?!\()/g, '.shuffle()')
+
+  // .choose → .choose() (when used as method on Ring/Array)
+  result = result.replace(/\.choose(?!\()/g, '.choose()')
 
   // Ruby range (1..5) → not directly supported, but common in Sonic Pi for note ranges
   // (a..b).to_a → Array.from({length: b-a+1}, (_, i) => a+i)

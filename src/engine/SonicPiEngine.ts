@@ -146,11 +146,17 @@ export class SonicPiEngine implements LiveCodingEngine {
       // Build DSL parameter names and values for the executor
       const dslNames = [
         'live_loop', 'use_bpm', 'use_synth',
-        'ring', 'spread', 'noteToMidi', 'midiToFreq', 'noteToFreq',
+        'ring', 'spread', 'chord', 'scale', 'chord_invert', 'note', 'note_range',
+        'noteToMidi', 'midiToFreq', 'noteToFreq',
       ]
       const dslValues = [
         wrappedLiveLoop, topLevelUseBpm, topLevelUseSynth,
         this.dsl.ring, this.dsl.spread,
+        this.dsl._makeTaskDSL('__top__').chord,
+        this.dsl._makeTaskDSL('__top__').scale,
+        this.dsl._makeTaskDSL('__top__').chord_invert,
+        this.dsl._makeTaskDSL('__top__').note,
+        this.dsl._makeTaskDSL('__top__').note_range,
         this.dsl.noteToMidi, this.dsl.midiToFreq, this.dsl.noteToFreq,
       ]
 

@@ -30,6 +30,72 @@ export class Ring<T> {
     this._tick = 0
   }
 
+  /** Random element (uses Math.random — for seeded, use ctx.choose). */
+  choose(): T {
+    return this.items[Math.floor(Math.random() * this.items.length)]
+  }
+
+  /** Read tick without advancing. */
+  look(): T {
+    return this.at(this._tick)
+  }
+
+  /** Reverse the ring. */
+  reverse(): Ring<T> {
+    return new Ring([...this.items].reverse())
+  }
+
+  /** Shuffle the ring (Fisher-Yates). */
+  shuffle(): Ring<T> {
+    const arr = [...this.items]
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    return new Ring(arr)
+  }
+
+  /** Pick n random elements. */
+  pick(n: number): Ring<T> {
+    const result: T[] = []
+    for (let i = 0; i < n; i++) {
+      result.push(this.items[Math.floor(Math.random() * this.items.length)])
+    }
+    return new Ring(result)
+  }
+
+  /** First n elements. */
+  take(n: number): Ring<T> {
+    return new Ring(this.items.slice(0, n))
+  }
+
+  /** Drop first n elements. */
+  drop(n: number): Ring<T> {
+    return new Ring(this.items.slice(n))
+  }
+
+  /** Stretch: repeat each element n times. */
+  stretch(n: number): Ring<T> {
+    const result: T[] = []
+    for (const item of this.items) {
+      for (let i = 0; i < n; i++) result.push(item)
+    }
+    return new Ring(result)
+  }
+
+  /** Mirror: [1,2,3] → [1,2,3,2,1] */
+  mirror(): Ring<T> {
+    const mid = this.items.slice(1, -1).reverse()
+    return new Ring([...this.items, ...mid])
+  }
+
+  /** Repeat the ring n times. */
+  repeat(n: number): Ring<T> {
+    const result: T[] = []
+    for (let i = 0; i < n; i++) result.push(...this.items)
+    return new Ring(result)
+  }
+
   /** Convert to plain array. */
   toArray(): T[] {
     return [...this.items]

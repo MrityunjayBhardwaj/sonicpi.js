@@ -3,8 +3,10 @@ import { SeededRandom } from './SeededRandom'
 import { Ring, ring } from './Ring'
 import { spread } from './EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq } from './NoteToFreq'
+import { chord, scale, chord_invert, note, note_range } from './ChordScale'
 
 export { Ring, ring, spread, noteToMidi, midiToFreq, noteToFreq }
+export { chord, scale, chord_invert, note, note_range }
 
 export interface DSLOptions {
   scheduler: VirtualTimeScheduler
@@ -30,6 +32,11 @@ export interface TaskDSL {
   use_random_seed(seed: number): void
   ring: typeof ring
   spread: typeof spread
+  chord: typeof chord
+  scale: typeof scale
+  chord_invert: typeof chord_invert
+  note: typeof note
+  note_range: typeof note_range
   noteToMidi: typeof noteToMidi
   midiToFreq: typeof midiToFreq
   noteToFreq: typeof noteToFreq
@@ -111,6 +118,11 @@ export function createDSLContext(options: DSLOptions) {
       use_random_seed: (seed: number) => getRandom(taskId).reset(seed),
       ring,
       spread,
+      chord,
+      scale,
+      chord_invert,
+      note,
+      note_range,
       noteToMidi,
       midiToFreq,
       noteToFreq,
