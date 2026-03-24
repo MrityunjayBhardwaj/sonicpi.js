@@ -197,11 +197,10 @@ live_loop("drums", async (ctx) => {
     expect(engine.components.queryable).toBeUndefined()
   })
 
-  it('re-evaluate creates fresh scheduler (hot-swap on named loops)', async () => {
+  it('re-evaluate without playing creates fresh scheduler', async () => {
     const engine = new SonicPiEngine()
     await engine.init()
 
-    // First evaluation
     await engine.evaluate(`
       live_loop("drums", async (ctx) => {
         await ctx.play(60)
@@ -209,7 +208,6 @@ live_loop("drums", async (ctx) => {
       })
     `)
 
-    // Second evaluation with different code
     const result = await engine.evaluate(`
       live_loop("drums", async (ctx) => {
         await ctx.play(64)
@@ -218,6 +216,114 @@ live_loop("drums", async (ctx) => {
     `)
 
     expect(result.error).toBeUndefined()
+    engine.dispose()
+  })
+
+  it('hot-swaps same-named loops while playing', async () => {
+    const engine = new SonicPiEngine()
+    await engine.init()
+
+    await engine.evaluate(`
+      live_loop("drums", async (ctx) => {
+        await ctx.play(60)
+        await ctx.sleep(1)
+      })
+    `)
+
+    engine.play()
+    const scheduler = (engine as any).scheduler
+
+    // Advance virtual time
+    scheduler.tick(100)
+    await new Promise(r => setTimeout(r, 50))
+
+    const vtBefore = scheduler.getTask('drums')?.virtualTime
+    expect(vtBefore).toBeGreaterThan(0)
+
+    // Re-evaluate with same loop name while playing
+    await engine.evaluate(`
+      live_loop("drums", async (ctx) => {
+        await ctx.play(64)
+        await ctx.sleep(0.5)
+      })
+    `)
+
+    // Scheduler instance preserved (not destroyed and recreated)
+    expect((engine as any).scheduler).toBe(scheduler)
+
+    // Virtual time preserved
+    expect(scheduler.getTask('drums')?.virtualTime).toBe(vtBefore)
+
+    engine.dispose()
+  })
+
+  it('stops removed loops on re-evaluate', async () => {
+    const engine = new SonicPiEngine()
+    await engine.init()
+
+    await engine.evaluate(`
+      live_loop("drums", async (ctx) => {
+        await ctx.play(60)
+        await ctx.sleep(1)
+      })
+      live_loop("bass", async (ctx) => {
+        await ctx.play(36)
+        await ctx.sleep(1)
+      })
+    `)
+
+    engine.play()
+    const scheduler = (engine as any).scheduler
+    scheduler.tick(100)
+    await new Promise(r => setTimeout(r, 50))
+
+    expect(scheduler.getTask('drums')?.running).toBe(true)
+    expect(scheduler.getTask('bass')?.running).toBe(true)
+
+    // Re-evaluate with only drums (bass removed)
+    await engine.evaluate(`
+      live_loop("drums", async (ctx) => {
+        await ctx.play(64)
+        await ctx.sleep(0.5)
+      })
+    `)
+
+    // Bass should be stopped
+    expect(scheduler.getTask('bass')?.running).toBe(false)
+    // Drums should still be running
+    expect(scheduler.getTask('drums')?.running).toBe(true)
+
+    engine.dispose()
+  })
+
+  it('stop then evaluate creates fresh scheduler', async () => {
+    const engine = new SonicPiEngine()
+    await engine.init()
+
+    await engine.evaluate(`
+      live_loop("drums", async (ctx) => {
+        await ctx.play(60)
+        await ctx.sleep(1)
+      })
+    `)
+
+    engine.play()
+    const scheduler1 = (engine as any).scheduler
+
+    engine.stop()
+    expect((engine as any).scheduler).toBeNull()
+
+    await engine.evaluate(`
+      live_loop("drums", async (ctx) => {
+        await ctx.play(64)
+        await ctx.sleep(0.5)
+      })
+    `)
+
+    // New scheduler created (not the old one)
+    expect((engine as any).scheduler).not.toBe(scheduler1)
+    expect((engine as any).scheduler).not.toBeNull()
+
     engine.dispose()
   })
 })

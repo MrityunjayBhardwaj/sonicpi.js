@@ -139,6 +139,15 @@ export class VirtualTimeScheduler {
     return this.tasks.get(taskId)
   }
 
+  /** Get names of all currently running loops. */
+  getRunningLoopNames(): string[] {
+    const names: string[] = []
+    for (const [name, task] of this.tasks) {
+      if (task.running) names.push(name)
+    }
+    return names
+  }
+
 
   /**
    * Hot-swap a running loop's function.

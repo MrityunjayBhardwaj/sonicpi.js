@@ -278,6 +278,13 @@ export class SuperSonicBridge {
     this.freeBuses.push(busNum)
   }
 
+  /** Free all synth and FX nodes (clean slate for re-evaluate). */
+  freeAllNodes(): void {
+    if (!this.sonic) return
+    this.sonic.send('/g_freeAll', 100)  // synths group
+    this.sonic.send('/g_freeAll', 101)  // FX group
+  }
+
   /** Send raw OSC message to SuperSonic. */
   send(address: string, ...args: (string | number)[]): void {
     this.sonic?.send(address, ...args)

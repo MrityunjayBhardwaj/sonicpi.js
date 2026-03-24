@@ -259,6 +259,18 @@ export function createDSLContext(options: DSLOptions) {
     scheduler.registerLoop(name, wrappedFn)
   }
 
+  /**
+   * Build a wrapped loop function without registering it with the scheduler.
+   * Used by the engine's collection mode during hot-swap re-evaluate.
+   */
+  function buildLoopFn(name: string, asyncFn: (ctx: TaskDSL) => Promise<void>): () => Promise<void> {
+    const taskDSL = makeTaskDSL(name)
+    return async () => {
+      tickCounters.delete(name)
+      await asyncFn(taskDSL)
+    }
+  }
+
   return {
     live_loop,
     ring,
@@ -268,6 +280,7 @@ export function createDSLContext(options: DSLOptions) {
     noteToFreq,
     _makeTaskDSL: makeTaskDSL,
     _getRandom: getRandom,
+    _buildLoopFn: buildLoopFn,
   }
 }
 

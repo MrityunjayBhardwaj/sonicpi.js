@@ -105,45 +105,58 @@ export class SonicPiEngine implements LiveCodingEngine {
       this.currentCode = code
       this.currentStratum = detectStratum(code)
 
-      // Create fresh scheduler
-      const wasPlaying = this.playing
-      if (this.playing) this.stop()
+      const isReEvaluate = this.scheduler !== null && this.playing
 
-      const audioCtx = this.bridge?.audioContext
-      this.scheduler = new VirtualTimeScheduler({
-        getAudioTime: () => audioCtx?.currentTime ?? 0,
-        schedAheadTime: this.schedAheadTime,
-      })
+      // First run or after stop: create fresh scheduler + DSL
+      if (!isReEvaluate) {
+        if (this.scheduler) {
+          this.scheduler.dispose()
+        }
 
-      // Wire event handler for audio and viz
-      this.scheduler.onEvent((event) => this.handleEvent(event))
+        const audioCtx = this.bridge?.audioContext
+        this.scheduler = new VirtualTimeScheduler({
+          getAudioTime: () => audioCtx?.currentTime ?? 0,
+          schedAheadTime: this.schedAheadTime,
+        })
+        this.scheduler.onEvent((event) => this.handleEvent(event))
 
-      // Create DSL context with FX bridge if audio is available
-      this.dsl = createDSLContext({
-        scheduler: this.scheduler,
-        fxBridge: this.bridge,
-      })
+        this.dsl = createDSLContext({
+          scheduler: this.scheduler,
+          fxBridge: this.bridge,
+        })
+      }
 
       // Transpile: Ruby DSL → JS → add missing awaits
       const jsCode = autoTranspile(code)
       const { code: transpiledCode } = transpile(jsCode)
 
-      // Top-level DSL functions (outside live_loop)
+      // Top-level DSL functions
       let defaultBpm = 60
       let defaultSynth = 'beep'
-      const scheduler = this.scheduler
+      const scheduler = this.scheduler!
+      const dsl = this.dsl!
 
       const topLevelUseBpm = (bpm: number) => { defaultBpm = bpm }
       const topLevelUseSynth = (name: string) => { defaultSynth = name }
 
-      // Wrap live_loop to pass default bpm/synth
+      // Collection map for re-evaluate hot-swap path
+      const pendingLoops = new Map<string, () => Promise<void>>()
+      const pendingDefaults = new Map<string, { bpm: number; synth: string }>()
+
       const wrappedLiveLoop = (name: string, asyncFn: (ctx: unknown) => Promise<void>) => {
-        this.dsl!.live_loop(name, asyncFn)
-        // Apply defaults to the newly created task
-        const task = scheduler.getTask(name)
-        if (task) {
-          task.bpm = defaultBpm
-          task.currentSynth = defaultSynth
+        if (isReEvaluate) {
+          // Collect: build the wrapped function but don't register yet
+          const wrappedFn = dsl._buildLoopFn(name, asyncFn as (ctx: unknown) => Promise<void>)
+          pendingLoops.set(name, wrappedFn)
+          pendingDefaults.set(name, { bpm: defaultBpm, synth: defaultSynth })
+        } else {
+          // Direct: first run, register immediately
+          dsl.live_loop(name, asyncFn as (ctx: unknown) => Promise<void>)
+          const task = scheduler.getTask(name)
+          if (task) {
+            task.bpm = defaultBpm
+            task.currentSynth = defaultSynth
+          }
         }
       }
 
@@ -153,29 +166,48 @@ export class SonicPiEngine implements LiveCodingEngine {
         'ring', 'knit', 'range', 'line', 'spread', 'chord', 'scale', 'chord_invert', 'note', 'note_range',
         'noteToMidi', 'midiToFreq', 'noteToFreq',
       ]
+      const topDSL = dsl._makeTaskDSL('__top__')
       const dslValues = [
         wrappedLiveLoop, topLevelUseBpm, topLevelUseSynth,
-        this.dsl.ring, this.dsl._makeTaskDSL('__top__').knit,
-        this.dsl._makeTaskDSL('__top__').range, this.dsl._makeTaskDSL('__top__').line,
-        this.dsl.spread,
-        this.dsl._makeTaskDSL('__top__').chord,
-        this.dsl._makeTaskDSL('__top__').scale,
-        this.dsl._makeTaskDSL('__top__').chord_invert,
-        this.dsl._makeTaskDSL('__top__').note,
-        this.dsl._makeTaskDSL('__top__').note_range,
-        this.dsl.noteToMidi, this.dsl.midiToFreq, this.dsl.noteToFreq,
+        dsl.ring, topDSL.knit,
+        topDSL.range, topDSL.line,
+        dsl.spread,
+        topDSL.chord, topDSL.scale, topDSL.chord_invert,
+        topDSL.note, topDSL.note_range,
+        dsl.noteToMidi, dsl.midiToFreq, dsl.noteToFreq,
       ]
 
       const executor = createExecutor(transpiledCode, dslNames)
       await executor(...dslValues)
 
-      // Auto-resume if was playing
-      if (wasPlaying) this.play()
+      if (isReEvaluate) {
+        // Detect removed loops before committing
+        const oldLoops = scheduler.getRunningLoopNames()
+        const removedLoops = oldLoops.filter(name => !pendingLoops.has(name))
+
+        // Commit: hot-swap same-named, stop removed, start new
+        scheduler.reEvaluate(pendingLoops, { bpm: defaultBpm, synth: defaultSynth })
+
+        // Apply per-loop defaults
+        for (const [name, defaults] of pendingDefaults) {
+          const task = scheduler.getTask(name)
+          if (task) {
+            task.bpm = defaults.bpm
+            task.currentSynth = defaults.synth
+          }
+        }
+
+        // Audio cleanup only when loops are actually removed
+        if (removedLoops.length > 0 && this.bridge) {
+          this.bridge.freeAllNodes()
+          this.nodeRefMap.clear()
+        }
+      }
 
       return {}
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
-      return { error, friendly: friendlyError(error) }
+      return { error }
     }
   }
 
@@ -192,6 +224,17 @@ export class SonicPiEngine implements LiveCodingEngine {
 
     this.playing = false
     this.scheduler?.stop()
+
+    // Free all scsynth nodes for clean silence
+    if (this.bridge) {
+      this.bridge.freeAllNodes()
+    }
+    this.nodeRefMap.clear()
+
+    // Dispose scheduler so next evaluate() starts fresh
+    this.scheduler?.dispose()
+    this.scheduler = null
+    this.dsl = null
   }
 
   dispose(): void {
