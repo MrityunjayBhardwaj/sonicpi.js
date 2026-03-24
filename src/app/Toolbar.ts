@@ -2,7 +2,7 @@
  * Toolbar — Sonic Pi-style toolbar with Run/Stop, buffer tabs, volume.
  */
 
-import { examples, type Example } from '../engine/examples'
+import { examples, getExamplesByDifficulty, type Example } from '../engine/examples'
 
 export interface ToolbarCallbacks {
   onPlay: () => void
@@ -125,11 +125,19 @@ export class Toolbar {
     defaultOpt.textContent = 'Load Example...'
     defaultOpt.value = ''
     select.appendChild(defaultOpt)
-    for (const ex of examples) {
-      const opt = document.createElement('option')
-      opt.value = ex.name
-      opt.textContent = ex.name
-      select.appendChild(opt)
+
+    const grouped = getExamplesByDifficulty()
+    for (const [level, exs] of Object.entries(grouped)) {
+      if (exs.length === 0) continue
+      const group = document.createElement('optgroup')
+      group.label = level.charAt(0).toUpperCase() + level.slice(1)
+      for (const ex of exs) {
+        const opt = document.createElement('option')
+        opt.value = ex.name
+        opt.textContent = ex.name
+        group.appendChild(opt)
+      }
+      select.appendChild(group)
     }
     select.addEventListener('change', () => {
       const ex = examples.find(e => e.name === select.value)

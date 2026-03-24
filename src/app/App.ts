@@ -73,14 +73,43 @@ export class App {
 
   constructor(root: HTMLElement) {
     this.root = root
-    this.buffers[0] = WELCOME_CODE
+    this.loadBuffers()
     this.buildLayout()
   }
 
+  /** Load buffers from localStorage, falling back to welcome code. */
+  private loadBuffers(): void {
+    try {
+      const saved = localStorage.getItem('spw-buffers')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length === BUFFER_COUNT) {
+          this.buffers = parsed
+          return
+        }
+      }
+    } catch { /* ignore */ }
+    this.buffers[0] = WELCOME_CODE
+  }
+
+  /** Save buffers to localStorage. */
+  private saveBuffers(): void {
+    // Save current editor content to active buffer
+    if (this.editor) {
+      this.buffers[this.activeBuffer] = this.editor.getValue()
+    }
+    try {
+      localStorage.setItem('spw-buffers', JSON.stringify(this.buffers))
+    } catch { /* storage full or unavailable */ }
+  }
+
   async init(): Promise<void> {
-    await this.editor.init(WELCOME_CODE)
+    await this.editor.init(this.buffers[0] || WELCOME_CODE)
     this.editor.onRun(() => this.handlePlay())
     this.editor.onStop(() => this.handleStop())
+
+    // Save buffers on page unload
+    window.addEventListener('beforeunload', () => this.saveBuffers())
 
     // Show welcome log
     for (const line of WELCOME_LOG) {
@@ -233,10 +262,10 @@ export class App {
   }
 
   private switchBuffer(index: number): void {
-    // Save current buffer
     this.buffers[this.activeBuffer] = this.editor.getValue()
     this.activeBuffer = index
     this.editor.setValue(this.buffers[index])
+    this.saveBuffers()
 
     const title = document.getElementById('spw-buffer-title')
     if (title) title.textContent = `Buffer ${index}`
@@ -322,6 +351,7 @@ export class App {
   private loadExample(example: Example): void {
     this.editor.setValue(example.ruby)
     this.buffers[this.activeBuffer] = example.ruby
+    this.saveBuffers()
     this.console.logSystem(`  Loaded: ${example.name} — ${example.description}`)
     if (this.playing) this.handlePlay()
   }

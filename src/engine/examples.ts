@@ -5,9 +5,12 @@
  * and JS code (native DSL). Both should produce identical output.
  */
 
+export type Difficulty = 'beginner' | 'intermediate' | 'advanced'
+
 export interface Example {
   name: string
   description: string
+  difficulty: Difficulty
   ruby: string
   js: string
 }
@@ -15,6 +18,7 @@ export interface Example {
 export const examples: Example[] = [
   {
     name: 'Hello Beep',
+    difficulty: 'beginner',
     description: 'The simplest possible Sonic Pi program — one note.',
     ruby: `\
 play 60
@@ -35,6 +39,7 @@ live_loop("hello", async ({play, sleep}) => {
 
   {
     name: 'Basic Beat',
+    difficulty: 'beginner',
     description: 'A four-on-the-floor drum pattern with kick and snare.',
     ruby: `\
 live_loop :drums do
@@ -54,6 +59,7 @@ live_loop("drums", async ({sample, sleep}) => {
 
   {
     name: 'Ambient Pad',
+    difficulty: 'beginner',
     description: 'Slow chord washes with reverb — ambient music in 6 lines.',
     ruby: `\
 use_synth :prophet
@@ -74,6 +80,7 @@ live_loop("pad", async ({play, sleep, use_synth, chord}) => {
 
   {
     name: 'Arpeggio',
+    difficulty: 'intermediate',
     description: 'A rising arpeggio using ring and tick — Sonic Pi\'s signature pattern.',
     ruby: `\
 use_synth :tb303
@@ -92,6 +99,7 @@ live_loop("arp", async ({play, sleep, use_synth, ring, tick}) => {
 
   {
     name: 'Euclidean Rhythm',
+    difficulty: 'intermediate',
     description: 'Euclidean rhythms — spread hits evenly across steps.',
     ruby: `\
 live_loop :euclidean do
@@ -113,6 +121,7 @@ live_loop("euclidean", async ({sample, sleep, spread}) => {
 
   {
     name: 'Random Melody',
+    difficulty: 'intermediate',
     description: 'Seeded random melody — deterministic but unpredictable.',
     ruby: `\
 use_random_seed 42
@@ -133,6 +142,7 @@ live_loop("melody", async ({play, sleep, use_synth, use_random_seed, scale, choo
 
   {
     name: 'Sync/Cue',
+    difficulty: 'advanced',
     description: 'Two loops synchronized — the bass waits for the drums.',
     ruby: `\
 live_loop :drums do
@@ -168,6 +178,7 @@ live_loop("bass", async ({play, sleep, sync, use_synth}) => {
 
   {
     name: 'Multi-Layer',
+    difficulty: 'intermediate',
     description: 'Three simultaneous loops — drums, bass, and lead.',
     ruby: `\
 use_bpm 120
@@ -223,6 +234,7 @@ live_loop("lead", async ({play, sleep, use_synth, use_bpm, scale, choose}) => {
 
   {
     name: 'FX Chain',
+    difficulty: 'advanced',
     description: 'Nested effects — reverb wrapping distortion.',
     ruby: `\
 live_loop :fx_demo do
@@ -250,6 +262,7 @@ live_loop("fx_demo", async (ctx) => {
 
   {
     name: 'Minimal Techno',
+    difficulty: 'advanced',
     description: 'A stripped-down techno loop with Euclidean hi-hats.',
     ruby: `\
 use_bpm 130
@@ -307,4 +320,13 @@ export function getExample(name: string): Example | undefined {
 /** Get all example names. */
 export function getExampleNames(): string[] {
   return examples.map(e => e.name)
+}
+
+/** Get examples grouped by difficulty. */
+export function getExamplesByDifficulty(): Record<Difficulty, Example[]> {
+  return {
+    beginner: examples.filter(e => e.difficulty === 'beginner'),
+    intermediate: examples.filter(e => e.difficulty === 'intermediate'),
+    advanced: examples.filter(e => e.difficulty === 'advanced'),
+  }
 }
