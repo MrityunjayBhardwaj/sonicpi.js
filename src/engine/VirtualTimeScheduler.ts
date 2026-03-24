@@ -308,6 +308,21 @@ export class VirtualTimeScheduler {
     this.tickTimer = setInterval(() => this.tick(), this.tickInterval)
   }
 
+  /** Pause the tick timer without stopping tasks. Used during hot-swap. */
+  pauseTick(): void {
+    if (this.tickTimer !== null) {
+      clearInterval(this.tickTimer)
+      this.tickTimer = null
+    }
+  }
+
+  /** Resume the tick timer after a pause. */
+  resumeTick(): void {
+    if (this.tickTimer !== null) return // already running
+    if (!this._running) return
+    this.tickTimer = setInterval(() => this.tick(), this.tickInterval)
+  }
+
   stop(): void {
     this._running = false
 

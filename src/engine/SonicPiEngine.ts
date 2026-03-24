@@ -181,9 +181,19 @@ export class SonicPiEngine implements LiveCodingEngine {
       await executor(...dslValues)
 
       if (isReEvaluate) {
-        // Detect removed loops before committing
         const oldLoops = scheduler.getRunningLoopNames()
         const removedLoops = oldLoops.filter(name => !pendingLoops.has(name))
+        const hasNewLoops = [...pendingLoops.keys()].some(name => !oldLoops.includes(name))
+        const loopsChanged = removedLoops.length > 0 || hasNewLoops
+
+        // Pause ticking so no old events fire during transition
+        scheduler.pauseTick()
+
+        // Free old audio BEFORE starting new loops — instant clean cut
+        if (loopsChanged && this.bridge) {
+          this.bridge.freeAllNodes()
+          this.nodeRefMap.clear()
+        }
 
         // Commit: hot-swap same-named, stop removed, start new
         scheduler.reEvaluate(pendingLoops, { bpm: defaultBpm, synth: defaultSynth })
@@ -197,11 +207,8 @@ export class SonicPiEngine implements LiveCodingEngine {
           }
         }
 
-        // Audio cleanup only when loops are actually removed
-        if (removedLoops.length > 0 && this.bridge) {
-          this.bridge.freeAllNodes()
-          this.nodeRefMap.clear()
-        }
+        // Resume ticking — new loops start clean
+        scheduler.resumeTick()
       }
 
       return {}
