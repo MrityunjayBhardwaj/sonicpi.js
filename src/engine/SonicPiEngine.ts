@@ -3,6 +3,7 @@ import { createDSLContext } from './DSLContext'
 import { SuperSonicBridge, type SuperSonicBridgeOptions } from './SuperSonicBridge'
 import { transpile, createExecutor } from './Transpiler'
 import { autoTranspile } from './RubyTranspiler'
+import { friendlyError, formatFriendlyError, type FriendlyError } from './FriendlyErrors'
 import { CaptureScheduler, detectStratum, Stratum } from './CaptureScheduler'
 import { HapStream } from './HapStream'
 import { noteToMidi, midiToFreq } from './NoteToFreq'
@@ -174,7 +175,7 @@ export class SonicPiEngine implements LiveCodingEngine {
       return {}
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
-      return { error }
+      return { error, friendly: friendlyError(error) }
     }
   }
 
@@ -206,6 +207,16 @@ export class SonicPiEngine implements LiveCodingEngine {
 
   setRuntimeErrorHandler(handler: (err: Error) => void): void {
     this.runtimeErrorHandler = handler
+  }
+
+  /** Get a friendly version of the last error (for display in a log pane). */
+  static formatError(err: Error): FriendlyError {
+    return friendlyError(err)
+  }
+
+  /** Format a friendly error as a display string. */
+  static formatErrorString(err: Error): string {
+    return formatFriendlyError(friendlyError(err))
   }
 
   get components(): Partial<EngineComponents> {
