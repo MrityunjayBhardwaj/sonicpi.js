@@ -14,7 +14,9 @@
     "test:all": "vitest run && playwright test",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "dev": "vite"
+    "dev": "vite",
+    "build": "vite build",
+    "build:single": "vite build --config vite.build.config.ts"
   },
   "keywords": [
     "sonic-pi",
@@ -28,6 +30,7 @@
     "@playwright/test": "^1.58.2",
     "typescript": "^5.7.0",
     "vite": "^7.3.1",
+    "vite-plugin-singlefile": "^2.3.2",
     "vitest": "^3.0.0"
   },
   "license": "MIT"
