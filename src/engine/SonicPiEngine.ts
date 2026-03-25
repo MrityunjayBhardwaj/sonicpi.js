@@ -21,7 +21,7 @@ export interface EngineComponents {
   /** Sound event stream for visualization and logging. */
   streaming: { eventStream: SoundEventStream }
   /** Audio context and analyser node for scope/recording. */
-  audio: { analyser: AnalyserNode; audioCtx: AudioContext }
+  audio: { analyser: AnalyserNode; audioCtx: AudioContext; trackAnalysers?: Map<string, AnalyserNode> }
   /** Capture query for deterministic (S1/S2) code introspection. */
   capture: { queryRange(begin: number, end: number): Promise<unknown[]> }
 }
@@ -270,11 +270,12 @@ export class SonicPiEngine {
       streaming: { eventStream: this.eventStream },
     }
 
-    // Audio (from SuperSonic)
+    // Audio (from SuperSonic) — master + per-track analysers
     const audioCtx = this.bridge?.audioContext
     const analyser = this.bridge?.analyser
     if (audioCtx && analyser) {
-      result.audio = { analyser, audioCtx }
+      const trackAnalysers = this.bridge?.getAllTrackAnalysers()
+      result.audio = { analyser, audioCtx, trackAnalysers }
     }
 
     // Capture query (only for deterministic S1/S2 code)

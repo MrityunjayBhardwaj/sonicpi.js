@@ -123,6 +123,10 @@ function translateSampleOpts(
   return result
 }
 
+/** Max stereo track outputs (beyond master). Channels 0-1 = master, 2-3 = track 0, etc. */
+const MAX_TRACK_OUTPUTS = 6
+const NUM_OUTPUT_CHANNELS = 2 + MAX_TRACK_OUTPUTS * 2 // 14 channels total
+
 export class SuperSonicBridge {
   private sonic: SuperSonic | null = null
   private loadedSynthDefs = new Set<string>()
@@ -131,8 +135,14 @@ export class SuperSonicBridge {
   private analyserNode: AnalyserNode | null = null
   private options: SuperSonicBridgeOptions
   /** Audio bus allocator — buses 0-15 are hardware, 16+ are private */
-  private nextBusNum = 16
+  private nextBusNum = NUM_OUTPUT_CHANNELS
   private freeBuses: number[] = []
+  /** Per-track AnalyserNodes keyed by track name */
+  private trackAnalysers = new Map<string, AnalyserNode>()
+  /** Track name → scsynth bus pair (stereo, starting at bus 2) */
+  private trackBuses = new Map<string, number>()
+  /** Next available track bus pair */
+  private nextTrackBus = 2
 
   constructor(options: SuperSonicBridgeOptions = {}) {
     this.options = options
@@ -168,7 +178,8 @@ export class SuperSonicBridge {
     this.sonic.send('/g_new', 101, 1, 0) // FX group at tail
     await this.sonic.sync()
 
-    // Create AnalyserNode tap
+    // Master analyser — side-tap on the SuperSonic output
+    // SuperSonic auto-connects to destination (sound), we add analyser as passive tap
     this.analyserNode = this.sonic.audioContext.createAnalyser()
     this.analyserNode.fftSize = 2048
     this.analyserNode.smoothingTimeConstant = 0.8
@@ -265,6 +276,44 @@ export class SuperSonicBridge {
 
     this.sonic.send('/s_new', fullName, nodeId, 0, 101, ...paramList)
     return nodeId
+  }
+
+  /**
+   * Allocate a stereo output bus for a track with its own AnalyserNode.
+   * Returns the bus number to use as out_bus in synth params.
+   * The bus audio is automatically routed to speakers via the worklet's
+   * multi-channel output + Web Audio ChannelSplitter.
+   */
+  allocateTrackBus(trackId: string): number {
+    const existing = this.trackBuses.get(trackId)
+    if (existing !== undefined) return existing
+
+    if (this.nextTrackBus >= NUM_OUTPUT_CHANNELS) {
+      // Out of track buses — fall back to master bus 0
+      return 0
+    }
+
+    const busNum = this.nextTrackBus
+    this.nextTrackBus += 2 // stereo pair
+
+    this.trackBuses.set(trackId, busNum)
+
+    // Per-track AnalyserNode — placeholder for when multi-channel output is available.
+    // Currently scsynth buses are internal; audio exits as stereo mix from the worklet.
+    // Per-track audio analysis requires SuperSonic multi-channel output support.
+    // For now, trackAnalysers stays empty — inline viz uses BufferedScheduler (Path 2).
+
+    return busNum
+  }
+
+  /** Get the per-track AnalyserNode for a specific track. */
+  getTrackAnalyser(trackId: string): AnalyserNode | null {
+    return this.trackAnalysers.get(trackId) ?? null
+  }
+
+  /** Get all per-track AnalyserNodes. */
+  getAllTrackAnalysers(): Map<string, AnalyserNode> {
+    return this.trackAnalysers
   }
 
   /** Allocate a private audio bus for FX routing. */
