@@ -87,8 +87,12 @@ export class App {
       if (saved) {
         const parsed = JSON.parse(saved)
         if (Array.isArray(parsed) && parsed.length === BUFFER_COUNT) {
-          this.buffers = parsed
-          return
+          // Only use saved buffers if at least one has content
+          const hasContent = parsed.some((b: string) => b.trim().length > 0)
+          if (hasContent) {
+            this.buffers = parsed
+            return
+          }
         }
       }
     } catch { /* ignore */ }
@@ -97,10 +101,14 @@ export class App {
 
   /** Save buffers to localStorage. */
   private saveBuffers(): void {
-    // Save current editor content to active buffer
-    if (this.editor) {
-      this.buffers[this.activeBuffer] = this.editor.getValue()
+    // Don't save if editor hasn't initialized (would overwrite with empty)
+    if (!this.editor) return
+    const val = this.editor.getValue()
+    if (val.trim().length === 0 && this.buffers[this.activeBuffer].trim().length > 0) {
+      // Editor returned empty but buffer had content — editor not ready yet, skip save
+      return
     }
+    this.buffers[this.activeBuffer] = val
     try {
       localStorage.setItem('spw-buffers', JSON.stringify(this.buffers))
     } catch { /* storage full or unavailable */ }
