@@ -7,6 +7,7 @@ import { examples, getExamplesByDifficulty, type Example } from '../engine/examp
 export interface ToolbarCallbacks {
   onPlay: () => void
   onStop: () => void
+  onRecord: () => void
   onExample: (example: Example) => void
   onBufferSelect: (index: number) => void
   onVolumeChange: (vol: number) => void
@@ -18,9 +19,11 @@ export class Toolbar {
   private el: HTMLElement
   private playBtn: HTMLButtonElement
   private stopBtn: HTMLButtonElement
+  private recBtn: HTMLButtonElement
   private bufferBtns: HTMLButtonElement[] = []
   private activeBuffer = 0
   private playing = false
+  private recording = false
 
   constructor(container: HTMLElement, private callbacks: ToolbarCallbacks) {
     this.el = document.createElement('div')
@@ -79,6 +82,16 @@ export class Toolbar {
     this.stopBtn.title = 'Stop (Esc)'
     this.stopBtn.style.opacity = '0.4'
     topRow.appendChild(this.stopBtn)
+
+    // Record button
+    this.recBtn = this.iconButton(
+      '\u23FA', 'Rec',
+      () => this.callbacks.onRecord(),
+      { bg: '#555', hover: '#777' }
+    )
+    this.recBtn.title = 'Record to WAV'
+    this.recBtn.style.opacity = '0.4'
+    topRow.appendChild(this.recBtn)
 
     topRow.appendChild(this.separator())
 
@@ -187,6 +200,15 @@ export class Toolbar {
     const label = this.playBtn.querySelector('.spw-btn-label') as HTMLElement
     if (label) label.textContent = playing ? 'Update' : 'Run'
     this.stopBtn.style.opacity = playing ? '1' : '0.4'
+    if (!playing) this.setRecording(false)
+  }
+
+  setRecording(recording: boolean): void {
+    this.recording = recording
+    this.recBtn.style.opacity = recording ? '1' : '0.4'
+    this.recBtn.style.background = recording ? '#C0392B' : '#555'
+    const label = this.recBtn.querySelector('.spw-btn-label') as HTMLElement
+    if (label) label.textContent = recording ? 'Save' : 'Rec'
   }
 
   private selectBuffer(index: number): void {

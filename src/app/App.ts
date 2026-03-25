@@ -5,6 +5,7 @@
 
 import { SonicPiEngine } from '../engine/SonicPiEngine'
 import { friendlyError } from '../engine/FriendlyErrors'
+import { Recorder } from '../engine/Recorder'
 import { examples as allExamples, type Example } from '../engine/examples'
 import { Editor } from './Editor'
 import { Scope } from './Scope'
@@ -70,6 +71,8 @@ export class App {
   private buffers: string[] = Array(BUFFER_COUNT).fill('')
   private activeBuffer = 0
   private hapStreamHandler: ((event: unknown) => void) | null = null
+  private recorder: Recorder | null = null
+  private isRecording = false
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -141,6 +144,7 @@ export class App {
     this.toolbar = new Toolbar(toolbarContainer, {
       onPlay: () => this.handlePlay(),
       onStop: () => this.handleStop(),
+      onRecord: () => this.handleRecord(),
       onExample: (ex) => this.loadExample(ex),
       onBufferSelect: (i) => this.switchBuffer(i),
       onVolumeChange: (_v) => { /* TODO: wire to SuperSonic master volume */ },
@@ -346,6 +350,37 @@ export class App {
     this.console.logSystem('')
     this.console.logSystem('  Stopping all runs...')
     this.console.logSystem('')
+  }
+
+  private async handleRecord(): Promise<void> {
+    if (this.isRecording) {
+      // Stop recording and download
+      if (this.recorder) {
+        this.console.logSystem('  Saving recording...')
+        try {
+          await this.recorder.stopAndDownload()
+          this.console.logSystem('  Recording saved!')
+        } catch (err) {
+          this.console.logError('Recording failed', String(err))
+        }
+      }
+      this.isRecording = false
+      this.toolbar.setRecording(false)
+      return
+    }
+
+    // Start recording
+    const audio = this.engine?.components.audio
+    if (!audio) {
+      this.console.logError('Cannot record', 'No audio engine available. Press Run first.')
+      return
+    }
+
+    this.recorder = new Recorder(audio.audioCtx, audio.analyser)
+    this.recorder.start()
+    this.isRecording = true
+    this.toolbar.setRecording(true)
+    this.console.logSystem('  Recording... Press Rec again to save.')
   }
 
   private loadExample(example: Example): void {
