@@ -1,8 +1,10 @@
 {
-  "name": "sonic-pi-web",
+  "name": "sonic-pi-web-root",
   "version": "0.1.0",
-  "description": "Browser-native reimplementation of Sonic Pi's temporal scheduling model",
+  "private": true,
+  "description": "Sonic Pi Web monorepo",
   "type": "module",
+  "workspaces": ["packages/*"],
   "bin": {
     "sonic-pi-web": "./bin/cli.js"
   },

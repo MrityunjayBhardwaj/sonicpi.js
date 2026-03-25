@@ -1,0 +1,199 @@
+import { describe, it, expect } from 'vitest'
+import { parseAndTranspile } from '../Parser'
+
+describe('Parser', () => {
+  it('transpiles basic live_loop', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :drums do
+  sample :bd_haus
+  sleep 0.5
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('live_loop("drums"')
+    expect(code).toContain('await ctx.sample("bd_haus")')
+    expect(code).toContain('await ctx.sleep(0.5)')
+    expect(code).toContain('})')
+  })
+
+  it('transpiles live_loop with sync option', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :bass, sync: :drums do
+  play :e2
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('live_loop("bass"')
+    expect(code).toContain('await ctx.sync("drums")')
+    expect(code).toContain('await ctx.play("e2")')
+  })
+
+  it('transpiles with_fx', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :fx do
+  with_fx :reverb do
+    play 60
+    sleep 1
+  end
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('with_fx("reverb"')
+    expect(code).toContain('await ctx.play(60)')
+  })
+
+  it('transpiles if/elsif/else/end', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  if true
+    play 60
+  elsif false
+    play 64
+  else
+    play 67
+  end
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('if (true)')
+    expect(code).toContain('else if (false)')
+    expect(code).toContain('} else {')
+  })
+
+  it('transpiles unless block', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  unless false
+    play 60
+  end
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('if (!(false))')
+  })
+
+  it('transpiles N.times do |i|', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  4.times do |i|
+    play 60
+    sleep 0.25
+  end
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('for (let i = 0; i < 4; i++)')
+  })
+
+  it('transpiles define', () => {
+    const { code, errors } = parseAndTranspile(`
+define :bass_line do
+  play :e2
+  sleep 0.5
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('async function bass_line()')
+  })
+
+  it('transpiles in_thread', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  in_thread do
+    play 72
+    sleep 0.5
+  end
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain(';(async () => {')
+    expect(code).toContain('})()')
+  })
+
+  it('transpiles comments', () => {
+    const { code, errors } = parseAndTranspile(`
+# This is a comment
+live_loop :test do
+  play 60  # inline comment
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('// This is a comment')
+  })
+
+  it('transpiles use_synth and use_bpm', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  use_synth :tb303
+  use_bpm 120
+  play :c4
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('ctx.use_synth("tb303")')
+    expect(code).toContain('ctx.use_bpm(120)')
+  })
+
+  it('transpiles trailing if/unless', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  play 60 if true
+  sample "bd_haus" unless false
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('if (true) { await ctx.play(60) }')
+    expect(code).toContain('if (!(false)) { await ctx.sample("bd_haus") }')
+  })
+
+  it('reports error for unclosed block', () => {
+    const { errors } = parseAndTranspile(`
+live_loop :test do
+  play 60
+  sleep 1
+`)
+    expect(errors.length).toBeGreaterThan(0)
+    expect(errors[0].message).toContain('end')
+  })
+
+  it('transpiles symbols to strings', () => {
+    const { code } = parseAndTranspile(`
+live_loop :drums do
+  sample :bd_haus
+  sleep 0.5
+end
+`)
+    expect(code).toContain('"bd_haus"')
+    expect(code).not.toContain(':bd_haus')
+  })
+
+  it('transpiles puts and print', () => {
+    const { code } = parseAndTranspile(`
+live_loop :test do
+  puts "hello"
+  print "world"
+  sleep 1
+end
+`)
+    expect(code).toContain('console.log("hello")')
+    expect(code).toContain('console.log("world")')
+  })
+
+  it('transpiles loop do', () => {
+    const { code, errors } = parseAndTranspile(`
+loop do
+  play 60
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('while (true)')
+  })
+})

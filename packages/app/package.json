@@ -1,0 +1,14 @@
+{
+  "name": "sonic-pi-web",
+  "version": "0.1.0",
+  "description": "Sonic Pi in the browser — standalone app with editor, scope, and console",
+  "type": "module",
+  "bin": {
+    "sonic-pi-web": "../../bin/cli.js"
+  },
+  "dependencies": {
+    "@sonic-pi-web/core": "workspace:*"
+  },
+  "keywords": ["sonic-pi", "live-coding", "music", "browser"],
+  "license": "MIT"
+}
