@@ -86,12 +86,16 @@ export class Editor {
     // @ts-ignore
     const cmMod = await import(/* @vite-ignore */ 'https://esm.sh/codemirror@6')
 
-    // Ruby syntax highlighting (best-effort — don't block editor if unavailable)
+    // Ruby syntax highlighting via legacy mode (best-effort)
     let rubyLang: unknown = null
     try {
       // @ts-ignore
-      const rubyMod = await import(/* @vite-ignore */ 'https://esm.sh/@codemirror/lang-ruby@6')
-      rubyLang = rubyMod.ruby?.() ?? null
+      const langMod = await import(/* @vite-ignore */ 'https://esm.sh/@codemirror/language@6')
+      // @ts-ignore
+      const rubyMod = await import(/* @vite-ignore */ 'https://esm.sh/@codemirror/legacy-modes@6/mode/ruby')
+      if (langMod.StreamLanguage && rubyMod.ruby) {
+        rubyLang = langMod.StreamLanguage.define(rubyMod.ruby)
+      }
     } catch {
       // Ruby highlighting unavailable — editor still works
     }
