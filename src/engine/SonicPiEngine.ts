@@ -376,26 +376,17 @@ export class SonicPiEngine implements LiveCodingEngine {
         }
       }
 
-      // Emit to HapStream for visualization
-      const note = event.params.note as number | undefined
-      const hap = {
-        value: {
-          note: note ?? null,
-          s: event.params.synth ?? event.params.name ?? 'unknown',
-        },
-        whole: {
-          begin: event.virtualTime,
-          end: event.virtualTime + 0.25,
-        },
-        part: {
-          begin: event.virtualTime,
-          end: event.virtualTime + 0.25,
-        },
-        context: { locations: [] },
-      }
-
+      // Emit to HapStream for visualization — no fake Strudel hap, just flat event
       const audioCtxTime = this.bridge?.audioContext?.currentTime ?? 0
-      this.hapStream.emit(hap, audioTime, 2, audioTime + 0.25, audioCtxTime)
+      this.hapStream.emitEvent({
+        audioTime,
+        audioDuration: 0.25,
+        scheduledAheadMs: (audioTime - audioCtxTime) * 1000,
+        midiNote: (event.params.note as number) ?? null,
+        s: (event.params.synth as string) ?? (event.params.name as string) ?? null,
+        color: null,
+        loc: null,  // TODO: wire transpiler source positions for highlighting
+      })
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       this.runtimeErrorHandler?.(error)

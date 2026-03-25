@@ -1,10 +1,11 @@
 /**
  * Lightweight event bus for visualization and highlighting.
- * Compatible with Motif's HapStream interface.
+ *
+ * emitEvent() is the primary API — engines emit flat event objects directly.
+ * No Strudel-specific "hap" shape required.
  */
 
 export interface HapEvent {
-  hap: unknown
   audioTime: number
   audioDuration: number
   scheduledAheadMs: number
@@ -27,29 +28,8 @@ export class HapStream {
     this.handlers.delete(handler)
   }
 
-  emit(
-    hap: unknown,
-    time: number,
-    cps: number,
-    endTime: number,
-    audioCtxCurrentTime: number
-  ): void {
-    const scheduledAheadMs = (time - audioCtxCurrentTime) * 1000
-    const audioDuration = endTime - time
-
-    const event: HapEvent = {
-      hap,
-      audioTime: time,
-      audioDuration,
-      scheduledAheadMs,
-      midiNote: (hap as Record<string, unknown>)?.value
-        ? ((hap as Record<string, Record<string, unknown>>).value.note as number | null) ?? null
-        : null,
-      s: (hap as Record<string, Record<string, unknown>>)?.value?.s as string | null ?? null,
-      color: null,
-      loc: null,
-    }
-
+  /** Emit a pre-built event directly. Preferred API for all engines. */
+  emitEvent(event: HapEvent): void {
     for (const handler of this.handlers) {
       try {
         handler(event)
