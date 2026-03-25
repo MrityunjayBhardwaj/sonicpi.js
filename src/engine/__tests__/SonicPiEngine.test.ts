@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SonicPiEngine } from '../SonicPiEngine'
-import type { HapEvent } from '../HapStream'
+import type { SoundEvent } from '../SoundEventStream'
 
 describe('SonicPiEngine', () => {
   beforeEach(() => {
@@ -8,7 +8,7 @@ describe('SonicPiEngine', () => {
     delete (globalThis as Record<string, unknown>).SuperSonic
   })
 
-  it('implements the LiveCodingEngine interface', () => {
+  it('implements the SonicPiEngine interface', () => {
     const engine = new SonicPiEngine()
     expect(typeof engine.init).toBe('function')
     expect(typeof engine.evaluate).toBe('function')
@@ -58,17 +58,17 @@ describe('SonicPiEngine', () => {
     engine.dispose()
   })
 
-  it('components.streaming provides hapStream', async () => {
+  it('components.streaming provides eventStream', async () => {
     const engine = new SonicPiEngine()
     await engine.init()
 
     expect(engine.components.streaming).toBeDefined()
-    expect(engine.components.streaming!.hapStream).toBeDefined()
+    expect(engine.components.streaming!.eventStream).toBeDefined()
 
     engine.dispose()
   })
 
-  it('components.queryable available for S1 code after evaluate', async () => {
+  it('components.capture available for S1 code after evaluate', async () => {
     const engine = new SonicPiEngine()
     await engine.init()
 
@@ -80,12 +80,12 @@ describe('SonicPiEngine', () => {
     `)
 
     // S1 code → queryable should be present
-    expect(engine.components.queryable).toBeDefined()
+    expect(engine.components.capture).toBeDefined()
 
     engine.dispose()
   })
 
-  it('components.queryable not available for S3 code', async () => {
+  it('components.capture not available for S3 code', async () => {
     const engine = new SonicPiEngine()
     await engine.init()
 
@@ -97,12 +97,12 @@ describe('SonicPiEngine', () => {
     `)
 
     // S3 code → no queryable
-    expect(engine.components.queryable).toBeUndefined()
+    expect(engine.components.capture).toBeUndefined()
 
     engine.dispose()
   })
 
-  it('does not provide inlineViz (adapter concern)', async () => {
+  it('components only contain streaming, audio, capture — no viz leakage', async () => {
     const engine = new SonicPiEngine()
     await engine.init()
 
@@ -111,11 +111,11 @@ live_loop("drums", async (ctx) => {
   await ctx.play(60)
   await ctx.sleep(0.5)
 })
-// @viz scope
     `)
 
-    // Viz parsing is the adapter's responsibility, not the engine's
-    expect(engine.components.inlineViz).toBeUndefined()
+    const keys = Object.keys(engine.components)
+    expect(keys).not.toContain('inlineViz')
+    expect(keys).not.toContain('queryable')
 
     engine.dispose()
   })
@@ -137,12 +137,12 @@ live_loop("drums", async (ctx) => {
     engine.dispose()
   })
 
-  it('hapStream receives events during playback', async () => {
+  it('eventStream receives events during playback', async () => {
     const engine = new SonicPiEngine()
     await engine.init()
 
-    const events: HapEvent[] = []
-    engine.components.streaming!.hapStream.on((e) => events.push(e))
+    const events: SoundEvent[] = []
+    engine.components.streaming!.eventStream.on((e) => events.push(e))
 
     await engine.evaluate(`
       live_loop("test", async (ctx) => {
@@ -194,7 +194,7 @@ live_loop("drums", async (ctx) => {
     engine.dispose()
 
     // After dispose, components should be minimal
-    expect(engine.components.queryable).toBeUndefined()
+    expect(engine.components.capture).toBeUndefined()
   })
 
   it('re-evaluate without playing creates fresh scheduler', async () => {

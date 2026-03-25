@@ -27,7 +27,7 @@ const AWAIT_CTX_FUNCTIONS = new Set([
 const CTX_FUNCTIONS = new Set([
   'use_synth', 'use_bpm', 'use_random_seed',
   'cue', 'rrand', 'rrand_i', 'choose', 'dice',
-  'ring', 'spread', 'note', 'hz_to_midi', 'midi_to_hz',
+  'ring', 'spread', 'note',
 ])
 
 // All DSL functions (for detection)

@@ -70,7 +70,7 @@ export class App {
   // Buffer management — 10 buffers like Sonic Pi
   private buffers: string[] = Array(BUFFER_COUNT).fill('')
   private activeBuffer = 0
-  private hapStreamHandler: ((event: unknown) => void) | null = null
+  private eventStreamHandler: ((event: unknown) => void) | null = null
   private recorder: Recorder | null = null
   private isRecording = false
 
@@ -324,15 +324,15 @@ export class App {
         this.scope.connect(audio.analyser)
       }
 
-      // Wire HapStream for console logging (remove old handler first)
+      // Wire event stream for console logging
       const streaming = this.engine.components.streaming
-      if (streaming && !this.hapStreamHandler) {
-        this.hapStreamHandler = ((event: { s: string | null; midiNote: number | null }) => {
+      if (streaming && !this.eventStreamHandler) {
+        this.eventStreamHandler = ((event: { s: string | null; midiNote: number | null }) => {
           const s = event.s ?? '?'
           const note = event.midiNote != null ? ` note:${event.midiNote}` : ''
           this.console.logEvent('synth', `${s}${note}`)
         }) as (event: unknown) => void
-        streaming.hapStream.on(this.hapStreamHandler as never)
+        streaming.eventStream.on(this.eventStreamHandler as never)
       }
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))

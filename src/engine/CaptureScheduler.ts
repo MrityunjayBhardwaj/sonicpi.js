@@ -67,9 +67,9 @@ export class CaptureScheduler {
 // ---------------------------------------------------------------------------
 
 export enum Stratum {
-  /** Stateless, cyclic, deterministic — full queryArc */
+  /** Stateless, cyclic, deterministic — capturable */
   S1 = 1,
-  /** Seeded stochastic — queryArc with seed */
+  /** Seeded stochastic — capturable with seed */
   S2 = 2,
   /** State-accumulating, external I/O — streaming only */
   S3 = 3,

@@ -5,61 +5,31 @@ import { transpile, createExecutor } from './Transpiler'
 import { autoTranspile } from './RubyTranspiler'
 import { friendlyError, formatFriendlyError, type FriendlyError } from './FriendlyErrors'
 import { CaptureScheduler, detectStratum, Stratum } from './CaptureScheduler'
-import { HapStream } from './HapStream'
+import { SoundEventStream } from './SoundEventStream'
 import { noteToMidi, midiToFreq } from './NoteToFreq'
 
 // ---------------------------------------------------------------------------
-// Types matching Motif's LiveCodingEngine interface
+// Engine interfaces
 // ---------------------------------------------------------------------------
 
-export interface StreamingComponent {
-  hapStream: HapStream
-}
-
-export interface QueryableComponent {
-  scheduler: PatternScheduler | null
-  trackSchedulers: Map<string, PatternScheduler>
-}
-
-export interface AudioComponent {
-  analyser: AnalyserNode
-  audioCtx: AudioContext
-}
-
-export interface InlineVizComponent {
-  vizRequests: Map<string, { vizId: string; afterLine: number }>
-}
-
 export interface EngineComponents {
-  streaming: StreamingComponent
-  queryable: QueryableComponent
-  audio: AudioComponent
-  inlineViz: InlineVizComponent
-}
-
-export interface PatternScheduler {
-  queryArc(begin: number, end: number): Promise<unknown[]>
-}
-
-export interface LiveCodingEngine {
-  init(): Promise<void>
-  evaluate(code: string): Promise<{ error?: Error }>
-  play(): void
-  stop(): void
-  dispose(): void
-  readonly components: Partial<EngineComponents>
-  setRuntimeErrorHandler(handler: (err: Error) => void): void
+  /** Sound event stream for visualization and logging. */
+  streaming: { eventStream: SoundEventStream }
+  /** Audio context and analyser node for scope/recording. */
+  audio: { analyser: AnalyserNode; audioCtx: AudioContext }
+  /** Capture query for deterministic (S1/S2) code introspection. */
+  capture: { queryRange(begin: number, end: number): Promise<unknown[]> }
 }
 
 // ---------------------------------------------------------------------------
 // SonicPiEngine
 // ---------------------------------------------------------------------------
 
-export class SonicPiEngine implements LiveCodingEngine {
+export class SonicPiEngine {
   private scheduler: VirtualTimeScheduler | null = null
   private bridge: SuperSonicBridge | null = null
   private dsl: ReturnType<typeof createDSLContext> | null = null
-  private hapStream = new HapStream()
+  private eventStream = new SoundEventStream()
   private initialized = false
   private playing = false
   private runtimeErrorHandler: ((err: Error) => void) | null = null
@@ -249,7 +219,7 @@ export class SonicPiEngine implements LiveCodingEngine {
     this.scheduler?.dispose()
     this.scheduler = null
     this.dsl = null
-    this.hapStream.dispose()
+    this.eventStream.dispose()
     this.bridge?.dispose()
     this.bridge = null
     this.initialized = false
@@ -270,43 +240,38 @@ export class SonicPiEngine implements LiveCodingEngine {
   }
 
   get components(): Partial<EngineComponents> {
-    const bag: Partial<EngineComponents> = {
-      streaming: { hapStream: this.hapStream },
+    const result: Partial<EngineComponents> = {
+      streaming: { eventStream: this.eventStream },
     }
 
-    // Audio components (from SuperSonic)
+    // Audio (from SuperSonic)
     const audioCtx = this.bridge?.audioContext
     const analyser = this.bridge?.analyser
     if (audioCtx && analyser) {
-      bag.audio = { analyser, audioCtx }
+      result.audio = { analyser, audioCtx }
     }
 
-    // Queryable components (only for Stratum 1-2)
+    // Capture query (only for deterministic S1/S2 code)
     if (this.currentStratum <= Stratum.S2 && this.scheduler) {
       const captureScheduler = this.captureScheduler
       const currentCode = this.currentCode
 
-      bag.queryable = {
-        scheduler: {
-          async queryArc(begin: number, end: number): Promise<unknown[]> {
-            // Re-parse and run in capture mode
-            const events = await captureScheduler.runUntilCapture((dsl) => {
-              const { code: tc } = transpile(currentCode)
-              const names = ['live_loop', 'ring', 'spread', 'noteToMidi', 'midiToFreq', 'noteToFreq']
-              const vals = [dsl.live_loop, dsl.ring, dsl.spread, dsl.noteToMidi, dsl.midiToFreq, dsl.noteToFreq]
-              const fn = createExecutor(tc, names)
-              fn(...vals)
-            }, end)
+      result.capture = {
+        async queryRange(begin: number, end: number): Promise<unknown[]> {
+          const events = await captureScheduler.runUntilCapture((dsl) => {
+            const { code: tc } = transpile(currentCode)
+            const names = ['live_loop', 'ring', 'spread', 'noteToMidi', 'midiToFreq', 'noteToFreq']
+            const vals = [dsl.live_loop, dsl.ring, dsl.spread, dsl.noteToMidi, dsl.midiToFreq, dsl.noteToFreq]
+            const fn = createExecutor(tc, names)
+            fn(...vals)
+          }, end)
 
-            return events.filter(e => e.time >= begin && e.time < end)
-          },
+          return events.filter(e => e.time >= begin && e.time < end)
         },
-        trackSchedulers: new Map(),
       }
     }
 
-    // Inline viz requests
-    return bag
+    return result
   }
 
   // ---------------------------------------------------------------------------
@@ -376,9 +341,9 @@ export class SonicPiEngine implements LiveCodingEngine {
         }
       }
 
-      // Emit to HapStream for visualization — no fake Strudel hap, just flat event
+      // Emit sound event for visualization and logging
       const audioCtxTime = this.bridge?.audioContext?.currentTime ?? 0
-      this.hapStream.emitEvent({
+      this.eventStream.emitEvent({
         audioTime,
         audioDuration: 0.25,
         scheduledAheadMs: (audioTime - audioCtxTime) * 1000,
