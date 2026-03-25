@@ -2,3 +2,16 @@ node_modules/
 dist/
 .DS_Store
 *.tsbuildinfo
+
+# Artifacts — thesis, research, cognitive framework (not part of the product)
+artifacts/
+
+# Test results
+test-results/
+
+# Playwright
+playwright-report/
+
+# Editor
+.vscode/
+.idea/

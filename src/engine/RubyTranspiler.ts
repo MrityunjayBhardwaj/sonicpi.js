@@ -599,6 +599,10 @@ export function detectLanguage(code: string): 'ruby' | 'js' {
 
 /**
  * Auto-detect language and transpile if needed.
+ * Uses the regex transpiler (battle-tested, 200+ test coverage) as primary.
+ * The recursive descent parser (Parser.ts) is available via parseAndTranspile()
+ * for callers who want structured errors — it will become the default once
+ * its expression-level ctx. prefix handling matches the regex transpiler.
  * Returns JS code ready for the engine.
  */
 export function autoTranspile(code: string): string {
