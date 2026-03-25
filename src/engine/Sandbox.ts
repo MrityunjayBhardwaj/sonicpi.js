@@ -30,8 +30,14 @@ export const BLOCKED_GLOBALS = [
   'importScripts', 'postMessage', 'globalThis',
 ]
 
-/** These can't be parameter names in strict mode — shadow via let. */
-const STRICT_MODE_RESERVED = ['eval', 'Function', 'arguments']
+/**
+ * These can't be parameter names or let-bound in strict mode.
+ * `eval` and `Function` are shadowed via let inside the async IIFE.
+ * `arguments` cannot be shadowed at all in strict mode (and async
+ * functions are always strict), so we skip it — it's harmless anyway
+ * since arrow functions don't have their own `arguments`.
+ */
+const STRICT_MODE_RESERVED = ['eval', 'Function']
 
 /**
  * Create a sandboxed executor. Same API as createExecutor but with
