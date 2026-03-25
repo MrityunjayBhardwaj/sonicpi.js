@@ -159,8 +159,11 @@ export class SonicPiEngine {
         // Pause ticking so no old events fire during transition
         scheduler.pauseTick()
 
-        // Free old audio BEFORE starting new loops — instant clean cut
-        if (loopsChanged && this.bridge) {
+        // Free old audio — clean cut on every re-evaluate.
+        // Even hot-swapped loops need this: the old body may have triggered
+        // synths that are still sustaining, and the new body may not trigger
+        // any (e.g., all play/sample calls commented out).
+        if (this.bridge) {
           this.bridge.freeAllNodes()
           this.nodeRefMap.clear()
         }
