@@ -32,26 +32,33 @@ export const BLOCKED_GLOBALS = [
 
 /**
  * Create a sandboxed executor. Same API as createExecutor but with
- * dangerous globals blocked.
+ * dangerous globals blocked via parameter shadowing.
+ *
+ * Falls back to unsandboxed execution if the browser rejects the
+ * parameter names (Firefox + SES/Lockdown extensions can cause this).
  */
 export function createSandboxedExecutor(
   transpiledCode: string,
   dslParamNames: string[]
 ): (...args: unknown[]) => Promise<void> {
-  const allParamNames = [...dslParamNames, ...BLOCKED_GLOBALS]
-
-  // Note: eval/Function/arguments cannot be reliably shadowed across
-  // all browsers (Firefox forbids var eval even in sloppy mode).
-  // They remain accessible but are low-risk: eval is rarely used in
-  // Sonic Pi code, and Function is shadowed by the parameter list approach
-  // failing silently in strict contexts.
   const asyncBody = `return (async () => {\n${transpiledCode}\n})();`
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  const fn = new Function(...allParamNames, asyncBody)
 
-  return (...dslArgs: unknown[]) => {
-    const blockedValues = BLOCKED_GLOBALS.map(() => undefined)
-    return fn(...dslArgs, ...blockedValues)
+  // Try sandboxed: shadow dangerous globals via function parameters
+  try {
+    const allParamNames = [...dslParamNames, ...BLOCKED_GLOBALS]
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const fn = new Function(...allParamNames, asyncBody)
+    return (...dslArgs: unknown[]) => {
+      const blockedValues = BLOCKED_GLOBALS.map(() => undefined)
+      return fn(...dslArgs, ...blockedValues)
+    }
+  } catch {
+    // Fallback: unsandboxed execution (browser rejected parameter names,
+    // likely due to SES lockdown or Firefox strict mode quirks)
+    console.warn('[SonicPi] Sandbox unavailable — running without global blocking')
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const fn = new Function(...dslParamNames, asyncBody)
+    return fn as (...args: unknown[]) => Promise<void>
   }
 }
 
