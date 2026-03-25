@@ -451,8 +451,8 @@ function transpileExpression(expr: string): string {
 
   // ring, knit, range, line, spread, chord, scale, note, note_range, chord_invert → ctx.*
   result = result.replace(/\b(ring|knit|range|line|spread|chord|scale|chord_invert|note_range|note)\s*\(/g, 'ctx.$1(')
-  // Without parens: ring 1, 2, 3
-  result = result.replace(/^(ring|spread)\s+([^(].+)$/, 'ctx.$1($2)')
+  // Without parens: ring 1, 2, 3 — also handles (ring ...) wrapping
+  result = result.replace(/(?<=\(|^)(ring|spread)\s+([^(].+?)(?=\)|$)/g, 'ctx.$1($2)')
 
   // rrand, choose, dice, rrand_i, tick, look → ctx.*
   result = result.replace(/\b(rrand_i|rrand|rand_i|rand|choose|dice|one_in)\s*\(/g, 'ctx.$1(')
