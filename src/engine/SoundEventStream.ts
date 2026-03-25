@@ -11,8 +11,8 @@ export interface SoundEvent {
   scheduledAheadMs: number
   midiNote: number | null
   s: string | null
-  color: string | null
-  loc: Array<{ start: number; end: number }> | null
+  /** Source line number (1-based) from the original code. Consumer computes char offsets. */
+  srcLine: number | null
 }
 
 type SoundEventHandler = (event: SoundEvent) => void
