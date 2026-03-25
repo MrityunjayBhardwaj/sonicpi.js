@@ -6,6 +6,7 @@
 // Minimal types for the CodeMirror API surface we use
 interface EditorState {
   doc: { toString(): string; length: number }
+  selection?: { main: { from: number; to: number } }
 }
 
 interface EditorView {
@@ -138,6 +139,41 @@ export class Editor {
       const runKeymap = cm.keymap.of([
         { key: 'Mod-Enter', run: () => { this.onRunCallback?.(); return true } },
         { key: 'Escape', run: () => { this.onStopCallback?.(); return true } },
+        {
+          key: 'Mod-/',
+          run: (view: EditorView) => {
+            // Toggle Ruby # comments on selected lines
+            const state = view.state
+            const doc = state.doc.toString()
+            const sel = state.selection?.main ?? { from: 0, to: 0 }
+            const fromLine = doc.substring(0, sel.from).split('\n').length
+            const toLine = doc.substring(0, sel.to).split('\n').length
+            const lines = doc.split('\n')
+
+            // Check if all selected lines are already commented
+            const selectedLines = lines.slice(fromLine - 1, toLine)
+            const allCommented = selectedLines.every(l => l.trimStart().startsWith('#') || l.trim() === '')
+
+            const newLines = [...lines]
+            for (let i = fromLine - 1; i < toLine; i++) {
+              if (allCommented) {
+                // Uncomment: remove first # (and optional space after)
+                newLines[i] = lines[i].replace(/^(\s*)#\s?/, '$1')
+              } else {
+                // Comment: add # at current indent
+                if (lines[i].trim() !== '') {
+                  newLines[i] = lines[i].replace(/^(\s*)/, '$1# ')
+                }
+              }
+            }
+
+            const newDoc = newLines.join('\n')
+            view.dispatch({
+              changes: { from: 0, to: doc.length, insert: newDoc },
+            })
+            return true
+          },
+        },
       ])
       if (runKeymap) extensions.push(runKeymap)
     } catch { /* keybindings failed */ }
@@ -188,6 +224,21 @@ export class Editor {
         const start = textarea.selectionStart
         textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(textarea.selectionEnd)
         textarea.selectionStart = textarea.selectionEnd = start + 2
+      }
+      // Ctrl+/ toggle Ruby # comment
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault()
+        const val = textarea.value
+        const start = val.lastIndexOf('\n', textarea.selectionStart - 1) + 1
+        const end = val.indexOf('\n', textarea.selectionEnd)
+        const lineEnd = end === -1 ? val.length : end
+        const line = val.substring(start, lineEnd)
+        const toggled = line.trimStart().startsWith('#')
+          ? line.replace(/^(\s*)#\s?/, '$1')
+          : line.replace(/^(\s*)/, '$1# ')
+        textarea.value = val.substring(0, start) + toggled + val.substring(lineEnd)
+        textarea.selectionStart = start
+        textarea.selectionEnd = start + toggled.length
       }
     })
     this.container.appendChild(textarea)
