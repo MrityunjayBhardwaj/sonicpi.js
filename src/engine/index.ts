@@ -31,4 +31,6 @@ export { createSandboxedExecutor, validateCode, BLOCKED_GLOBALS } from './Sandbo
 export { transpileRubyToJS, detectLanguage, autoTranspile } from './RubyTranspiler'
 export { parseAndTranspile } from './Parser'
 export { Recorder } from './Recorder'
+export { getAllSamples, getCategories, getSamplesByCategory, searchSamples, getSampleNames } from './SampleCatalog'
+export type { SampleInfo } from './SampleCatalog'
 export type { ParseError } from './Parser'
