@@ -29,3 +29,8 @@
 **Root cause:** Fast-forward scheduler runs a live_loop that never calls sleep — infinite loop, browser hangs.
 **Detection signal:** Tab freezes during queryArc.
 **The trap:** Add timeout. Root fix: cap iterations per tick in capture mode. If a loop body has zero sleep, mark as non-capturable (Stratum 3).
+
+## SP7: Browser Engine Differences in Strict Mode Variable Binding
+**Root cause:** `var eval = undefined` and `let eval` are handled differently across browser engines. V8 (Chrome/Node) allows `var eval` in sloppy-mode `new Function()`. SpiderMonkey (Firefox) forbids it entirely, producing "missing ) in parenthetical" SyntaxError.
+**Detection signal:** Code works in Chrome but fails in Firefox with "missing ) in parenthetical". Also applies to `arguments` and `Function` as variable names.
+**The trap:** Shadow dangerous names via `let`/`var` declarations inside the function body. Root fix: don't try to shadow `eval`/`Function`/`arguments` as variable names at all. Use parameter-name shadowing for other globals (fetch, document, etc.) which works cross-browser. Accept that eval/Function remain accessible — they're low-risk for the Sonic Pi use case.
