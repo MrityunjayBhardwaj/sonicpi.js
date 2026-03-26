@@ -65,7 +65,7 @@ function tokenize(source: string): Token[] {
         break
       }
 
-      // String (double-quoted)
+      // String (double-quoted) — convert to backtick template if interpolation present
       if (ch === '"') {
         let str = '"'
         i++
@@ -74,6 +74,10 @@ function tokenize(source: string): Token[] {
           str += line[i++]
         }
         if (i < line.length) { str += '"'; i++ }
+        // Ruby #{expr} → JS ${expr} in backtick template literal
+        if (str.includes('#{')) {
+          str = '`' + str.slice(1, -1).replace(/#\{/g, '${') + '`'
+        }
         tokens.push({ type: 'string', value: str, line: lineNum + 1, col: i + 1 })
         continue
       }

@@ -262,6 +262,18 @@ end
     expect(code).toContain('b.control(s')
   })
 
+  it('converts string interpolation to backtick template literals', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  puts "hello #{name} world"
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('`hello ${name} world`')
+    expect(code).not.toContain('"hello ${name} world"')
+  })
+
   it('transpiles density with save/restore', () => {
     const { code, errors } = parseAndTranspile(`
 live_loop :test do

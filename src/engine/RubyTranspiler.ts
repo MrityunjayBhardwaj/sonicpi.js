@@ -502,7 +502,11 @@ function transpileExpression(expr: string): string {
   // Ruby symbols :name → "name"
   result = result.replace(/:(\w+)/g, '"$1"')
 
-  // Ruby string interpolation #{expr} → ${expr}
+  // Ruby string interpolation #{expr} → ${expr} with backtick conversion
+  // "hello #{name}" → `hello ${name}`
+  result = result.replace(/"([^"]*#\{[^"]*)"/, (_match, inner) => {
+    return '`' + inner.replace(/#\{/g, '${') + '`'
+  })
   result = result.replace(/#\{/g, '${')
 
   // ring, knit, range, line, spread, chord, scale, note, note_range, chord_invert → b.*

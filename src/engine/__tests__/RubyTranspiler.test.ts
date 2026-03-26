@@ -310,4 +310,16 @@ end`
       expect(result).toBe(code)
     })
   })
+
+  describe('string interpolation', () => {
+    it('converts Ruby string interpolation to JS template literals', () => {
+      const ruby = `live_loop :test do
+  puts "note is #{n}"
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(js).toContain('`note is ${n}`')
+      expect(js).not.toContain('"note is ${n}"')
+    })
+  })
 })
