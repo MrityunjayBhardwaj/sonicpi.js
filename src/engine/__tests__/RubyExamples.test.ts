@@ -638,4 +638,20 @@ end
     expect(events.length).toBeGreaterThanOrEqual(3)
   })
 
+  // =========================================================================
+  // 24. .map with Ruby block syntax
+  // =========================================================================
+  it('24. .map with curly brace block', async () => {
+    const { error } = await runCode(`
+live_loop :mapped do
+  notes = [60, 62, 64].map { |n| n + 12 }
+  notes.each do |n|
+    play n
+    sleep 0.25
+  end
+end
+    `)
+    expect(error).toBeUndefined()
+  })
+
 })

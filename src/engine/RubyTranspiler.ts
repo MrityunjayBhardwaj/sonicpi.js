@@ -244,6 +244,55 @@ export function transpileRubyToJS(ruby: string): string {
       continue
     }
 
+    // --- expr.map/select/reject/collect do |var| --- (multi-line block)
+    const mapDoMatch = code.match(
+      /^(.+)\.(map|select|reject|collect)\s+do\s*(?:\|(\w+)\|)?\s*$/
+    )
+    if (mapDoMatch) {
+      const iterableExpr = transpileExpression(mapDoMatch[1])
+      const method = mapDoMatch[2]
+      const varName = mapDoMatch[3] ?? '_item'
+      const jsMethod = (method === 'select' || method === 'reject') ? 'filter' : 'map'
+      const isReject = method === 'reject'
+      const inLoop = blockStack.includes('loop')
+
+      // Collect body lines until 'end'
+      const bodyLines: string[] = []
+      i++
+      while (i < lines.length) {
+        const bodyLine = lines[i].trim()
+        if (bodyLine === 'end') break
+        bodyLines.push(bodyLine)
+        i++
+      }
+      // i now points at 'end', will be incremented by continue
+
+      if (bodyLines.length === 1) {
+        const bodyExpr = transpileLine(bodyLines[0], inLoop, i)
+        if (isReject) {
+          result.push(`${indent}${iterableExpr}.${jsMethod}((${varName}) => !(${bodyExpr}))${inlineComment}`)
+        } else {
+          result.push(`${indent}${iterableExpr}.${jsMethod}((${varName}) => ${bodyExpr})${inlineComment}`)
+        }
+      } else {
+        // Multi-line: last expression is return value
+        const lastBody = bodyLines.pop() ?? ''
+        const lastExpr = transpileLine(lastBody, inLoop, i)
+        result.push(`${indent}${iterableExpr}.${jsMethod}((${varName}) => {${inlineComment}`)
+        for (const bl of bodyLines) {
+          result.push(`${indent}  ${transpileLine(bl, inLoop, i)}`)
+        }
+        if (isReject) {
+          result.push(`${indent}  return !(${lastExpr})`)
+        } else {
+          result.push(`${indent}  return ${lastExpr}`)
+        }
+        result.push(`${indent}})`)
+      }
+      i++
+      continue
+    }
+
     // --- at [times] do / at [times], [values] do |params| ---
     const atMatch = code.match(
       /^at\s+(\[.+?\])(?:\s*,\s*(\[.+?\]))?\s+do\s*(?:\|(.+?)\|)?\s*$/
@@ -601,6 +650,12 @@ function transpileExpression(expr: string): string {
 
   // [].choose → b.choose([])
   // Already handled if user writes choose([...])
+
+  // Ruby block syntax: .map { |var| expr } → .map((var) => expr)
+  result = result.replace(/\.map\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.map(($1) => $2)')
+  result = result.replace(/\.select\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.filter(($1) => $2)')
+  result = result.replace(/\.reject\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.filter(($1) => !($2))')
+  result = result.replace(/\.collect\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.map(($1) => $2)')
 
   return result
 }

@@ -322,4 +322,54 @@ end`
       expect(js).not.toContain('"note is ${n}"')
     })
   })
+
+  describe('map/select/reject/collect block syntax', () => {
+    it('transpiles .map { |n| expr }', () => {
+      const ruby = `live_loop :test do
+  notes = [60, 62, 64].map { |n| n + 12 }
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(strip(js)).toContain('.map((n) => n + 12)')
+    })
+
+    it('transpiles .select { |n| expr }', () => {
+      const ruby = `live_loop :test do
+  evens = [1, 2, 3, 4].select { |n| n % 2 == 0 }
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(strip(js)).toContain('.filter((n) => n % 2 == 0)')
+    })
+
+    it('transpiles .reject { |n| expr }', () => {
+      const ruby = `live_loop :test do
+  odds = [1, 2, 3, 4].reject { |n| n % 2 == 0 }
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(strip(js)).toContain('.filter((n) => !(n % 2 == 0))')
+    })
+
+    it('transpiles .collect { |n| expr } as .map', () => {
+      const ruby = `live_loop :test do
+  notes = [60, 62, 64].collect { |n| n + 12 }
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(strip(js)).toContain('.map((n) => n + 12)')
+    })
+
+    it('transpiles multi-line .map do |n|', () => {
+      const ruby = `live_loop :test do
+  [60, 62, 64].map do |n|
+    play n
+  end
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(strip(js)).toContain('.map((n) =>')
+      expect(strip(js)).toContain('b.play(n)')
+    })
+  })
 })

@@ -386,4 +386,62 @@ end
     expect(errors).toHaveLength(0)
     expect(code).toContain('for (const n of notes)')
   })
+
+  it('transpiles .map with single-line curly brace block', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  notes = [60, 62, 64].map { |n| n + 12 }
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('.map((n) => n + 12)')
+  })
+
+  it('transpiles .select with single-line curly brace block', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  evens = [1, 2, 3, 4].select { |n| n % 2 == 0 }
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('.filter((n) => n % 2 == 0)')
+  })
+
+  it('transpiles .reject with single-line curly brace block', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  odds = [1, 2, 3, 4].reject { |n| n % 2 == 0 }
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('.filter((n) => !(n % 2 == 0))')
+  })
+
+  it('transpiles .collect as alias for .map', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  notes = [60, 62, 64].collect { |n| n + 12 }
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('.map((n) => n + 12)')
+  })
+
+  it('transpiles multi-line .map do |n|', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  [60, 62, 64].map do |n|
+    play n
+  end
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('.map((n) =>')
+    expect(code).toContain('b.play(n)')
+  })
 })

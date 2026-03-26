@@ -751,6 +751,94 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
       return
     }
 
+    // Check for expr.map/select/reject/collect do |var| pattern (multi-line)
+    const MAP_METHODS: Record<string, string> = { map: 'map', select: 'filter', reject: 'filter', collect: 'map' }
+    const mapIdx = lineTokens.findIndex((t, i) =>
+      t.type === 'dot' && lineTokens[i + 1] && MAP_METHODS[lineTokens[i + 1].value]
+    )
+    if (mapIdx >= 0 && lineTokens.some(t => t.value === 'do')) {
+      const methodName = lineTokens[mapIdx + 1].value as keyof typeof MAP_METHODS
+      const jsMethod = MAP_METHODS[methodName]
+      const isReject = methodName === 'reject'
+
+      const iterableTokens = lineTokens.slice(0, mapIdx)
+      const iterable = iterableTokens.map((t, idx) => {
+        const val = transpileToken(t)
+        const next = iterableTokens[idx + 1]
+        if (t.type === 'dot' || next?.type === 'dot') return val
+        if (t.type === 'lbracket' || t.type === 'lparen') return val
+        if (next && ['comma', 'rbracket', 'rparen'].includes(next.type)) return val
+        return val + ' '
+      }).join('').trim()
+
+      // Find |var| if present
+      let varName = '_item'
+      const pipeIdx = lineTokens.findIndex(t => t.type === 'pipe')
+      if (pipeIdx >= 0) {
+        const endPipe = lineTokens.findIndex((t, i) => i > pipeIdx && t.type === 'pipe')
+        if (endPipe >= 0) {
+          varName = lineTokens.slice(pipeIdx + 1, endPipe).map(t => t.value).join('').trim()
+        }
+      }
+
+      // Check if there's an assignment: `result = expr.map do |n|`
+      let assignVar: string | null = null
+      // Look backwards from the iterable to see if there's an assignment
+      // The iterable itself may contain the assignment pattern
+      const iterableStr = transpileExpr(iterable)
+      const assignCheck = iterableStr.match(/^(\w+)\s*=\s*(.+)$/)
+      let actualIterable = iterableStr
+      if (assignCheck) {
+        assignVar = assignCheck[1]
+        actualIterable = assignCheck[2]
+      }
+
+      const indent = getIndent()
+      // Collect block body lines
+      const bodyOutput: string[] = []
+      const savedOutput = output.splice(0, output.length) // save current output
+      blockStack.push('block')
+      const prevInsideLoop = insideLoop
+      insideLoop = true
+      parseBlock()
+      insideLoop = prevInsideLoop
+      blockStack.pop()
+      // The body lines are now in `output`
+      bodyOutput.push(...output)
+      output.length = 0
+      output.push(...savedOutput) // restore
+
+      if (at('word', 'end')) advance()
+
+      if (bodyOutput.length === 1) {
+        // Single-line body — emit as arrow expression
+        const bodyExpr = bodyOutput[0].trim()
+        const expr = isReject
+          ? `${actualIterable}.${jsMethod}((${varName}) => !(${bodyExpr}))`
+          : `${actualIterable}.${jsMethod}((${varName}) => ${bodyExpr})`
+        if (assignVar) {
+          output.push(`${indent}const ${assignVar} = ${expr}`)
+        } else {
+          output.push(`${indent}${expr}`)
+        }
+      } else {
+        // Multi-line body — last expression is return value
+        const lastLine = bodyOutput.pop()?.trim() ?? ''
+        const bodyLines = bodyOutput.map(l => `${indent}  ${l.trim()}`).join('\n')
+        const returnLine = isReject
+          ? `${indent}  return !(${lastLine})`
+          : `${indent}  return ${lastLine}`
+        const fnBody = bodyLines ? `\n${bodyLines}\n${returnLine}\n${indent}` : `\n${returnLine}\n${indent}`
+        const expr = `${actualIterable}.${jsMethod}((${varName}) => {${fnBody}})`
+        if (assignVar) {
+          output.push(`${indent}const ${assignVar} = ${expr}`)
+        } else {
+          output.push(`${indent}${expr}`)
+        }
+      }
+      return
+    }
+
     // Reconstruct line — no spaces around dots (for method chains)
     const rawLine = lineTokens.map((t, idx) => {
       const val = transpileToken(t)
@@ -876,10 +964,11 @@ function addBuilderPrefixes(line: string, insideLoop: boolean): string {
   result = result.replace(/(?<=\(|^)(ring|spread)\s+([^(].+?)(?=\)|$)/g, 'b.$1($2)')
 
   // Ruby block syntax: .map { |var| expr } → .map((var) => expr)
-  result = result.replace(/\.map\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.map(($1) => $2)')
-  result = result.replace(/\.select\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.filter(($1) => $2)')
-  result = result.replace(/\.reject\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.filter(($1) => !($2))')
-  result = result.replace(/\.collect\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.map(($1) => $2)')
+  // Note: tokenizer may insert spaces around pipes, so match `| var |` flexibly
+  result = result.replace(/\.map\s*\{\s*\|\s*(\w+)\s*\|\s*(.+?)\s*\}/g, '.map(($1) => $2)')
+  result = result.replace(/\.select\s*\{\s*\|\s*(\w+)\s*\|\s*(.+?)\s*\}/g, '.filter(($1) => $2)')
+  result = result.replace(/\.reject\s*\{\s*\|\s*(\w+)\s*\|\s*(.+?)\s*\}/g, '.filter(($1) => !($2))')
+  result = result.replace(/\.collect\s*\{\s*\|\s*(\w+)\s*\|\s*(.+?)\s*\}/g, '.map(($1) => $2)')
 
   return result
 }
