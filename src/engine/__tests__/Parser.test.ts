@@ -444,4 +444,59 @@ end
     expect(code).toContain('.map((n) =>')
     expect(code).toContain('b.play(n)')
   })
+
+  it('transpiles begin ... rescue ... end', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  begin
+    play 60
+    sleep 1
+  rescue
+    puts "error"
+  end
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('try {')
+    expect(code).toContain('} catch (_e) {')
+    expect(code).toContain('b.play(60)')
+    expect(code).toContain('b.puts("error")')
+  })
+
+  it('transpiles begin ... rescue => e ... end', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  begin
+    play 60
+  rescue => e
+    puts e
+  end
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('try {')
+    expect(code).toContain('} catch (e) {')
+  })
+
+  it('transpiles begin ... rescue ... ensure ... end', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  begin
+    play 60
+  rescue
+    puts "error"
+  ensure
+    puts "cleanup"
+  end
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('try {')
+    expect(code).toContain('} catch (_e) {')
+    expect(code).toContain('} finally {')
+    expect(code).toContain('b.puts("cleanup")')
+  })
 })

@@ -321,6 +321,12 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
       return
     }
 
+    // begin/rescue/ensure/end
+    if (t.type === 'word' && t.value === 'begin') {
+      parseBeginRescue()
+      return
+    }
+
     // end
     if (t.type === 'word' && t.value === 'end') {
       // Handled by block parsers — shouldn't reach here
@@ -576,6 +582,67 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
     output.push(`${indent}  b.density = __prevDensity`)
     output.push(`${indent}}`)
     if (at('newline')) advance()
+  }
+
+  function parseBeginRescue(): void {
+    advance() // 'begin'
+    skipNewlines()
+
+    const indent = getIndent()
+    output.push(`${indent}try {`)
+    blockStack.push('block')
+    parseBlockUntil(['rescue', 'ensure', 'end'])
+
+    // Handle rescue
+    if (at('word', 'rescue')) {
+      advance()
+      let errorVar = '_e'
+      // Optional => e (tokenizer splits => into = and >)
+      if (at('op', '=')) {
+        advance() // '='
+        if (at('op', '>')) {
+          advance() // '>'
+          if (at('word')) {
+            errorVar = advance().value
+          }
+        }
+      }
+      skipNewlines()
+      blockStack.pop()
+      output.push(`${indent}} catch (${errorVar}) {`)
+      blockStack.push('block')
+      parseBlockUntil(['ensure', 'end'])
+    }
+
+    // Handle ensure
+    if (at('word', 'ensure')) {
+      advance()
+      skipNewlines()
+      blockStack.pop()
+      output.push(`${indent}} finally {`)
+      blockStack.push('block')
+      parseBlockUntil(['end'])
+    }
+
+    blockStack.pop()
+    if (at('word', 'end')) advance()
+    output.push(`${indent}}`)
+    if (at('newline')) advance()
+  }
+
+  /** Like parseBlock() but also stops at specific keywords. */
+  function parseBlockUntil(stopWords: string[]): void {
+    skipNewlines()
+    while (
+      !at('eof') &&
+      !at('word', 'end') &&
+      !at('word', 'elsif') &&
+      !at('word', 'else') &&
+      !stopWords.some(w => at('word', w))
+    ) {
+      parseStatement()
+      skipNewlines()
+    }
   }
 
   function parseAtBlock(): void {
@@ -1052,6 +1119,10 @@ function transpileSonicPiLine(line: string, insideLoop: boolean): string {
   // use_random_seed
   const useRandSeedMatch = line.match(/^use_random_seed\s+(.+)$/)
   if (useRandSeedMatch) return `${prefix}use_random_seed(${useRandSeedMatch[1]})`
+
+  // live_audio
+  const liveAudioMatch = line.match(/^live_audio\s+(.+)$/)
+  if (liveAudioMatch) return `${prefix}live_audio(${transpileArgs(liveAudioMatch[1])})`
 
   // puts / print
   const putsMatch = line.match(/^puts\s+(.+)$/)

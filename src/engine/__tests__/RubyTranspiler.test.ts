@@ -311,6 +311,71 @@ end`
     })
   })
 
+  describe('begin/rescue/ensure', () => {
+    it('transpiles begin ... rescue ... end', () => {
+      const ruby = `live_loop :test do
+  begin
+    play 60
+    sleep 1
+  rescue
+    puts "error"
+  end
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(strip(js)).toContain('try {')
+      expect(strip(js)).toContain('} catch (_e) {')
+      expect(strip(js)).toContain('b.play(60)')
+      expect(strip(js)).toContain('b.puts("error")')
+    })
+
+    it('transpiles begin ... rescue => e ... end', () => {
+      const ruby = `live_loop :test do
+  begin
+    play 60
+  rescue => e
+    puts e
+  end
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(strip(js)).toContain('try {')
+      expect(strip(js)).toContain('} catch (e) {')
+    })
+
+    it('transpiles begin ... rescue ... ensure ... end', () => {
+      const ruby = `live_loop :test do
+  begin
+    play 60
+  rescue
+    puts "error"
+  ensure
+    puts "cleanup"
+  end
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(strip(js)).toContain('try {')
+      expect(strip(js)).toContain('} catch (_e) {')
+      expect(strip(js)).toContain('} finally {')
+    })
+
+    it('transpiles begin ... ensure ... end (no rescue)', () => {
+      const ruby = `live_loop :test do
+  begin
+    play 60
+  ensure
+    puts "cleanup"
+  end
+  sleep 1
+end`
+      const js = transpileRubyToJS(ruby)
+      expect(strip(js)).toContain('try {')
+      expect(strip(js)).not.toContain('catch')
+      expect(strip(js)).toContain('} finally {')
+    })
+  })
+
   describe('string interpolation', () => {
     it('converts Ruby string interpolation to JS template literals', () => {
       const ruby = `live_loop :test do

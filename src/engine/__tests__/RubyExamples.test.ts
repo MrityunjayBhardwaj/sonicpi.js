@@ -639,6 +639,26 @@ end
   })
 
   // =========================================================================
+  // 25. begin/rescue/ensure error handling
+  // =========================================================================
+  it('25. begin/rescue/ensure error handling', async () => {
+    const { error, events } = await runCode(`
+live_loop :safe do
+  begin
+    play 60
+    sleep 1
+  rescue => e
+    puts "error"
+  ensure
+    puts "cleanup"
+  end
+end
+    `)
+    expect(error).toBeUndefined()
+    expect(events.length).toBeGreaterThanOrEqual(1)
+  })
+
+  // =========================================================================
   // 24. .map with Ruby block syntax
   // =========================================================================
   it('24. .map with curly brace block', async () => {

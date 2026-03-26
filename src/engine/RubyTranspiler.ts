@@ -382,6 +382,30 @@ export function transpileRubyToJS(ruby: string): string {
       continue
     }
 
+    // --- begin (try) ---
+    if (code === 'begin') {
+      result.push(`${indent}try {${inlineComment}`)
+      blockStack.push('block')
+      i++
+      continue
+    }
+
+    // --- rescue => e ---
+    const rescueMatch = code.match(/^rescue\s*(?:=>\s*(\w+))?\s*$/)
+    if (rescueMatch) {
+      const errorVar = rescueMatch[1] ?? '_e'
+      result.push(`${indent}} catch (${errorVar}) {${inlineComment}`)
+      i++
+      continue
+    }
+
+    // --- ensure (finally) ---
+    if (code === 'ensure') {
+      result.push(`${indent}} finally {${inlineComment}`)
+      i++
+      continue
+    }
+
     // --- end ---
     if (code === 'end') {
       const blockType = blockStack.pop() ?? 'loop'
@@ -528,6 +552,13 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
   if (cueMatch) {
     const args = cueMatch[2] ? `, ${transpileExpression(cueMatch[2])}` : ''
     return `b.cue("${cueMatch[1]}"${args})`
+  }
+
+  // --- live_audio :name, opts ---
+  const liveAudioMatch = line.match(/^live_audio\s+(.+)$/)
+  if (liveAudioMatch) {
+    const args = transpileArgs(liveAudioMatch[1])
+    return `b.live_audio(${args})`
   }
 
   // --- use_synth :name ---
