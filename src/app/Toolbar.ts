@@ -24,6 +24,7 @@ export class Toolbar {
   private activeBuffer = 0
   private playing = false
   private recording = false
+  private bpmLabel: HTMLElement
 
   constructor(container: HTMLElement, private callbacks: ToolbarCallbacks) {
     this.el = document.createElement('div')
@@ -115,6 +116,18 @@ export class Toolbar {
     })
     volWrap.append(volIcon, volSlider)
     topRow.appendChild(volWrap)
+
+    // BPM display
+    this.bpmLabel = document.createElement('span')
+    this.bpmLabel.style.cssText = `
+      font-size: 0.7rem; color: #888;
+      user-select: none; white-space: nowrap;
+      margin-left: 0.25rem;
+    `
+    this.bpmLabel.textContent = '120 BPM'
+    topRow.appendChild(this.bpmLabel)
+
+    topRow.appendChild(this.separator())
 
     // Spacer
     const spacer = document.createElement('span')
@@ -233,6 +246,10 @@ export class Toolbar {
     this.recBtn.style.background = recording ? '#C0392B' : '#555'
     const label = this.recBtn.querySelector('.spw-btn-label') as HTMLElement
     if (label) label.textContent = recording ? 'Save' : 'Rec'
+  }
+
+  setBpm(bpm: number): void {
+    this.bpmLabel.textContent = `${Math.round(bpm)} BPM`
   }
 
   private selectBuffer(index: number): void {
