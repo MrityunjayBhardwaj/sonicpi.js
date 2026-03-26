@@ -262,4 +262,55 @@ describe('ProgramBuilder', () => {
     expect(steps).toHaveLength(4)
     expect(steps.map(s => s.tag)).toEqual(['play', 'sleep', 'play', 'sleep'])
   })
+
+  describe('density', () => {
+    it('density 2 halves sleep duration', () => {
+      const b = new ProgramBuilder()
+      b.density = 2
+      b.sleep(1)
+      const steps = b.build()
+
+      const step = steps[0] as Extract<(typeof steps)[0], { tag: 'sleep' }>
+      expect(step.beats).toBe(0.5)
+    })
+
+    it('nested density multiplies', () => {
+      const b = new ProgramBuilder()
+      b.density = 2
+      b.density = b.density * 3
+      b.sleep(1)
+      const steps = b.build()
+
+      const step = steps[0] as Extract<(typeof steps)[0], { tag: 'sleep' }>
+      expect(step.beats).toBeCloseTo(1 / 6)
+    })
+
+    it('density resets after block', () => {
+      const b = new ProgramBuilder()
+      const prevDensity = b.density
+      b.density = 2
+      b.sleep(1) // beats = 0.5
+      b.density = prevDensity
+      b.sleep(1) // beats = 1.0
+      const steps = b.build()
+
+      const step0 = steps[0] as Extract<(typeof steps)[0], { tag: 'sleep' }>
+      const step1 = steps[1] as Extract<(typeof steps)[0], { tag: 'sleep' }>
+      expect(step0.beats).toBe(0.5)
+      expect(step1.beats).toBe(1)
+    })
+
+    it('with_fx inner builder inherits density', () => {
+      const b = new ProgramBuilder()
+      b.density = 4
+      b.with_fx('reverb', (inner) => {
+        inner.sleep(1)
+        return inner
+      })
+      const steps = b.build()
+      const fxStep = steps[0] as Extract<(typeof steps)[0], { tag: 'fx' }>
+      const sleepStep = fxStep.body[0] as Extract<(typeof steps)[0], { tag: 'sleep' }>
+      expect(sleepStep.beats).toBe(0.25)
+    })
+  })
 })

@@ -243,4 +243,22 @@ end
     expect(errors).toHaveLength(0)
     expect(code).toContain('while (true)')
   })
+
+  it('transpiles density with save/restore', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  density 2 do
+    play 60
+    sleep 1
+  end
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('const __prevDensity = b.density')
+    expect(code).toContain('b.density = __prevDensity * 2')
+    expect(code).toContain('b.density = __prevDensity')
+    expect(code).toContain('b.play(60)')
+    expect(code).toContain('b.sleep(1)')
+  })
 })

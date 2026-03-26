@@ -20,10 +20,14 @@ export class ProgramBuilder {
   private currentSynth = 'beep'
   private rng: SeededRandom
   private ticks = new Map<string, number>()
+  private _densityFactor: number = 1
 
   constructor(seed: number = 0) {
     this.rng = new SeededRandom(seed)
   }
+
+  get density(): number { return this._densityFactor }
+  set density(d: number) { this._densityFactor = d }
 
   play(noteVal: number | string, opts?: Record<string, number>): this {
     const midi = typeof noteVal === 'string' ? noteToMidi(noteVal) : noteVal
@@ -44,7 +48,7 @@ export class ProgramBuilder {
   }
 
   sleep(beats: number): this {
-    this.steps.push({ tag: 'sleep', beats })
+    this.steps.push({ tag: 'sleep', beats: beats / this._densityFactor })
     return this
   }
 
@@ -105,6 +109,7 @@ export class ProgramBuilder {
     }
     const inner = new ProgramBuilder(this.rng.next() * 0xFFFFFFFF)
     inner.currentSynth = this.currentSynth
+    inner._densityFactor = this._densityFactor
     fn(inner)
     this.steps.push({ tag: 'fx', name, opts, body: inner.build() })
     return this
