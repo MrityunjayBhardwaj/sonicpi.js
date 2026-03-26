@@ -56,6 +56,28 @@ describe('SeededRandom', () => {
     const v2 = r.next()
     expect(v1).toBe(v2)
   })
+
+  it('matches Sonic Pi (Ruby MT19937) output for seed 0', () => {
+    const r = new SeededRandom(0)
+    // Ruby: Random.new(0).rand => 0.5488135039273248
+    expect(r.next()).toBeCloseTo(0.5488135039273248, 15)
+  })
+
+  it('matches Sonic Pi (Ruby MT19937) output for seed 42', () => {
+    const r = new SeededRandom(42)
+    // Ruby: Random.new(42).rand => 0.37454011884736246
+    expect(r.next()).toBeCloseTo(0.37454011884736246, 14)
+  })
+
+  it('clone preserves MT19937 state', () => {
+    const r = new SeededRandom(123)
+    r.next() // advance state
+    r.next()
+    const c = r.clone()
+    const seq1 = Array.from({ length: 5 }, () => r.next())
+    const seq2 = Array.from({ length: 5 }, () => c.next())
+    expect(seq1).toEqual(seq2)
+  })
 })
 
 describe('Ring', () => {
