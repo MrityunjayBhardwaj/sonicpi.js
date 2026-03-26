@@ -45,8 +45,21 @@ const SP_BUILTINS = new Set([
   'ring', 'knit', 'range', 'line', 'spread', 'chord', 'scale',
   'chord_invert', 'note', 'note_range', 'tick', 'look',
 ])
+// Block-opening keywords that increase indent on the next line
+const SP_BLOCK_OPENERS = new Set(['do', 'then', 'begin', 'else', 'elsif', 'rescue', 'ensure'])
+
+interface SonicPiParserState {
+  indentLevel: number
+}
+
 const sonicPiStreamParser = {
-  token(stream: { match(re: RegExp): string[] | null; next(): string; eol(): boolean; skipToEnd(): void; peek(): string }) {
+  startState(): SonicPiParserState {
+    return { indentLevel: 0 }
+  },
+  copyState(s: SonicPiParserState): SonicPiParserState {
+    return { indentLevel: s.indentLevel }
+  },
+  token(stream: { match(re: RegExp): string[] | null; next(): string; eol(): boolean; skipToEnd(): void; peek(): string; sol(): boolean }, state: SonicPiParserState) {
     // Comment
     if (stream.match(/^#.*/)) return 'comment'
     // String
@@ -60,7 +73,17 @@ const sonicPiStreamParser = {
     const wordMatch = stream.match(/^\w+[!?]?/)
     if (wordMatch) {
       const w = wordMatch[0]
-      if (SP_KEYWORDS.has(w)) return 'keyword'
+      if (SP_KEYWORDS.has(w)) {
+        // Track indent: block openers at end of line increase indent
+        if (SP_BLOCK_OPENERS.has(w) && stream.eol()) {
+          state.indentLevel++
+        }
+        // 'end' at start of meaningful content decreases indent
+        if (w === 'end') {
+          state.indentLevel = Math.max(0, state.indentLevel - 1)
+        }
+        return 'keyword'
+      }
       if (SP_BUILTINS.has(w)) return 'builtin'
       return 'variable'
     }
@@ -69,6 +92,14 @@ const sonicPiStreamParser = {
     // Skip unknown
     stream.next()
     return null
+  },
+  indent(state: SonicPiParserState, textAfter: string) {
+    let level = state.indentLevel
+    // If the line being indented starts with 'end', dedent one level
+    if (/^\s*end\b/.test(textAfter)) {
+      level = Math.max(0, level - 1)
+    }
+    return level * 2  // 2-space indent (Sonic Pi convention)
   },
 }
 
