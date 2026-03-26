@@ -18,6 +18,7 @@ export type Step =
   | { tag: 'fx'; name: string; opts: Record<string, number>; body: Program }
   | { tag: 'thread'; body: Program }
   | { tag: 'print'; message: string }
+  | { tag: 'liveAudio'; name: string; opts: Record<string, number> }
   | { tag: 'stop' }
 
 export type Program = Step[]

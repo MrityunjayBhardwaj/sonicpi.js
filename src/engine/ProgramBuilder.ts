@@ -144,6 +144,11 @@ export class ProgramBuilder {
     return this
   }
 
+  live_audio(name: string, opts?: Record<string, number>): this {
+    this.steps.push({ tag: 'liveAudio', name, opts: opts ?? {} })
+    return this
+  }
+
   stop(): this {
     this.steps.push({ tag: 'stop' })
     return this

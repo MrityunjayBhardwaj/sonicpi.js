@@ -138,6 +138,8 @@ export class SuperSonicBridge {
   /** Audio bus allocator — buses 0-15 are hardware, 16+ are private */
   private nextBusNum = NUM_OUTPUT_CHANNELS
   private freeBuses: number[] = []
+  /** Live audio (mic/line-in) streams keyed by name */
+  private liveAudioStreams = new Map<string, { stream: MediaStream, source: MediaStreamAudioSourceNode }>()
   /** Per-track AnalyserNodes keyed by track name */
   private trackAnalysers = new Map<string, AnalyserNode>()
   /** Track name → scsynth bus pair (stereo, starting at bus 2) */
@@ -315,6 +317,44 @@ export class SuperSonicBridge {
   }
 
   /**
+   * Start capturing live audio from the system input (microphone/line-in).
+   * The stream is connected to the master analyser → gain → speakers chain.
+   * Disables browser audio processing for clean pass-through.
+   */
+  async startLiveAudio(name: string, opts?: { stereo?: boolean }): Promise<void> {
+    if (!this.sonic) throw new Error('SuperSonic not initialized')
+
+    // If already running under this name, stop it first
+    this.stopLiveAudio(name)
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: opts?.stereo ? 2 : 1,
+      } as MediaTrackConstraints,
+    })
+
+    const audioCtx = this.sonic.audioContext
+    const source = audioCtx.createMediaStreamSource(stream)
+    // Connect to the analyser node (which feeds into master gain → destination)
+    source.connect(this.analyserNode ?? audioCtx.destination)
+
+    this.liveAudioStreams.set(name, { stream, source })
+  }
+
+  /** Stop a named live audio stream and release its resources. */
+  stopLiveAudio(name: string): void {
+    const entry = this.liveAudioStreams.get(name)
+    if (entry) {
+      entry.source.disconnect()
+      entry.stream.getTracks().forEach(t => t.stop())
+      this.liveAudioStreams.delete(name)
+    }
+  }
+
+  /**
    * Allocate a stereo output bus for a track with its own AnalyserNode.
    * Returns the bus number to use as out_bus in synth params.
    * The bus audio is automatically routed to speakers via the worklet's
@@ -390,6 +430,10 @@ export class SuperSonicBridge {
   }
 
   dispose(): void {
+    // Stop all live audio streams
+    for (const name of this.liveAudioStreams.keys()) {
+      this.stopLiveAudio(name)
+    }
     if (this.masterGainNode) {
       this.masterGainNode.disconnect()
       this.masterGainNode = null

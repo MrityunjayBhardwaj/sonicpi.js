@@ -159,6 +159,14 @@ export async function runProgram(
         break
       }
 
+      case 'liveAudio': {
+        if (ctx.bridge) {
+          ctx.bridge.startLiveAudio(step.name, { stereo: !!step.opts.stereo })
+            .catch((err: Error) => ctx.printHandler?.(`live_audio failed: ${err.message}`))
+        }
+        break
+      }
+
       case 'print':
         ctx.printHandler?.(step.message)
         break

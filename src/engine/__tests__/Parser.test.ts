@@ -499,4 +499,27 @@ end
     expect(code).toContain('} finally {')
     expect(code).toContain('b.puts("cleanup")')
   })
+
+  it('transpiles live_audio :mic', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :input do
+  live_audio :mic
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('b.live_audio("mic")')
+  })
+
+  it('transpiles live_audio :mic with stereo option', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :input do
+  live_audio :mic, stereo: true
+  sleep 1
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('b.live_audio("mic"')
+    expect(code).toMatch(/stereo\s*:\s*true/)
+  })
 })

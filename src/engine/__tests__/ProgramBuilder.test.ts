@@ -485,4 +485,27 @@ describe('ProgramBuilder', () => {
       expect(playStep.opts.cutoff_slide).toBe(2)
     })
   })
+
+  describe('live_audio', () => {
+    it('live_audio() adds a liveAudio step with name and default opts', () => {
+      const b = new ProgramBuilder()
+      b.live_audio('mic')
+      const steps = b.build()
+
+      expect(steps).toHaveLength(1)
+      expect(steps[0].tag).toBe('liveAudio')
+      const step = steps[0] as Extract<(typeof steps)[0], { tag: 'liveAudio' }>
+      expect(step.name).toBe('mic')
+      expect(step.opts).toEqual({})
+    })
+
+    it('live_audio() passes opts through', () => {
+      const b = new ProgramBuilder()
+      b.live_audio('mic', { stereo: 1 })
+      const steps = b.build()
+
+      const step = steps[0] as Extract<(typeof steps)[0], { tag: 'liveAudio' }>
+      expect(step.opts.stereo).toBe(1)
+    })
+  })
 })
