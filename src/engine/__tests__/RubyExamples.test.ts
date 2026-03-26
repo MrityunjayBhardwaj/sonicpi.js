@@ -509,6 +509,24 @@ end
   })
 
   // =========================================================================
+  // 21. in_thread runs concurrently
+  // =========================================================================
+  it('21. in_thread runs concurrently', async () => {
+    const { error, events } = await runCode(`
+live_loop :test do
+  in_thread do
+    play 72
+    sleep 0.5
+  end
+  play 60
+  sleep 1
+end
+    `)
+    expect(error).toBeUndefined()
+    expect(events.length).toBeGreaterThanOrEqual(2)
+  })
+
+  // =========================================================================
   // 20a. Define + call from live_loop
   // =========================================================================
   it('20a. Define and call from live_loop', async () => {

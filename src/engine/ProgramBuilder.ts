@@ -115,6 +115,15 @@ export class ProgramBuilder {
     return this
   }
 
+  in_thread(buildFn: (b: ProgramBuilder) => void): this {
+    const inner = new ProgramBuilder(this.rng.next() * 0xFFFFFFFF)
+    inner.currentSynth = this.currentSynth
+    inner._densityFactor = this._densityFactor
+    buildFn(inner)
+    this.steps.push({ tag: 'thread', body: inner.build() })
+    return this
+  }
+
   stop(): this {
     this.steps.push({ tag: 'stop' })
     return this

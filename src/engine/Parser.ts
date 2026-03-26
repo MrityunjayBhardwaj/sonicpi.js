@@ -461,12 +461,17 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
     skipNewlines()
 
     const indent = getIndent()
-    output.push(`${indent};(async () => {`)
-    blockStack.push('thread')
+    output.push(`${indent}b.in_thread((b) => {`)
+
+    const prevInsideLoop = insideLoop
+    insideLoop = true
+    blockStack.push('loop')  // 'loop' so body gets b. prefixes
     parseBlock()
     blockStack.pop()
+    insideLoop = prevInsideLoop
+
     if (at('word', 'end')) advance()
-    output.push(`${indent}})()`)
+    output.push(`${indent}})`)
     if (at('newline')) advance()
   }
 

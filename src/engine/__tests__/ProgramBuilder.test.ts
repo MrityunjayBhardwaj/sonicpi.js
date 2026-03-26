@@ -263,6 +263,48 @@ describe('ProgramBuilder', () => {
     expect(steps.map(s => s.tag)).toEqual(['play', 'sleep', 'play', 'sleep'])
   })
 
+  describe('in_thread', () => {
+    it('creates a thread step with sub-program', () => {
+      const b = new ProgramBuilder()
+      b.play(60).in_thread((b) => {
+        b.play(72)
+        b.sleep(0.5)
+      }).sleep(1)
+      const program = b.build()
+      expect(program).toHaveLength(3)  // play, thread, sleep
+      expect(program[1].tag).toBe('thread')
+      expect((program[1] as any).body).toHaveLength(2)  // play, sleep
+    })
+
+    it('inherits currentSynth from parent', () => {
+      const b = new ProgramBuilder()
+      b.use_synth('prophet')
+      b.in_thread((inner) => {
+        inner.play(60)
+      })
+      const program = b.build()
+      // program[0] = useSynth, program[1] = thread
+      const threadStep = program[1] as any
+      expect(threadStep.tag).toBe('thread')
+      const playStep = threadStep.body[0]
+      expect(playStep.synth).toBe('prophet')
+    })
+
+    it('inherits density from parent', () => {
+      const b = new ProgramBuilder()
+      b.density = 2
+      b.in_thread((inner) => {
+        inner.sleep(1)
+      })
+      const program = b.build()
+      // program[0] = thread (no useSynth step, just density property)
+      const threadStep = program[0] as any
+      expect(threadStep.tag).toBe('thread')
+      const sleepStep = threadStep.body[0]
+      expect(sleepStep.beats).toBe(0.5)
+    })
+  })
+
   describe('density', () => {
     it('density 2 halves sleep duration', () => {
       const b = new ProgramBuilder()

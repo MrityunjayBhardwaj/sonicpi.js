@@ -137,6 +137,28 @@ export async function runProgram(
         break
       }
 
+      case 'thread': {
+        const task = ctx.scheduler.getTask(ctx.taskId)
+        if (!task) break
+        const threadName = `${ctx.taskId}__thread_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+        const threadBody = step.body
+
+        // Spawn a one-shot "loop" that runs the thread body once, then stops
+        ctx.scheduler.registerLoop(threadName, async () => {
+          await runProgram(threadBody, {
+            ...ctx,
+            taskId: threadName,
+          })
+          // One-shot: stop after first run
+          const t = ctx.scheduler.getTask(threadName)
+          if (t) t.running = false
+        }, {
+          bpm: task.bpm,
+          synth: task.currentSynth,
+        })
+        break
+      }
+
       case 'print':
         ctx.printHandler?.(step.message)
         break

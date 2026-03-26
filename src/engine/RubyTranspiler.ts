@@ -234,8 +234,8 @@ export function transpileRubyToJS(ruby: string): string {
     // --- in_thread do ---
     const inThreadMatch = code.match(/^in_thread\s+do\s*$/)
     if (inThreadMatch) {
-      result.push(`${indent};(async () => {${inlineComment}`)
-      blockStack.push('thread')
+      result.push(`${indent}b.in_thread((b) => {${inlineComment}`)
+      blockStack.push('loop')  // 'loop' so body gets b. prefixes
       i++
       continue
     }

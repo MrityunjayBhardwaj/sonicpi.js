@@ -84,6 +84,14 @@ export function queryProgram(
         time += fxDuration
         break
 
+      case 'thread': {
+        // Thread starts at current time, runs in parallel
+        const threadEvents = queryProgram(step.body, begin, end, currentBpm, time)
+        events.push(...threadEvents)
+        // Thread does NOT advance parent time (fire-and-forget)
+        break
+      }
+
       case 'stop':
         return events // halt here
 

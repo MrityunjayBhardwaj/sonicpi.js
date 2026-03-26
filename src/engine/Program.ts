@@ -16,6 +16,7 @@ export type Step =
   | { tag: 'cue'; name: string; args?: unknown[] }
   | { tag: 'sync'; name: string }
   | { tag: 'fx'; name: string; opts: Record<string, number>; body: Program }
+  | { tag: 'thread'; body: Program }
   | { tag: 'print'; message: string }
   | { tag: 'stop' }
 

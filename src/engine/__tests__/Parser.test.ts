@@ -146,7 +146,7 @@ end
     expect(code).toContain('hit(b)')
   })
 
-  it('transpiles in_thread', () => {
+  it('transpiles in_thread as builder call', () => {
     const { code, errors } = parseAndTranspile(`
 live_loop :test do
   in_thread do
@@ -157,8 +157,11 @@ live_loop :test do
 end
 `)
     expect(errors).toHaveLength(0)
-    expect(code).toContain(';(async () => {')
-    expect(code).toContain('})()')
+    expect(code).toContain('b.in_thread((b) => {')
+    expect(code).toContain('b.play(72)')
+    expect(code).toContain('b.sleep(0.5)')
+    expect(code).not.toContain(';(async () => {')
+    expect(code).not.toContain('})()')
   })
 
   it('transpiles comments', () => {
