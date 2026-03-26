@@ -145,6 +145,7 @@ export class SuperSonicBridge {
   private nextTrackBus = 2
   private splitter: ChannelSplitterNode | null = null
   private masterMerger: ChannelMergerNode | null = null
+  private masterGainNode: GainNode | null = null
 
   constructor(options: SuperSonicBridgeOptions = {}) {
     this.options = options
@@ -200,12 +201,17 @@ export class SuperSonicBridge {
       this.splitter.connect(this.masterMerger, ch + 1, 1) // right
     }
 
-    // Master analyser taps the mixed stereo → then to speakers
+    // Master gain control (default 0.8 to match UI slider)
+    this.masterGainNode = audioCtx.createGain()
+    this.masterGainNode.gain.value = 0.8
+
+    // Master analyser taps the mixed stereo → gain → speakers
     this.analyserNode = audioCtx.createAnalyser()
     this.analyserNode.fftSize = 2048
     this.analyserNode.smoothingTimeConstant = 0.8
     this.masterMerger.connect(this.analyserNode)
-    this.analyserNode.connect(audioCtx.destination)
+    this.analyserNode.connect(this.masterGainNode)
+    this.masterGainNode.connect(audioCtx.destination)
   }
 
   get audioContext(): AudioContext | null {
@@ -214,6 +220,13 @@ export class SuperSonicBridge {
 
   get analyser(): AnalyserNode | null {
     return this.analyserNode
+  }
+
+  /** Set master volume (0-1). Uses exponential ramp for smooth transitions. */
+  setMasterVolume(volume: number): void {
+    if (!this.masterGainNode) return
+    const clamped = Math.max(0, Math.min(1, volume))
+    this.masterGainNode.gain.setTargetAtTime(clamped, this.masterGainNode.context.currentTime, 0.02)
   }
 
   private async ensureSynthDefLoaded(name: string): Promise<void> {
@@ -376,6 +389,10 @@ export class SuperSonicBridge {
   }
 
   dispose(): void {
+    if (this.masterGainNode) {
+      this.masterGainNode.disconnect()
+      this.masterGainNode = null
+    }
     if (this.analyserNode) {
       this.analyserNode.disconnect()
       this.analyserNode = null

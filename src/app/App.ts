@@ -158,7 +158,7 @@ export class App {
       onRecord: () => this.handleRecord(),
       onExample: (ex) => this.loadExample(ex),
       onBufferSelect: (i) => this.switchBuffer(i),
-      onVolumeChange: (_v) => { /* TODO: wire to SuperSonic master volume */ },
+      onVolumeChange: (v) => { if (this.engine) this.engine.setVolume(v) },
     })
 
     // Main area

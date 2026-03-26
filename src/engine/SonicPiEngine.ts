@@ -46,6 +46,8 @@ export class SonicPiEngine {
   private schedAheadTime: number
   /** Maps DSL nodeRef → SuperSonic nodeId for control messages */
   private nodeRefMap = new Map<number, number>()
+  /** Pending volume to apply when bridge initializes */
+  private pendingVolume: number | null = null
   /** Stored builder functions for capture/query path */
   private loopBuilders = new Map<string, (b: ProgramBuilder) => void>()
   /** Per-loop seed counters for deterministic random */
@@ -66,6 +68,10 @@ export class SonicPiEngine {
 
     try {
       await this.bridge.init()
+      // Apply any volume set before init
+      if (this.pendingVolume !== null) {
+        this.bridge.setMasterVolume(this.pendingVolume)
+      }
     } catch (err) {
       console.warn('[SonicPi] SuperSonic init failed, running without audio:', err)
       this.bridge = null
@@ -278,6 +284,12 @@ export class SonicPiEngine {
   /** Set handler for puts/print output from user code. */
   setPrintHandler(handler: (msg: string) => void): void {
     this.printHandler = handler
+  }
+
+  /** Set master volume (0-1). Safe to call before init — volume is applied when bridge is ready. */
+  setVolume(volume: number): void {
+    this.pendingVolume = volume
+    this.bridge?.setMasterVolume(volume)
   }
 
   /** Get a friendly version of the last error (for display in a log pane). */
