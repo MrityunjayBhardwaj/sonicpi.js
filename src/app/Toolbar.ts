@@ -185,6 +185,7 @@ export class Toolbar {
       btn.title = `Buffer ${i}`
       btn.style.cssText = `
         padding: 0.3rem 0.65rem;
+        min-height: 2rem;
         border: none;
         background: transparent;
         color: ${i === 0 ? '#E8527C' : '#555'};
@@ -297,6 +298,7 @@ export class Toolbar {
     btn.style.cssText = `
       display: flex; align-items: center; gap: 0.35rem;
       padding: 0.3rem 0.75rem;
+      min-height: 2.2rem;
       border: none;
       border-radius: 5px;
       background: ${colors.bg};
