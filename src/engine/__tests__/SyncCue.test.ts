@@ -1,10 +1,28 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualTimeScheduler } from '../VirtualTimeScheduler'
-import { createDSLContext } from '../DSLContext'
+import { ProgramBuilder } from '../ProgramBuilder'
+import { runProgram, type AudioContext as AudioCtx } from '../interpreters/AudioInterpreter'
+import { SoundEventStream } from '../SoundEventStream'
 
 async function flushMicrotasks(rounds = 10) {
   for (let i = 0; i < rounds; i++) {
     await new Promise((r) => setTimeout(r, 0))
+  }
+}
+
+function makeAudioCtx(
+  scheduler: VirtualTimeScheduler,
+  taskId: string,
+  eventStream: SoundEventStream,
+  nodeRefMap: Map<number, number>
+): AudioCtx {
+  return {
+    bridge: null,
+    scheduler,
+    taskId,
+    eventStream,
+    schedAheadTime: 100,
+    nodeRefMap,
   }
 }
 
@@ -14,20 +32,32 @@ describe('sync/cue', () => {
       getAudioTime: () => 0,
       schedAheadTime: 100,
     })
-    const dsl = createDSLContext({ scheduler })
-    const events: string[] = []
+    const eventStream = new SoundEventStream()
+    const soundEvents: import('../SoundEventStream').SoundEvent[] = []
+    eventStream.on((e) => soundEvents.push(e))
+    const nodeRefMap = new Map<number, number>()
 
-    dsl.live_loop('metro', async (ctx) => {
-      await ctx.sleep(1)
-      ctx.cue('tick')
-      events.push(`cue@${scheduler.getTask('metro')!.virtualTime}`)
-      await ctx.sleep(999999)
+    // Metro loop: sleep 1, cue 'tick', play 60 (proof cue ran), then park
+    const metroProgram = new ProgramBuilder(0)
+      .sleep(1)
+      .cue('tick')
+      .play(60)
+      .sleep(999999)
+      .build()
+
+    scheduler.registerLoop('metro', async () => {
+      await runProgram(metroProgram, makeAudioCtx(scheduler, 'metro', eventStream, nodeRefMap))
     })
 
-    dsl.live_loop('player', async (ctx) => {
-      await ctx.sync('tick')
-      events.push(`sync@${scheduler.getTask('player')!.virtualTime}`)
-      await ctx.sleep(999999)
+    // Player loop: sync on 'tick', play 72 (proof sync resolved), then park
+    const playerProgram = new ProgramBuilder(0)
+      .sync('tick')
+      .play(72)
+      .sleep(999999)
+      .build()
+
+    scheduler.registerLoop('player', async () => {
+      await runProgram(playerProgram, makeAudioCtx(scheduler, 'player', eventStream, nodeRefMap))
     })
 
     scheduler.tick(100)
@@ -36,8 +66,17 @@ describe('sync/cue', () => {
     scheduler.tick(100)
     await flushMicrotasks()
 
-    expect(events).toContain('cue@1')
-    expect(events).toContain('sync@1')
+    // Metro played note 60 after cue — proof the cue step executed
+    const metroPlay = soundEvents.find(e => e.midiNote === 60 && e.trackId === 'metro')
+    expect(metroPlay).toBeDefined()
+
+    // Player played note 72 after sync — proof sync resolved
+    const playerPlay = soundEvents.find(e => e.midiNote === 72 && e.trackId === 'player')
+    expect(playerPlay).toBeDefined()
+
+    // Player's play happened at VT=1 (inherited from cue source).
+    // audioTime = VT + schedAheadTime = 1 + 100 = 101
+    expect(playerPlay!.audioTime).toBe(101)
   })
 
   it('multiple tasks can sync on the same cue', async () => {
@@ -45,28 +84,42 @@ describe('sync/cue', () => {
       getAudioTime: () => 0,
       schedAheadTime: 100,
     })
-    const dsl = createDSLContext({ scheduler })
-    const synced: string[] = []
-    const vtAtSync: Record<string, number> = {}
+    const eventStream = new SoundEventStream()
+    const soundEvents: import('../SoundEventStream').SoundEvent[] = []
+    eventStream.on((e) => soundEvents.push(e))
+    const nodeRefMap = new Map<number, number>()
 
-    dsl.live_loop('source', async (ctx) => {
-      await ctx.sleep(1)
-      ctx.cue('go')
-      await ctx.sleep(999999)
+    // Source: sleep 1, cue 'go', park
+    const sourceProgram = new ProgramBuilder(0)
+      .sleep(1)
+      .cue('go')
+      .sleep(999999)
+      .build()
+
+    scheduler.registerLoop('source', async () => {
+      await runProgram(sourceProgram, makeAudioCtx(scheduler, 'source', eventStream, nodeRefMap))
     })
 
-    dsl.live_loop('waiter1', async (ctx) => {
-      await ctx.sync('go')
-      vtAtSync['waiter1'] = scheduler.getTask('waiter1')!.virtualTime
-      synced.push('waiter1')
-      await ctx.sleep(999999)
+    // Waiter 1: sync on 'go', play 60 (proof), park
+    const waiter1Program = new ProgramBuilder(0)
+      .sync('go')
+      .play(60)
+      .sleep(999999)
+      .build()
+
+    scheduler.registerLoop('waiter1', async () => {
+      await runProgram(waiter1Program, makeAudioCtx(scheduler, 'waiter1', eventStream, nodeRefMap))
     })
 
-    dsl.live_loop('waiter2', async (ctx) => {
-      await ctx.sync('go')
-      vtAtSync['waiter2'] = scheduler.getTask('waiter2')!.virtualTime
-      synced.push('waiter2')
-      await ctx.sleep(999999)
+    // Waiter 2: sync on 'go', play 72 (proof), park
+    const waiter2Program = new ProgramBuilder(0)
+      .sync('go')
+      .play(72)
+      .sleep(999999)
+      .build()
+
+    scheduler.registerLoop('waiter2', async () => {
+      await runProgram(waiter2Program, makeAudioCtx(scheduler, 'waiter2', eventStream, nodeRefMap))
     })
 
     scheduler.tick(100)
@@ -75,11 +128,16 @@ describe('sync/cue', () => {
     scheduler.tick(100)
     await flushMicrotasks()
 
-    expect(synced).toContain('waiter1')
-    expect(synced).toContain('waiter2')
+    // Both waiters should have synced (proved by play events emitted after sync)
+    const w1Play = soundEvents.find(e => e.midiNote === 60 && e.trackId === 'waiter1')
+    const w2Play = soundEvents.find(e => e.midiNote === 72 && e.trackId === 'waiter2')
+    expect(w1Play).toBeDefined()
+    expect(w2Play).toBeDefined()
 
-    expect(vtAtSync['waiter1']).toBe(1)
-    expect(vtAtSync['waiter2']).toBe(1)
+    // Both plays happened at VT=1 (inherited from cue source).
+    // audioTime = VT + schedAheadTime = 1 + 100 = 101
+    expect(w1Play!.audioTime).toBe(101)
+    expect(w2Play!.audioTime).toBe(101)
   })
 
   it('sync resolves immediately if cue already fired', async () => {
@@ -115,18 +173,24 @@ describe('sync/cue', () => {
       getAudioTime: () => 0,
       schedAheadTime: 100,
     })
-    const dsl = createDSLContext({ scheduler })
+    const eventStream = new SoundEventStream()
+    const nodeRefMap = new Map<number, number>()
+
+    // Note: cue args are handled at the scheduler level (fireCue/waitForSync).
+    // The ProgramBuilder.cue() step stores args, and AudioInterpreter passes them
+    // to fireCue. However, sync step doesn't capture return value in the program model.
+    // So we test cue arg passing at the scheduler level directly.
     let receivedArgs: unknown[] = []
 
-    dsl.live_loop('sender', async (ctx) => {
-      await ctx.sleep(0.5)
-      ctx.cue('data', 42, 'hello')
-      await ctx.sleep(999999)
+    scheduler.registerLoop('sender', async () => {
+      await scheduler.scheduleSleep('sender', 0.5)
+      scheduler.fireCue('data', 'sender', [42, 'hello'])
+      await scheduler.scheduleSleep('sender', 999999)
     })
 
-    dsl.live_loop('receiver', async (ctx) => {
-      receivedArgs = await ctx.sync('data')
-      await ctx.sleep(999999)
+    scheduler.registerLoop('receiver', async () => {
+      receivedArgs = await scheduler.waitForSync('data', 'receiver')
+      await scheduler.scheduleSleep('receiver', 999999)
     })
 
     scheduler.tick(100)

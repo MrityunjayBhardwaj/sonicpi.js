@@ -1,8 +1,20 @@
 import { describe, it, expect } from 'vitest'
 import { autoTranspile } from '../RubyTranspiler'
 import { VirtualTimeScheduler } from '../VirtualTimeScheduler'
-import { createDSLContext } from '../DSLContext'
+import { ProgramBuilder } from '../ProgramBuilder'
+import { runProgram } from '../interpreters/AudioInterpreter'
+import { SoundEventStream } from '../SoundEventStream'
 import { transpile, createExecutor } from '../Transpiler'
+import { ring, knit, range, line } from '../Ring'
+import { spread } from '../EuclideanRhythm'
+import { noteToMidi, midiToFreq, noteToFreq } from '../NoteToFreq'
+import { chord, scale, chord_invert, note, note_range } from '../ChordScale'
+
+async function flushMicrotasks(rounds = 10) {
+  for (let i = 0; i < rounds; i++) {
+    await new Promise((r) => setTimeout(r, 0))
+  }
+}
 
 /**
  * Run transpiled code in a real scheduler to verify it's valid and executable.
@@ -14,19 +26,71 @@ async function runCode(rubyCode: string): Promise<{ error?: Error; events: strin
     getAudioTime: () => 0,
     schedAheadTime: 100,
   })
-  scheduler.onEvent((e) => events.push(`${e.type}:${e.taskId}@${e.virtualTime}`))
-  const dsl = createDSLContext({ scheduler })
+  const eventStream = new SoundEventStream()
+  eventStream.on((e) => events.push(`${e.s ?? 'synth'}:${e.trackId}@${e.audioTime}`))
+  const nodeRefMap = new Map<number, number>()
 
-  // Top-level support
   let defaultBpm = 60
   let defaultSynth = 'beep'
-  const wrappedLiveLoop = (name: string, asyncFn: (ctx: unknown) => Promise<void>) => {
-    dsl.live_loop(name, asyncFn)
+  const loopSeeds = new Map<string, number>()
+
+  const wrappedLiveLoop = (name: string, builderFn: (b: ProgramBuilder) => void) => {
+    loopSeeds.set(name, 0)
+
+    const asyncFn = async () => {
+      const seed = loopSeeds.get(name) ?? 0
+      loopSeeds.set(name, seed + 1)
+      const builder = new ProgramBuilder(seed)
+      builderFn(builder)
+      const program = builder.build()
+
+      await runProgram(program, {
+        bridge: null,
+        scheduler,
+        taskId: name,
+        eventStream,
+        schedAheadTime: 100,
+        nodeRefMap,
+      })
+    }
+
+    scheduler.registerLoop(name, asyncFn)
     const task = scheduler.getTask(name)
     if (task) {
       task.bpm = defaultBpm
       task.currentSynth = defaultSynth
     }
+  }
+
+  // Top-level builder for code outside live_loop (tests 1, 3, 13)
+  const topBuilder = new ProgramBuilder(0)
+  let hasTopLevelCode = false
+
+  const topPlay = (n: number | string, opts?: Record<string, number>) => {
+    hasTopLevelCode = true
+    topBuilder.play(n, opts)
+  }
+  const topSleep = (beats: number) => {
+    hasTopLevelCode = true
+    topBuilder.sleep(beats)
+  }
+  const topSample = (name: string, opts?: Record<string, number>) => {
+    hasTopLevelCode = true
+    topBuilder.sample(name, opts)
+  }
+  const topUseSynth = (name: string) => {
+    hasTopLevelCode = true
+    topBuilder.use_synth(name)
+    defaultSynth = name
+  }
+  const topUseRandomSeed = (seed: number) => {
+    topBuilder.use_random_seed(seed)
+  }
+  const topChoose = <T>(arr: T[]): T => topBuilder.choose(arr)
+  const topRrandI = (min: number, max: number): number => topBuilder.rrand_i(min, max)
+  const topCue = (name: string, ...args: unknown[]) => {
+    hasTopLevelCode = true
+    topBuilder.cue(name, ...args)
   }
 
   try {
@@ -35,25 +99,53 @@ async function runCode(rubyCode: string): Promise<{ error?: Error; events: strin
 
     const dslNames = [
       'live_loop', 'use_bpm', 'use_synth',
-      'ring', 'spread', 'noteToMidi', 'midiToFreq', 'noteToFreq',
-      'console',
+      'play', 'sleep', 'sample', 'cue',
+      'use_random_seed', 'choose', 'rrand_i',
+      'ring', 'knit', 'range', 'line', 'spread',
+      'chord', 'scale', 'chord_invert', 'note', 'note_range',
+      'noteToMidi', 'midiToFreq', 'noteToFreq',
+      'puts', 'stop',
     ]
     const dslValues = [
       wrappedLiveLoop,
       (bpm: number) => { defaultBpm = bpm },
-      (name: string) => { defaultSynth = name },
-      dsl.ring, dsl.spread,
-      dsl.noteToMidi, dsl.midiToFreq, dsl.noteToFreq,
-      console,
+      topUseSynth,
+      topPlay, topSleep, topSample, topCue,
+      topUseRandomSeed, topChoose, topRrandI,
+      ring, knit, range, line, spread,
+      chord, scale, chord_invert, note, note_range,
+      noteToMidi, midiToFreq, noteToFreq,
+      (...args: unknown[]) => {},  // puts no-op in tests
+      () => {},  // stop no-op
     ]
 
     const executor = createExecutor(transpiledCode, dslNames)
     await executor(...dslValues)
 
+    // If there was top-level code (not in a live_loop), run it as __main__
+    if (hasTopLevelCode) {
+      const program = topBuilder.build()
+      scheduler.registerLoop('__main__', async () => {
+        await runProgram(program, {
+          bridge: null,
+          scheduler,
+          taskId: '__main__',
+          eventStream,
+          schedAheadTime: 100,
+          nodeRefMap,
+        })
+      })
+      const task = scheduler.getTask('__main__')
+      if (task) {
+        task.bpm = defaultBpm
+        task.currentSynth = defaultSynth
+      }
+    }
+
     // Run a few ticks to execute the code
     for (let t = 0; t < 10; t++) {
       scheduler.tick(100)
-      await new Promise((r) => setTimeout(r, 0))
+      await flushMicrotasks()
     }
 
     scheduler.stop()

@@ -40,10 +40,9 @@ describe('addMissingAwaits', () => {
 })
 
 describe('transpile', () => {
-  it('returns transpiled code', () => {
+  it('returns code as-is (no await injection)', () => {
     const result = transpile('play(60)\nsleep(0.5)')
-    expect(result.code).toContain('await play(60)')
-    expect(result.code).toContain('await sleep(0.5)')
+    expect(result.code).toBe('play(60)\nsleep(0.5)')
   })
 })
 

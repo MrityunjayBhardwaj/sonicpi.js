@@ -6,9 +6,12 @@ export type { EngineComponents } from './SonicPiEngine'
 export { VirtualTimeScheduler } from './VirtualTimeScheduler'
 export type { TaskState, SchedulerEvent, SleepEntry, SchedulerOptions } from './VirtualTimeScheduler'
 
-// DSL
-export { createDSLContext } from './DSLContext'
-export type { TaskDSL, DSLFunctions } from './DSLContext'
+// Program (free monad architecture)
+export type { Step, Program, LoopProgram } from './Program'
+export { ProgramBuilder } from './ProgramBuilder'
+export { runProgram } from './interpreters/AudioInterpreter'
+export { queryProgram, queryLoopProgram, captureAll } from './interpreters/QueryInterpreter'
+export type { QueryEvent } from './interpreters/QueryInterpreter'
 
 // Audio
 export { SuperSonicBridge } from './SuperSonicBridge'
@@ -17,9 +20,8 @@ export { SuperSonicBridge } from './SuperSonicBridge'
 export { SoundEventStream } from './SoundEventStream'
 export type { SoundEvent } from './SoundEventStream'
 
-// Capture (fast-forward for visualization)
-export { CaptureScheduler, detectStratum, Stratum } from './CaptureScheduler'
-export type { CapturedEvent } from './CaptureScheduler'
+// Stratum detection
+export { detectStratum, Stratum } from './Stratum'
 
 // Music theory
 export { ring } from './Ring'
@@ -29,7 +31,7 @@ export { chord, scale, chord_invert, note, note_range, chord_names, scale_names 
 export { SeededRandom } from './SeededRandom'
 
 // Transpilation
-export { transpile, addMissingAwaits, createExecutor } from './Transpiler'
+export { transpile, createExecutor } from './Transpiler'
 export { transpileRubyToJS, detectLanguage, autoTranspile } from './RubyTranspiler'
 export { parseAndTranspile } from './Parser'
 export type { ParseError } from './Parser'

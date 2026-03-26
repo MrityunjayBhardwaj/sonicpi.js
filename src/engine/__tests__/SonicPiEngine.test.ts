@@ -39,9 +39,9 @@ describe('SonicPiEngine', () => {
     await engine.init()
 
     const result = await engine.evaluate(`
-      live_loop("test", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(1)
+      live_loop("test", (b) => {
+        b.play(60)
+        b.sleep(1)
       })
     `)
 
@@ -73,9 +73,9 @@ describe('SonicPiEngine', () => {
     await engine.init()
 
     await engine.evaluate(`
-      live_loop("drums", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(0.5)
+      live_loop("drums", (b) => {
+        b.play(60)
+        b.sleep(0.5)
       })
     `)
 
@@ -90,9 +90,9 @@ describe('SonicPiEngine', () => {
     await engine.init()
 
     await engine.evaluate(`
-      live_loop("noisy", async (ctx) => {
-        await ctx.play(Math.random() * 12 + 60)
-        await ctx.sleep(0.5)
+      live_loop("noisy", (b) => {
+        b.play(Math.random() * 12 + 60)
+        b.sleep(0.5)
       })
     `)
 
@@ -107,9 +107,9 @@ describe('SonicPiEngine', () => {
     await engine.init()
 
     await engine.evaluate(`
-live_loop("drums", async (ctx) => {
-  await ctx.play(60)
-  await ctx.sleep(0.5)
+live_loop("drums", (b) => {
+  b.play(60)
+  b.sleep(0.5)
 })
     `)
 
@@ -125,9 +125,9 @@ live_loop("drums", async (ctx) => {
     await engine.init()
 
     await engine.evaluate(`
-      live_loop("test", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(1)
+      live_loop("test", (b) => {
+        b.play(60)
+        b.sleep(1)
       })
     `)
 
@@ -145,9 +145,9 @@ live_loop("drums", async (ctx) => {
     engine.components.streaming!.eventStream.on((e) => events.push(e))
 
     await engine.evaluate(`
-      live_loop("test", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(999999)
+      live_loop("test", (b) => {
+        b.play(60)
+        b.sleep(999999)
       })
     `)
 
@@ -170,9 +170,9 @@ live_loop("drums", async (ctx) => {
 
     // This should just work without errors
     await engine.evaluate(`
-      live_loop("test", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(999999)
+      live_loop("test", (b) => {
+        b.play(60)
+        b.sleep(999999)
       })
     `)
 
@@ -184,9 +184,9 @@ live_loop("drums", async (ctx) => {
     await engine.init()
 
     await engine.evaluate(`
-      live_loop("test", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(1)
+      live_loop("test", (b) => {
+        b.play(60)
+        b.sleep(1)
       })
     `)
 
@@ -202,16 +202,16 @@ live_loop("drums", async (ctx) => {
     await engine.init()
 
     await engine.evaluate(`
-      live_loop("drums", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(1)
+      live_loop("drums", (b) => {
+        b.play(60)
+        b.sleep(1)
       })
     `)
 
     const result = await engine.evaluate(`
-      live_loop("drums", async (ctx) => {
-        await ctx.play(64)
-        await ctx.sleep(0.5)
+      live_loop("drums", (b) => {
+        b.play(64)
+        b.sleep(0.5)
       })
     `)
 
@@ -224,9 +224,9 @@ live_loop("drums", async (ctx) => {
     await engine.init()
 
     await engine.evaluate(`
-      live_loop("drums", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(1)
+      live_loop("drums", (b) => {
+        b.play(60)
+        b.sleep(1)
       })
     `)
 
@@ -242,9 +242,9 @@ live_loop("drums", async (ctx) => {
 
     // Re-evaluate with same loop name while playing
     await engine.evaluate(`
-      live_loop("drums", async (ctx) => {
-        await ctx.play(64)
-        await ctx.sleep(0.5)
+      live_loop("drums", (b) => {
+        b.play(64)
+        b.sleep(0.5)
       })
     `)
 
@@ -262,13 +262,13 @@ live_loop("drums", async (ctx) => {
     await engine.init()
 
     await engine.evaluate(`
-      live_loop("drums", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(1)
+      live_loop("drums", (b) => {
+        b.play(60)
+        b.sleep(1)
       })
-      live_loop("bass", async (ctx) => {
-        await ctx.play(36)
-        await ctx.sleep(1)
+      live_loop("bass", (b) => {
+        b.play(36)
+        b.sleep(1)
       })
     `)
 
@@ -282,9 +282,9 @@ live_loop("drums", async (ctx) => {
 
     // Re-evaluate with only drums (bass removed)
     await engine.evaluate(`
-      live_loop("drums", async (ctx) => {
-        await ctx.play(64)
-        await ctx.sleep(0.5)
+      live_loop("drums", (b) => {
+        b.play(64)
+        b.sleep(0.5)
       })
     `)
 
@@ -301,9 +301,9 @@ live_loop("drums", async (ctx) => {
     await engine.init()
 
     await engine.evaluate(`
-      live_loop("drums", async (ctx) => {
-        await ctx.play(60)
-        await ctx.sleep(1)
+      live_loop("drums", (b) => {
+        b.play(60)
+        b.sleep(1)
       })
     `)
 
@@ -314,9 +314,9 @@ live_loop("drums", async (ctx) => {
     expect((engine as any).scheduler).toBeNull()
 
     await engine.evaluate(`
-      live_loop("drums", async (ctx) => {
-        await ctx.play(64)
-        await ctx.sleep(0.5)
+      live_loop("drums", (b) => {
+        b.play(64)
+        b.sleep(0.5)
       })
     `)
 

@@ -1,6 +1,24 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualTimeScheduler } from '../VirtualTimeScheduler'
-import { createDSLContext } from '../DSLContext'
+import { ProgramBuilder } from '../ProgramBuilder'
+import { runProgram, type AudioContext as AudioCtx } from '../interpreters/AudioInterpreter'
+import { SoundEventStream } from '../SoundEventStream'
+
+function makeAudioCtx(
+  scheduler: VirtualTimeScheduler,
+  taskId: string,
+  eventStream: SoundEventStream,
+  nodeRefMap: Map<number, number>
+): AudioCtx {
+  return {
+    bridge: null,
+    scheduler,
+    taskId,
+    eventStream,
+    schedAheadTime: 200,
+    nodeRefMap,
+  }
+}
 
 describe('Performance', () => {
   it('handles 100 concurrent live_loops with <5ms tick', async () => {
@@ -9,20 +27,23 @@ describe('Performance', () => {
       schedAheadTime: 200,
     })
 
-    const events: unknown[] = []
-    scheduler.onEvent((event) => events.push(event))
+    const eventStream = new SoundEventStream()
+    let eventCount = 0
+    eventStream.on(() => { eventCount++ })
+    const nodeRefMap = new Map<number, number>()
 
-    const dsl = createDSLContext({ scheduler })
-
-    // Register 100 concurrent loops
+    // Register 100 concurrent loops, each plays a note then sleeps
     const LOOP_COUNT = 100
     for (let i = 0; i < LOOP_COUNT; i++) {
-      const taskDSL = dsl._makeTaskDSL(`loop_${i}`)
-      const loopFn = async () => {
-        await taskDSL.play(60 + (i % 12))
-        await taskDSL.sleep(0.25)
-      }
-      dsl.live_loop(`loop_${i}`, loopFn)
+      const taskId = `loop_${i}`
+      const program = new ProgramBuilder(i)
+        .play(60 + (i % 12))
+        .sleep(0.25)
+        .build()
+
+      scheduler.registerLoop(taskId, async () => {
+        await runProgram(program, makeAudioCtx(scheduler, taskId, eventStream, nodeRefMap))
+      })
     }
 
     // First tick to let all loops start (they sleep(0) initially)
@@ -30,7 +51,7 @@ describe('Performance', () => {
     // Give microtasks time to resolve
     await new Promise(r => setTimeout(r, 10))
 
-    // Now tick to resolve the real sleeps — measure time
+    // Now tick to resolve the real sleeps -- measure time
     const start = performance.now()
     scheduler.tick(100)
     const elapsed = performance.now() - start
@@ -42,7 +63,7 @@ describe('Performance', () => {
     await new Promise(r => setTimeout(r, 50))
 
     // All 100 loops should have emitted events
-    expect(events.length).toBeGreaterThanOrEqual(LOOP_COUNT)
+    expect(eventCount).toBeGreaterThanOrEqual(LOOP_COUNT)
 
     scheduler.dispose()
   })
@@ -54,10 +75,9 @@ describe('Performance', () => {
     })
 
     // Push 10000 sleep entries
-    const promises: Promise<void>[] = []
     const taskId = 'stress'
     scheduler.registerLoop(taskId, async () => {
-      // Intentionally empty — we manually push sleeps below
+      // Intentionally empty -- we manually push sleeps below
       await new Promise(() => {}) // park forever
     })
 
@@ -70,7 +90,7 @@ describe('Performance', () => {
       // Override virtualTime each time to prevent accumulation
       const task = scheduler.getTask(taskId)!
       task.virtualTime = 0
-      promises.push(scheduler.scheduleSleep(taskId, i * 0.001))
+      scheduler.scheduleSleep(taskId, i * 0.001)
     }
 
     const start = performance.now()
@@ -89,19 +109,22 @@ describe('Performance', () => {
       schedAheadTime: 200,
     })
 
+    const eventStream = new SoundEventStream()
     let eventCount = 0
-    scheduler.onEvent(() => { eventCount++ })
-
-    const dsl = createDSLContext({ scheduler })
+    eventStream.on(() => { eventCount++ })
+    const nodeRefMap = new Map<number, number>()
 
     // Single loop that emits many events per iteration
     const NOTES_PER_ITER = 50
-    const taskDSL = dsl._makeTaskDSL('burst')
-    dsl.live_loop('burst', async () => {
-      for (let i = 0; i < NOTES_PER_ITER; i++) {
-        await taskDSL.play(60 + i)
-      }
-      await taskDSL.sleep(1)
+    const builder = new ProgramBuilder(0)
+    for (let i = 0; i < NOTES_PER_ITER; i++) {
+      builder.play(60 + i)
+    }
+    builder.sleep(1)
+    const program = builder.build()
+
+    scheduler.registerLoop('burst', async () => {
+      await runProgram(program, makeAudioCtx(scheduler, 'burst', eventStream, nodeRefMap))
     })
 
     // Start and run

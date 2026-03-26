@@ -1,18 +1,19 @@
-import { VirtualTimeScheduler, type SchedulerEvent } from './VirtualTimeScheduler'
-import { createDSLContext } from './DSLContext'
+import { VirtualTimeScheduler } from './VirtualTimeScheduler'
+import { ProgramBuilder } from './ProgramBuilder'
+import { runProgram, type AudioContext as AudioCtx } from './interpreters/AudioInterpreter'
+import { queryLoopProgram, type QueryEvent } from './interpreters/QueryInterpreter'
 import { SuperSonicBridge, type SuperSonicBridgeOptions } from './SuperSonicBridge'
 import { transpile } from './Transpiler'
 import { createSandboxedExecutor } from './Sandbox'
 import { autoTranspile } from './RubyTranspiler'
 import { friendlyError, formatFriendlyError, type FriendlyError } from './FriendlyErrors'
-import { CaptureScheduler, detectStratum, Stratum } from './CaptureScheduler'
+import { detectStratum, Stratum } from './Stratum'
 import { SoundEventStream } from './SoundEventStream'
-import { noteToMidi, midiToFreq } from './NoteToFreq'
-
-/** Sentinel thrown by the `stop` DSL command to halt the current thread. */
-class StopSignal extends Error {
-  constructor() { super('stop'); this.name = 'StopSignal' }
-}
+import { ring, knit, range, line } from './Ring'
+import { spread } from './EuclideanRhythm'
+import { noteToMidi, midiToFreq, noteToFreq } from './NoteToFreq'
+import { chord, scale, chord_invert, note, note_range } from './ChordScale'
+import type { Program } from './Program'
 
 // ---------------------------------------------------------------------------
 // Engine interfaces
@@ -34,7 +35,6 @@ export interface EngineComponents {
 export class SonicPiEngine {
   private scheduler: VirtualTimeScheduler | null = null
   private bridge: SuperSonicBridge | null = null
-  private dsl: ReturnType<typeof createDSLContext> | null = null
   private eventStream = new SoundEventStream()
   private initialized = false
   private playing = false
@@ -42,11 +42,14 @@ export class SonicPiEngine {
   private printHandler: ((msg: string) => void) | null = null
   private currentCode = ''
   private currentStratum: Stratum = Stratum.S1
-  private captureScheduler = new CaptureScheduler()
   private bridgeOptions: SuperSonicBridgeOptions
   private schedAheadTime: number
   /** Maps DSL nodeRef → SuperSonic nodeId for control messages */
   private nodeRefMap = new Map<number, number>()
+  /** Stored builder functions for capture/query path */
+  private loopBuilders = new Map<string, (b: ProgramBuilder) => void>()
+  /** Per-loop seed counters for deterministic random */
+  private loopSeeds = new Map<string, number>()
 
   constructor(options?: {
     bridge?: SuperSonicBridgeOptions
@@ -64,8 +67,6 @@ export class SonicPiEngine {
     try {
       await this.bridge.init()
     } catch (err) {
-      // SuperSonic not available (e.g., tests without browser)
-      // Engine still works for transpile/evaluate, just no audio
       console.warn('[SonicPi] SuperSonic init failed, running without audio:', err)
       this.bridge = null
     }
@@ -84,7 +85,7 @@ export class SonicPiEngine {
 
       const isReEvaluate = this.scheduler !== null && this.playing
 
-      // First run or after stop: create fresh scheduler + DSL
+      // First run or after stop: create fresh scheduler
       if (!isReEvaluate) {
         if (this.scheduler) {
           this.scheduler.dispose()
@@ -95,23 +96,19 @@ export class SonicPiEngine {
           getAudioTime: () => audioCtx?.currentTime ?? 0,
           schedAheadTime: this.schedAheadTime,
         })
-        this.scheduler.onEvent((event) => this.handleEvent(event))
 
-        this.dsl = createDSLContext({
-          scheduler: this.scheduler,
-          fxBridge: this.bridge,
-        })
+        this.loopBuilders.clear()
+        this.loopSeeds.clear()
       }
 
-      // Transpile: Ruby DSL → JS → add missing awaits
+      // Transpile: Ruby DSL → JS builder chain
       const jsCode = autoTranspile(code)
       const { code: transpiledCode } = transpile(jsCode)
 
-      // Top-level DSL functions
+      // Top-level DSL state
       let defaultBpm = 60
       let defaultSynth = 'beep'
       const scheduler = this.scheduler!
-      const dsl = this.dsl!
 
       const topLevelUseBpm = (bpm: number) => { defaultBpm = bpm }
       const topLevelUseSynth = (name: string) => { defaultSynth = name }
@@ -120,17 +117,54 @@ export class SonicPiEngine {
       const pendingLoops = new Map<string, () => Promise<void>>()
       const pendingDefaults = new Map<string, { bpm: number; synth: string }>()
 
-      const wrappedLiveLoop = (name: string, asyncFn: (ctx: unknown) => Promise<void>) => {
+      // Top-level print handler
+      const topLevelPuts = (...args: unknown[]) => {
+        const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')
+        if (this.printHandler) this.printHandler(msg)
+        else console.log('[SonicPi]', msg)
+      }
+
+      // Top-level stop sentinel
+      const topLevelStop = () => {
+        // At top level, stop just halts evaluation
+      }
+
+      const wrappedLiveLoop = (name: string, builderFn: (b: ProgramBuilder) => void) => {
         const trackBus = this.bridge?.allocateTrackBus(name) ?? 0
 
+        // Store builder function for capture path
+        this.loopBuilders.set(name, builderFn)
+        if (!this.loopSeeds.has(name)) {
+          this.loopSeeds.set(name, 0)
+        }
+
+        // Create the async function that builds a Program each iteration
+        // and runs it via AudioInterpreter
+        const asyncFn = async () => {
+          const seed = this.loopSeeds.get(name) ?? 0
+          this.loopSeeds.set(name, seed + 1)
+
+          const builder = new ProgramBuilder(seed)
+          // Await in case builderFn is async (backward compat with old JS code)
+          await Promise.resolve(builderFn(builder))
+          const program = builder.build()
+
+          await runProgram(program, {
+            bridge: this.bridge,
+            scheduler,
+            taskId: name,
+            eventStream: this.eventStream,
+            schedAheadTime: this.schedAheadTime,
+            printHandler: this.printHandler ?? undefined,
+            nodeRefMap: this.nodeRefMap,
+          })
+        }
+
         if (isReEvaluate) {
-          // Collect: build the wrapped function but don't register yet
-          const wrappedFn = dsl._buildLoopFn(name, asyncFn as (ctx: unknown) => Promise<void>)
-          pendingLoops.set(name, wrappedFn)
+          pendingLoops.set(name, asyncFn)
           pendingDefaults.set(name, { bpm: defaultBpm, synth: defaultSynth })
         } else {
-          // Direct: first run, register immediately
-          dsl.live_loop(name, asyncFn as (ctx: unknown) => Promise<void>)
+          scheduler.registerLoop(name, asyncFn)
           const task = scheduler.getTask(name)
           if (task) {
             task.bpm = defaultBpm
@@ -140,33 +174,20 @@ export class SonicPiEngine {
         }
       }
 
-      // Print handler — routes puts/print to the app console
-      const __print = (...args: unknown[]) => {
-        const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')
-        if (this.printHandler) this.printHandler(msg)
-        else console.log('[SonicPi]', msg)
-      }
-
-      // Stop sentinel — thrown by stop command, caught by runLoop
-      const __stop = () => { throw new StopSignal() }
-
       // Build DSL parameter names and values for the executor
       const dslNames = [
         'live_loop', 'use_bpm', 'use_synth',
-        'ring', 'knit', 'range', 'line', 'spread', 'chord', 'scale', 'chord_invert', 'note', 'note_range',
+        'ring', 'knit', 'range', 'line', 'spread',
+        'chord', 'scale', 'chord_invert', 'note', 'note_range',
         'noteToMidi', 'midiToFreq', 'noteToFreq',
-        'console', 'stop',
+        'puts', 'stop',
       ]
-      const topDSL = dsl._makeTaskDSL('__top__')
       const dslValues = [
         wrappedLiveLoop, topLevelUseBpm, topLevelUseSynth,
-        dsl.ring, topDSL.knit,
-        topDSL.range, topDSL.line,
-        dsl.spread,
-        topDSL.chord, topDSL.scale, topDSL.chord_invert,
-        topDSL.note, topDSL.note_range,
-        dsl.noteToMidi, dsl.midiToFreq, dsl.noteToFreq,
-        { log: __print }, __stop,
+        ring, knit, range, line, spread,
+        chord, scale, chord_invert, note, note_range,
+        noteToMidi, midiToFreq, noteToFreq,
+        topLevelPuts, topLevelStop,
       ]
 
       const executor = createSandboxedExecutor(transpiledCode, dslNames)
@@ -176,15 +197,11 @@ export class SonicPiEngine {
         const oldLoops = scheduler.getRunningLoopNames()
         const removedLoops = oldLoops.filter(name => !pendingLoops.has(name))
         const hasNewLoops = [...pendingLoops.keys()].some(name => !oldLoops.includes(name))
-        const loopsChanged = removedLoops.length > 0 || hasNewLoops
 
         // Pause ticking so no old events fire during transition
         scheduler.pauseTick()
 
-        // Free old audio — clean cut on every re-evaluate.
-        // Even hot-swapped loops need this: the old body may have triggered
-        // synths that are still sustaining, and the new body may not trigger
-        // any (e.g., all play/sample calls commented out).
+        // Free old audio — clean cut on every re-evaluate
         if (this.bridge) {
           this.bridge.freeAllNodes()
           this.nodeRefMap.clear()
@@ -237,18 +254,21 @@ export class SonicPiEngine {
     // Dispose scheduler so next evaluate() starts fresh
     this.scheduler?.dispose()
     this.scheduler = null
-    this.dsl = null
+    this.loopBuilders.clear()
+    this.loopSeeds.clear()
   }
 
   dispose(): void {
     if (this.playing) this.stop()
     this.scheduler?.dispose()
     this.scheduler = null
-    this.dsl = null
     this.eventStream.dispose()
     this.bridge?.dispose()
     this.bridge = null
     this.initialized = false
+    this.currentStratum = Stratum.S3  // Reset to S3 so capture is unavailable
+    this.loopBuilders.clear()
+    this.loopSeeds.clear()
   }
 
   setRuntimeErrorHandler(handler: (err: Error) => void): void {
@@ -284,110 +304,26 @@ export class SonicPiEngine {
     }
 
     // Capture query (only for deterministic S1/S2 code)
-    if (this.currentStratum <= Stratum.S2 && this.scheduler) {
-      const captureScheduler = this.captureScheduler
-      const currentCode = this.currentCode
+    if (this.currentStratum <= Stratum.S2) {
+      const loopBuilders = this.loopBuilders
+      const scheduler = this.scheduler
 
       result.capture = {
         async queryRange(begin: number, end: number): Promise<unknown[]> {
-          const events = await captureScheduler.runUntilCapture((dsl) => {
-            const { code: tc } = transpile(currentCode)
-            const names = ['live_loop', 'ring', 'spread', 'noteToMidi', 'midiToFreq', 'noteToFreq']
-            const vals = [dsl.live_loop, dsl.ring, dsl.spread, dsl.noteToMidi, dsl.midiToFreq, dsl.noteToFreq]
-            const fn = createSandboxedExecutor(tc, names)
-            fn(...vals)
-          }, end)
-
-          return events.filter(e => e.time >= begin && e.time < end)
+          const events: QueryEvent[] = []
+          for (const [name, builderFn] of loopBuilders) {
+            const builder = new ProgramBuilder(0)
+            builderFn(builder)
+            const program = builder.build()
+            const task = scheduler?.getTask(name)
+            const bpm = task?.bpm ?? 60
+            events.push(...queryLoopProgram(program, begin, end, bpm))
+          }
+          return events.sort((a, b) => a.time - b.time)
         },
       }
     }
 
     return result
   }
-
-  // ---------------------------------------------------------------------------
-  // Internal
-  // ---------------------------------------------------------------------------
-
-  private handleEvent(event: SchedulerEvent): void {
-    try {
-      const audioTime = event.virtualTime + this.schedAheadTime
-
-      // Trigger audio via SuperSonic
-      if (this.bridge) {
-        if (event.type === 'synth') {
-          const params: Record<string, number> = {}
-          for (const [k, v] of Object.entries(event.params)) {
-            if (typeof v === 'number') params[k] = v
-          }
-          const nodeRef = event.params._nodeRef as number | undefined
-          this.bridge.triggerSynth(
-            event.params.synth as string ?? 'beep',
-            audioTime,
-            params
-          ).then(realNodeId => {
-            if (nodeRef) this.nodeRefMap.set(nodeRef, realNodeId)
-          }).catch(err => {
-            this.runtimeErrorHandler?.(
-              err instanceof Error ? err : new Error(String(err))
-            )
-          })
-        } else if (event.type === 'sample') {
-          const sampleOpts: Record<string, number> = {}
-          for (const [k, v] of Object.entries(event.params)) {
-            if (k !== 'name' && typeof v === 'number') sampleOpts[k] = v
-          }
-          const taskBpm = this.scheduler?.getTask(event.taskId)?.bpm ?? 60
-          this.bridge.playSample(
-            event.params.name as string,
-            audioTime,
-            Object.keys(sampleOpts).length > 0 ? sampleOpts : undefined,
-            taskBpm
-          ).catch(err => {
-            // Sample load failure — report but don't crash the scheduler
-            this.runtimeErrorHandler?.(
-              err instanceof Error ? err : new Error(String(err))
-            )
-          })
-        } else if (event.type === 'control') {
-          const nodeRef = event.params._nodeRef as number | undefined
-          if (nodeRef) {
-            const realNodeId = this.nodeRefMap.get(nodeRef)
-            if (realNodeId) {
-              const controlParams: Record<string, number> = {}
-              for (const [k, v] of Object.entries(event.params)) {
-                if (k !== '_nodeRef' && typeof v === 'number') controlParams[k] = v
-              }
-              // Convert note names to MIDI if present
-              if (controlParams['note']) {
-                controlParams['freq'] = midiToFreq(controlParams['note'])
-              }
-              const paramList: (string | number)[] = []
-              for (const [k, v] of Object.entries(controlParams)) {
-                paramList.push(k, v)
-              }
-              this.bridge.send?.('/n_set', realNodeId, ...paramList)
-            }
-          }
-        }
-      }
-
-      // Emit sound event for visualization and logging
-      const audioCtxTime = this.bridge?.audioContext?.currentTime ?? 0
-      this.eventStream.emitEvent({
-        audioTime,
-        audioDuration: 0.25,
-        scheduledAheadMs: (audioTime - audioCtxTime) * 1000,
-        midiNote: (event.params.note as number) ?? null,
-        s: (event.params.synth as string) ?? (event.params.name as string) ?? null,
-        srcLine: (event.params._srcLine as number) ?? null,
-        trackId: event.taskId,
-      })
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err))
-      this.runtimeErrorHandler?.(error)
-    }
-  }
-
 }

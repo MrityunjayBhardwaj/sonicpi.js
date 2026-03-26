@@ -11,8 +11,8 @@ end
 `)
     expect(errors).toHaveLength(0)
     expect(code).toContain('live_loop("drums"')
-    expect(code).toContain('await ctx.sample("bd_haus")')
-    expect(code).toContain('await ctx.sleep(0.5)')
+    expect(code).toContain('b.sample("bd_haus")')
+    expect(code).toContain('b.sleep(0.5)')
     expect(code).toContain('})')
   })
 
@@ -25,8 +25,8 @@ end
 `)
     expect(errors).toHaveLength(0)
     expect(code).toContain('live_loop("bass"')
-    expect(code).toContain('await ctx.sync("drums")')
-    expect(code).toContain('await ctx.play("e2")')
+    expect(code).toContain('b.sync("drums")')
+    expect(code).toContain('b.play("e2")')
   })
 
   it('transpiles with_fx', () => {
@@ -40,7 +40,7 @@ end
 `)
     expect(errors).toHaveLength(0)
     expect(code).toContain('with_fx("reverb"')
-    expect(code).toContain('await ctx.play(60)')
+    expect(code).toContain('b.play(60)')
   })
 
   it('transpiles if/elsif/else/end', () => {
@@ -136,8 +136,8 @@ live_loop :test do
 end
 `)
     expect(errors).toHaveLength(0)
-    expect(code).toContain('ctx.use_synth("tb303")')
-    expect(code).toContain('ctx.use_bpm(120)')
+    expect(code).toContain('b.use_synth("tb303")')
+    expect(code).toContain('b.use_bpm(120)')
   })
 
   it('transpiles trailing if/unless', () => {
@@ -149,8 +149,8 @@ live_loop :test do
 end
 `)
     expect(errors).toHaveLength(0)
-    expect(code).toContain('if (true) { await ctx.play(60) }')
-    expect(code).toContain('if (!(false)) { await ctx.sample("bd_haus") }')
+    expect(code).toContain('if (true) { b.play(60) }')
+    expect(code).toContain('if (!(false)) { b.sample("bd_haus") }')
   })
 
   it('reports error for unclosed block', () => {
@@ -182,8 +182,8 @@ live_loop :test do
   sleep 1
 end
 `)
-    expect(code).toContain('console.log("hello")')
-    expect(code).toContain('console.log("world")')
+    expect(code).toContain('b.puts("hello")')
+    expect(code).toContain('b.puts("world")')
   })
 
   it('transpiles loop do', () => {

@@ -204,7 +204,7 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
   let pos = 0
   const output: string[] = []
 
-  // Track block depth for ctx prefix
+  // Track block depth for b. prefix
   let insideLoop = false
   const blockStack: Array<'loop' | 'block' | 'thread'> = []
 
@@ -350,10 +350,10 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
     skipNewlines()
 
     const indent = getIndent()
-    output.push(`${indent}live_loop("${name}", async (ctx) => {`)
+    output.push(`${indent}live_loop("${name}", (b) => {`)
 
     if (syncName) {
-      output.push(`${indent}  await ctx.sync("${syncName}")`)
+      output.push(`${indent}  b.sync("${syncName}")`)
     }
 
     blockStack.push('loop')
@@ -398,9 +398,9 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
 
     const indent = getIndent()
     if (opts) {
-      output.push(`${indent}await ctx.with_fx("${fxName}", ${transpileExpr(opts)}, async (ctx) => {`)
+      output.push(`${indent}b.with_fx("${fxName}", ${transpileExpr(opts)}, (b) => {`)
     } else {
-      output.push(`${indent}await ctx.with_fx("${fxName}", async (ctx) => {`)
+      output.push(`${indent}b.with_fx("${fxName}", (b) => {`)
     }
 
     blockStack.push('loop')
@@ -649,23 +649,23 @@ function transpileExpr(expr: string): string {
   return result
 }
 
-/** Add ctx. prefix to all DSL function calls in a string. */
-function addCtxPrefixes(line: string, insideLoop: boolean): string {
+/** Add b. prefix to all DSL function calls in a string. */
+function addBuilderPrefixes(line: string, insideLoop: boolean): string {
   if (!insideLoop) return line
 
   let result = line
 
   // Expression-level DSL functions (NOT statement-level play/sleep/sample/etc — those
-  // are handled by the match arms in transpileSonicPiLine and add their own ctx. prefix)
+  // are handled by the match arms in transpileSonicPiLine and add their own b. prefix)
   // Use negative lookbehind to avoid prefixing method calls like notes.tick(
   result = result.replace(
-    /(?<!\.)(?<!ctx\.)\b(rrand_i|rrand|rand_i|rand|choose|dice|one_in|ring|knit|range|line|spread|chord|scale|chord_invert|note_range|note|tick|look)\s*\(/g,
-    'ctx.$1('
+    /(?<!\.)(?<!b\.)\b(rrand_i|rrand|rand_i|rand|choose|dice|one_in|ring|knit|range|line|spread|chord|scale|chord_invert|note_range|note|tick|look)\s*\(/g,
+    'b.$1('
   )
 
   // Standalone tick/look without parens (not as method: notes.tick)
-  result = result.replace(/(?<!\.)(?<!ctx\.)\btick\b(?!\s*[.(])/g, 'ctx.tick()')
-  result = result.replace(/(?<!\.)(?<!ctx\.)\blook\b(?!\s*[.(])/g, 'ctx.look()')
+  result = result.replace(/(?<!\.)(?<!b\.)\btick\b(?!\s*[.(])/g, 'b.tick()')
+  result = result.replace(/(?<!\.)(?<!b\.)\blook\b(?!\s*[.(])/g, 'b.look()')
 
   // .tick → .tick() (method on ring)
   result = result.replace(/\.tick(?!\()/g, '.tick()')
@@ -676,17 +676,17 @@ function addCtxPrefixes(line: string, insideLoop: boolean): string {
   result = result.replace(/\.shuffle(?!\()/g, '.shuffle()')
   result = result.replace(/\.choose(?!\()/g, '.choose()')
 
-  // ring without parens: (ring 1, 2, 3) → (ctx.ring(1, 2, 3))
-  result = result.replace(/(?<=\(|^)(ring|spread)\s+([^(].+?)(?=\)|$)/g, 'ctx.$1($2)')
+  // ring without parens: (ring 1, 2, 3) → (b.ring(1, 2, 3))
+  result = result.replace(/(?<=\(|^)(ring|spread)\s+([^(].+?)(?=\)|$)/g, 'b.$1($2)')
 
   return result
 }
 
-/** Transpile DSL calls with ctx. prefix and await. */
+/** Transpile DSL calls with b. prefix (synchronous builder chain). */
 function transpileSonicPiLine(line: string, insideLoop: boolean): string {
-  const prefix = insideLoop ? 'ctx.' : ''
-  // Apply ctx. prefix to all DSL calls in the line first
-  line = addCtxPrefixes(line, insideLoop)
+  const prefix = insideLoop ? 'b.' : ''
+  // Apply b. prefix to all DSL calls in the line first
+  line = addBuilderPrefixes(line, insideLoop)
 
   // Trailing if: `statement if condition`
   const trailingIf = line.match(/^(.+?)\s+if\s+(.+)$/)
@@ -709,9 +709,9 @@ function transpileSonicPiLine(line: string, insideLoop: boolean): string {
     const rest = synthCmdMatch[2].trim()
     const args = rest ? transpileArgs(rest) : ''
     if (args && args.includes('{')) {
-      return `await ${prefix}play(${args.replace('{', `{ synth: "${sName}", `)})`
+      return `${prefix}play(${args.replace('{', `{ synth: "${sName}", `)})`
     }
-    return `await ${prefix}play(${args ? args + ', ' : ''}{ synth: "${sName}" })`
+    return `${prefix}play(${args ? args + ', ' : ''}{ synth: "${sName}" })`
   }
 
   // bare synth name as command: beep note:67
@@ -721,26 +721,26 @@ function transpileSonicPiLine(line: string, insideLoop: boolean): string {
     const sName = bareSynth[1]
     const args = transpileArgs(bareSynth[2])
     if (args.includes('{')) {
-      return `await ${prefix}play(${args.replace('{', `{ synth: "${sName}", `)})`
+      return `${prefix}play(${args.replace('{', `{ synth: "${sName}", `)})`
     }
-    return `await ${prefix}play(${args}, { synth: "${sName}" })`
+    return `${prefix}play(${args}, { synth: "${sName}" })`
   }
 
   // play
   const playMatch = line.match(/^play\s+(.+)$/)
-  if (playMatch) return `await ${prefix}play(${transpileArgs(playMatch[1])})`
+  if (playMatch) return `${prefix}play(${transpileArgs(playMatch[1])})`
 
   // sleep
   const sleepMatch = line.match(/^sleep\s+(.+)$/)
-  if (sleepMatch) return `await ${prefix}sleep(${sleepMatch[1]})`
+  if (sleepMatch) return `${prefix}sleep(${sleepMatch[1]})`
 
   // sample
   const sampleMatch = line.match(/^sample\s+(.+)$/)
-  if (sampleMatch) return `await ${prefix}sample(${transpileArgs(sampleMatch[1])})`
+  if (sampleMatch) return `${prefix}sample(${transpileArgs(sampleMatch[1])})`
 
   // sync
   const syncMatch = line.match(/^sync\s+"(\w+)"$/)
-  if (syncMatch) return `await ${prefix}sync("${syncMatch[1]}")`
+  if (syncMatch) return `${prefix}sync("${syncMatch[1]}")`
 
   // cue
   const cueMatch = line.match(/^cue\s+"(\w+)"(.*)$/)
@@ -764,15 +764,15 @@ function transpileSonicPiLine(line: string, insideLoop: boolean): string {
 
   // puts / print
   const putsMatch = line.match(/^puts\s+(.+)$/)
-  if (putsMatch) return `console.log(${putsMatch[1]})`
+  if (putsMatch) return `${prefix}puts(${putsMatch[1]})`
   const printMatch = line.match(/^print\s+(.+)$/)
-  if (printMatch) return `console.log(${printMatch[1]})`
+  if (printMatch) return `${prefix}puts(${printMatch[1]})`
 
   // Variable assignment
   const assignMatch = line.match(/^(\w+)\s*=\s*(.+)$/)
   if (assignMatch) {
     const rhs = transpileSonicPiLine(assignMatch[2], insideLoop)
-    // Check if the RHS was transpiled (has await/ctx)
+    // Check if the RHS was transpiled (has b. prefix)
     if (rhs !== assignMatch[2]) {
       return `const ${assignMatch[1]} = ${rhs}`
     }

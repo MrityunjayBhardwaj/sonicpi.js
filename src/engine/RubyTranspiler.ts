@@ -12,28 +12,21 @@ import { parseAndTranspile as _parseAndTranspile } from './Parser'
  *   end
  *
  * Output (JS for our engine):
- *   live_loop("drums", async (ctx) => {
- *     await ctx.sample("bd_haus")
- *     await ctx.sleep(0.5)
- *     await ctx.sample("sn_dub")
- *     await ctx.sleep(0.5)
+ *   live_loop("drums", (b) => {
+ *     b.sample("bd_haus")
+ *     b.sleep(0.5)
+ *     b.sample("sn_dub")
+ *     b.sleep(0.5)
  *   })
  */
 
-// DSL functions that need `await` and `ctx.` prefix
-const AWAIT_CTX_FUNCTIONS = new Set([
+// DSL functions that need `b.` prefix (builder chain — all synchronous)
+const BUILDER_FUNCTIONS = new Set([
   'play', 'sleep', 'sample', 'sync',
-])
-
-// DSL functions that need `ctx.` but NOT `await`
-const CTX_FUNCTIONS = new Set([
   'use_synth', 'use_bpm', 'use_random_seed',
   'cue', 'rrand', 'rrand_i', 'choose', 'dice',
   'ring', 'spread', 'note',
 ])
-
-// All DSL functions (for detection)
-const ALL_DSL = new Set([...AWAIT_CTX_FUNCTIONS, ...CTX_FUNCTIONS])
 
 /**
  * If the code has bare play/sleep/sample calls outside any live_loop or
@@ -188,8 +181,8 @@ export function transpileRubyToJS(ruby: string): string {
     if (liveLoopSyncMatch) {
       const name = liveLoopSyncMatch[1]
       const syncName = liveLoopSyncMatch[2]
-      result.push(`${indent}live_loop("${name}", async (ctx) => {${inlineComment}`)
-      result.push(`${indent}  await ctx.sync("${syncName}")`)
+      result.push(`${indent}live_loop("${name}", (b) => {${inlineComment}`)
+      result.push(`${indent}  b.sync("${syncName}")`)
       blockStack.push('loop')
       i++
       continue
@@ -201,7 +194,7 @@ export function transpileRubyToJS(ruby: string): string {
     )
     if (liveLoopMatch) {
       const name = liveLoopMatch[1]
-      result.push(`${indent}live_loop("${name}", async (ctx) => {${inlineComment}`)
+      result.push(`${indent}live_loop("${name}", (b) => {${inlineComment}`)
       blockStack.push('loop')
       i++
       continue
@@ -215,9 +208,9 @@ export function transpileRubyToJS(ruby: string): string {
       const fxName = withFxMatch[1]
       const fxOpts = withFxMatch[2] ? transpileArgs(withFxMatch[2]) : ''
       if (fxOpts) {
-        result.push(`${indent}await ctx.with_fx("${fxName}", ${fxOpts}, async (ctx) => {${inlineComment}`)
+        result.push(`${indent}b.with_fx("${fxName}", ${fxOpts}, (b) => {${inlineComment}`)
       } else {
-        result.push(`${indent}await ctx.with_fx("${fxName}", async (ctx) => {${inlineComment}`)
+        result.push(`${indent}b.with_fx("${fxName}", (b) => {${inlineComment}`)
       }
       blockStack.push('loop') // uses }) closing like live_loop
       i++
@@ -365,13 +358,13 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
   const playMatch = line.match(/^play\s+(.+)$/)
   if (playMatch) {
     const args = transpileArgs(playMatch[1], srcLine)
-    return `await ctx.play(${args})`
+    return `b.play(${args})`
   }
 
   // --- sleep duration ---
   const sleepMatch = line.match(/^sleep\s+(.+)$/)
   if (sleepMatch) {
-    return `await ctx.sleep(${transpileExpression(sleepMatch[1])})`
+    return `b.sleep(${transpileExpression(sleepMatch[1])})`
   }
 
   // --- synth :name, opts --- (explicit synth command)
@@ -380,7 +373,7 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
     const synthName = synthMatch[1]
     const rest = synthMatch[2].trim()
     const args = rest ? transpileArgs(rest, srcLine) : (srcLine !== undefined ? `{ _srcLine: ${srcLine} }` : '')
-    return `await ctx.play(${args ? args : ''}, { synth: "${synthName}"${srcLine !== undefined ? `, _srcLine: ${srcLine}` : ''} })`.replace(', {})', ')').replace('(, ', '(')
+    return `b.play(${args ? args : ''}, { synth: "${synthName}"${srcLine !== undefined ? `, _srcLine: ${srcLine}` : ''} })`.replace(', {})', ')').replace('(, ', '(')
   }
 
   // --- bare synth name as command: beep note:67, tb303 60, etc ---
@@ -391,16 +384,16 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
     const args = transpileArgs(bareSynthMatch[2], srcLine)
     // Inject synth name into the opts
     if (args.includes('{')) {
-      return `await ctx.play(${args.replace('{', `{ synth: "${synthName}", `)})`
+      return `b.play(${args.replace('{', `{ synth: "${synthName}", `)})`
     }
-    return `await ctx.play(${args}, { synth: "${synthName}"${srcLine !== undefined ? `, _srcLine: ${srcLine}` : ''} })`
+    return `b.play(${args}, { synth: "${synthName}"${srcLine !== undefined ? `, _srcLine: ${srcLine}` : ''} })`
   }
 
   // --- sample :name, opts ---
   const sampleMatch = line.match(/^sample\s+(.+)$/)
   if (sampleMatch) {
     const args = transpileArgs(sampleMatch[1], srcLine)
-    return `await ctx.sample(${args})`
+    return `b.sample(${args})`
   }
 
   // --- control node, opts ---
@@ -408,53 +401,55 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
   if (controlMatch) {
     const nodeVar = controlMatch[1]
     const args = transpileArgs(controlMatch[2])
-    return `ctx.control(${nodeVar}, ${args})`
+    return `b.control(${nodeVar}, ${args})`
   }
 
   // --- sync :name ---
   const syncMatch = line.match(/^sync\s+:(\w+)\s*$/)
   if (syncMatch) {
-    return `await ctx.sync("${syncMatch[1]}")`
+    return `b.sync("${syncMatch[1]}")`
   }
 
   // --- cue :name ---
   const cueMatch = line.match(/^cue\s+:(\w+)\s*(.*)$/)
   if (cueMatch) {
     const args = cueMatch[2] ? `, ${transpileExpression(cueMatch[2])}` : ''
-    return `ctx.cue("${cueMatch[1]}"${args})`
+    return `b.cue("${cueMatch[1]}"${args})`
   }
 
   // --- use_synth :name ---
   const useSynthMatch = line.match(/^use_synth\s+:(\w+)\s*$/)
   if (useSynthMatch) {
-    const prefix = insideLoop ? 'ctx.' : ''
+    const prefix = insideLoop ? 'b.' : ''
     return `${prefix}use_synth("${useSynthMatch[1]}")`
   }
 
   // --- use_bpm N ---
   const useBpmMatch = line.match(/^use_bpm\s+(.+)$/)
   if (useBpmMatch) {
-    const prefix = insideLoop ? 'ctx.' : ''
+    const prefix = insideLoop ? 'b.' : ''
     return `${prefix}use_bpm(${transpileExpression(useBpmMatch[1])})`
   }
 
   // --- use_random_seed N ---
   const useRandomSeedMatch = line.match(/^use_random_seed\s+(.+)$/)
   if (useRandomSeedMatch) {
-    const prefix = insideLoop ? 'ctx.' : ''
+    const prefix = insideLoop ? 'b.' : ''
     return `${prefix}use_random_seed(${transpileExpression(useRandomSeedMatch[1])})`
   }
 
   // --- puts "text" ---
   const putsMatch = line.match(/^puts\s+(.+)$/)
   if (putsMatch) {
-    return `console.log(${transpileExpression(putsMatch[1])})`
+    const prefix = insideLoop ? 'b.' : ''
+    return `${prefix}puts(${transpileExpression(putsMatch[1])})`
   }
 
   // --- print "text" ---
   const printMatch = line.match(/^print\s+(.+)$/)
   if (printMatch) {
-    return `console.log(${transpileExpression(printMatch[1])})`
+    const prefix = insideLoop ? 'b.' : ''
+    return `${prefix}puts(${transpileExpression(printMatch[1])})`
   }
 
   // General expression — transpile Ruby syntax within it
@@ -473,23 +468,23 @@ function transpileExpression(expr: string): string {
   // Ruby string interpolation #{expr} → ${expr}
   result = result.replace(/#\{/g, '${')
 
-  // ring, knit, range, line, spread, chord, scale, note, note_range, chord_invert → ctx.*
-  result = result.replace(/\b(ring|knit|range|line|spread|chord|scale|chord_invert|note_range|note)\s*\(/g, 'ctx.$1(')
+  // ring, knit, range, line, spread, chord, scale, note, note_range, chord_invert → b.*
+  result = result.replace(/\b(ring|knit|range|line|spread|chord|scale|chord_invert|note_range|note)\s*\(/g, 'b.$1(')
   // Without parens: ring 1, 2, 3 — also handles (ring ...) wrapping
-  result = result.replace(/(?<=\(|^)(ring|spread)\s+([^(].+?)(?=\)|$)/g, 'ctx.$1($2)')
+  result = result.replace(/(?<=\(|^)(ring|spread)\s+([^(].+?)(?=\)|$)/g, 'b.$1($2)')
 
-  // rrand, choose, dice, rrand_i, tick, look → ctx.*
-  result = result.replace(/\b(rrand_i|rrand|rand_i|rand|choose|dice|one_in)\s*\(/g, 'ctx.$1(')
+  // rrand, choose, dice, rrand_i, tick, look → b.*
+  result = result.replace(/\b(rrand_i|rrand|rand_i|rand|choose|dice|one_in)\s*\(/g, 'b.$1(')
   // Without parens: rrand 0, 1
-  result = result.replace(/\b(rrand_i|rrand|rand_i|rand)\s+([^(].+)$/, 'ctx.$1($2)')
+  result = result.replace(/\b(rrand_i|rrand|rand_i|rand)\s+([^(].+)$/, 'b.$1($2)')
 
   // Standalone tick/look (as function call, not method .tick())
-  result = result.replace(/(?<!\.)(?<!\w)\btick\s*\(/g, 'ctx.tick(')
-  result = result.replace(/(?<!\.)(?<!\w)\blook\s*\(/g, 'ctx.look(')
+  result = result.replace(/(?<!\.)(?<!\w)\btick\s*\(/g, 'b.tick(')
+  result = result.replace(/(?<!\.)(?<!\w)\blook\s*\(/g, 'b.look(')
 
   // Standalone tick/look without parens (bare tick, not as method .tick)
-  result = result.replace(/(?<!\.)(?<!\w)\btick\b(?!\s*[.(])/g, 'ctx.tick()')
-  result = result.replace(/(?<!\.)(?<!\w)\blook\b(?!\s*[.(])/g, 'ctx.look()')
+  result = result.replace(/(?<!\.)(?<!\w)\btick\b(?!\s*[.(])/g, 'b.tick()')
+  result = result.replace(/(?<!\.)(?<!\w)\blook\b(?!\s*[.(])/g, 'b.look()')
 
   // .tick → .tick()
   result = result.replace(/\.tick(?!\()/g, '.tick()')
@@ -524,7 +519,7 @@ function transpileExpression(expr: string): string {
 
   // Ruby ternary: same as JS
 
-  // [].choose → ctx.choose([])
+  // [].choose → b.choose([])
   // Already handled if user writes choose([...])
 
   return result
@@ -613,7 +608,7 @@ export function detectLanguage(code: string): 'ruby' | 'js' {
   // Strong JS indicators
   if (/\basync\b/.test(trimmed)) return 'js'
   if (/\bawait\b/.test(trimmed)) return 'js'
-  if (/\bctx\./.test(trimmed)) return 'js'
+  if (/\bb\./.test(trimmed)) return 'js'
   if (/=>/.test(trimmed)) return 'js'
   if (/\bconst\b|\blet\b|\bvar\b/.test(trimmed)) return 'js'
 
@@ -623,7 +618,7 @@ export function detectLanguage(code: string): 'ruby' | 'js' {
 
 /**
  * Auto-detect language and transpile if needed.
- * Uses the recursive descent parser as primary (handles nesting, ctx. prefix,
+ * Uses the recursive descent parser as primary (handles nesting, b. prefix,
  * structured errors). Falls back to regex transpiler if parser reports errors.
  * Returns JS code ready for the engine.
  */

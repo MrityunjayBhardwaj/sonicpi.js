@@ -1,10 +1,28 @@
 import { describe, it, expect } from 'vitest'
 import { VirtualTimeScheduler } from '../VirtualTimeScheduler'
-import { createDSLContext } from '../DSLContext'
+import { ProgramBuilder } from '../ProgramBuilder'
+import { runProgram, type AudioContext as AudioCtx } from '../interpreters/AudioInterpreter'
+import { SoundEventStream } from '../SoundEventStream'
 
 async function flushMicrotasks(rounds = 10) {
   for (let i = 0; i < rounds; i++) {
     await new Promise((r) => setTimeout(r, 0))
+  }
+}
+
+function makeAudioCtx(
+  scheduler: VirtualTimeScheduler,
+  taskId: string,
+  eventStream: SoundEventStream,
+  nodeRefMap: Map<number, number>
+): AudioCtx {
+  return {
+    bridge: null,
+    scheduler,
+    taskId,
+    eventStream,
+    schedAheadTime: 100,
+    nodeRefMap,
   }
 }
 
@@ -66,17 +84,21 @@ describe('Hot-swap (SV6)', () => {
       getAudioTime: () => 0,
       schedAheadTime: 100,
     })
-    const dsl = createDSLContext({ scheduler })
+    const eventStream = new SoundEventStream()
+    const nodeRefMap = new Map<number, number>()
     const events: string[] = []
 
     // Initial evaluation: loop A and B
-    dsl.live_loop('A', async (ctx) => {
+    const progA_old = new ProgramBuilder(0).sleep(1).build()
+    const progB = new ProgramBuilder(0).sleep(1).build()
+
+    scheduler.registerLoop('A', async () => {
       events.push('A-old')
-      await ctx.sleep(1)
+      await runProgram(progA_old, makeAudioCtx(scheduler, 'A', eventStream, nodeRefMap))
     })
-    dsl.live_loop('B', async (ctx) => {
+    scheduler.registerLoop('B', async () => {
       events.push('B')
-      await ctx.sleep(1)
+      await runProgram(progB, makeAudioCtx(scheduler, 'B', eventStream, nodeRefMap))
     })
 
     scheduler.tick(100)
@@ -85,16 +107,17 @@ describe('Hot-swap (SV6)', () => {
     expect(events).toContain('B')
 
     // Re-evaluate: keep A (new code), add C, remove B
+    const progA_new = new ProgramBuilder(0).sleep(1).build()
+    const progC = new ProgramBuilder(0).sleep(1).build()
+
     const newLoops = new Map<string, () => Promise<void>>()
-    const taskDSL_A = dsl._makeTaskDSL('A')
-    const taskDSL_C = dsl._makeTaskDSL('C')
     newLoops.set('A', async () => {
       events.push('A-new')
-      await taskDSL_A.sleep(1)
+      await runProgram(progA_new, makeAudioCtx(scheduler, 'A', eventStream, nodeRefMap))
     })
     newLoops.set('C', async () => {
       events.push('C')
-      await taskDSL_C.sleep(1)
+      await runProgram(progC, makeAudioCtx(scheduler, 'C', eventStream, nodeRefMap))
     })
 
     scheduler.reEvaluate(newLoops)
@@ -119,41 +142,49 @@ describe('Hot-swap (SV6)', () => {
     expect(scheduler.hotSwap('nonexistent', async () => {})).toBe(false)
   })
 
-  it('random state preserved across hot-swap', async () => {
+  it('random produces different values on different iterations', async () => {
     const scheduler = new VirtualTimeScheduler({
       getAudioTime: () => 0,
       schedAheadTime: 100,
     })
-    const dsl = createDSLContext({ scheduler })
+    const eventStream = new SoundEventStream()
+    const nodeRefMap = new Map<number, number>()
     const randoms: number[] = []
 
-    dsl.live_loop('test', async (ctx) => {
-      ctx.use_random_seed(42)
-      randoms.push(ctx.rrand(0, 100))
-      await ctx.sleep(1)
+    // Each iteration builds a new program with a different seed,
+    // so random values should differ between iterations.
+    let iteration = 0
+    scheduler.registerLoop('test', async () => {
+      const builder = new ProgramBuilder(iteration)
+      const val = builder.rrand(0, 100)
+      randoms.push(val)
+      builder.sleep(1)
+      const program = builder.build()
+      iteration++
+      await runProgram(program, makeAudioCtx(scheduler, 'test', eventStream, nodeRefMap))
     })
 
+    // Run first iteration
     scheduler.tick(100)
     await flushMicrotasks()
 
-    const r1 = randoms[randoms.length - 1]
+    const r1 = randoms[0]
 
-    // Hot-swap with new code that also reads random
-    const taskDSL = dsl._makeTaskDSL('test')
-    scheduler.hotSwap('test', async () => {
-      randoms.push(taskDSL.rrand(0, 100))
-      await taskDSL.sleep(1)
-    })
-
+    // Run second iteration
     scheduler.tick(100)
     await flushMicrotasks()
 
-    // Random state should continue from where old code left off
-    // (not reset, because we didn't call use_random_seed)
-    const r2 = randoms[randoms.length - 1]
+    const r2 = randoms[1]
+
+    // Both should be valid random values
+    expect(typeof r1).toBe('number')
+    expect(r1).toBeGreaterThanOrEqual(0)
+    expect(r1).toBeLessThanOrEqual(100)
     expect(typeof r2).toBe('number')
-    // r2 should be a valid random value
     expect(r2).toBeGreaterThanOrEqual(0)
     expect(r2).toBeLessThanOrEqual(100)
+
+    // Different seeds produce different values
+    expect(r1).not.toBe(r2)
   })
 })
