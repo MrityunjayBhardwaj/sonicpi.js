@@ -6,6 +6,7 @@
 import { SonicPiEngine } from '../engine/SonicPiEngine'
 import { friendlyError } from '../engine/FriendlyErrors'
 import { Recorder } from '../engine/Recorder'
+import { SessionLog } from '../engine/SessionLog'
 import { examples as allExamples, type Example } from '../engine/examples'
 import { Editor } from './Editor'
 import { Scope } from './Scope'
@@ -73,6 +74,7 @@ export class App {
   private eventStreamHandler: ((event: unknown) => void) | null = null
   private recorder: Recorder | null = null
   private isRecording = false
+  private sessionLog = new SessionLog()
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -301,8 +303,10 @@ export class App {
 
         let SuperSonicClass: unknown = undefined
         try {
+          // CDN dependency — pinned version. dynamic import() does not support SRI.
+          // See src/engine/cdn-manifest.ts for the full dependency manifest.
           // @ts-ignore — CDN URL
-          const mod = await import(/* @vite-ignore */ 'https://unpkg.com/supersonic-scsynth@latest')
+          const mod = await import(/* @vite-ignore */ 'https://unpkg.com/supersonic-scsynth@0.4.0')
           SuperSonicClass = mod.SuperSonic ?? mod.default
         } catch {
           this.console.logSystem('  SuperSonic CDN unavailable.')
@@ -323,8 +327,10 @@ export class App {
         })
 
         await this.engine.init()
+        await this.sessionLog.initSigning()
         this.toolbar.setLoading(false)
         this.console.logSystem('  Audio engine ready.')
+        this.console.logSystem('  Session logging active. Ctrl+Shift+S to export.')
         this.console.logSystem('')
       }
 
