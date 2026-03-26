@@ -310,6 +310,20 @@ end
     expect(code).toContain('b.play(note)')
   })
 
+  it('transpiles time_warp as at() sugar', () => {
+    const { code, errors } = parseAndTranspile(`
+live_loop :test do
+  time_warp 2 do
+    play 60
+  end
+  sleep 4
+end
+`)
+    expect(errors).toHaveLength(0)
+    expect(code).toContain('b.at([2], null, (b) => {')
+    expect(code).toContain('b.play(60)')
+  })
+
   it('transpiles density with save/restore', () => {
     const { code, errors } = parseAndTranspile(`
 live_loop :test do

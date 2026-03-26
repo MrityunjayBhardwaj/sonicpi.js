@@ -260,6 +260,16 @@ export function transpileRubyToJS(ruby: string): string {
       continue
     }
 
+    // --- time_warp N do --- (sugar for at([N], null, fn))
+    const timeWarpMatch = code.match(/^time_warp\s+(.+?)\s+do\s*$/)
+    if (timeWarpMatch) {
+      const offset = transpileExpression(timeWarpMatch[1])
+      result.push(`${indent}b.at([${offset}], null, (b) => {${inlineComment}`)
+      blockStack.push('loop')
+      i++
+      continue
+    }
+
     // --- in_thread do ---
     const inThreadMatch = code.match(/^in_thread\s+do\s*$/)
     if (inThreadMatch) {

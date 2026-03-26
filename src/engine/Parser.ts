@@ -309,6 +309,12 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
       return
     }
 
+    // time_warp N do ... end (sugar for at([N], null, fn))
+    if (t.type === 'word' && t.value === 'time_warp') {
+      parseTimeWarp()
+      return
+    }
+
     // density N do
     if (t.type === 'word' && t.value === 'density') {
       parseDensity()
@@ -643,6 +649,27 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
     if (at('newline')) advance()
   }
 
+  function parseTimeWarp(): void {
+    advance() // 'time_warp'
+    const offset = collectUntilDo().trim()
+    if (at('word', 'do')) advance()
+    skipNewlines()
+
+    const indent = getIndent()
+    output.push(`${indent}b.at([${offset}], null, (b) => {`)
+
+    blockStack.push('loop')
+    const prevInsideLoop = insideLoop
+    insideLoop = true
+    parseBlock()
+    insideLoop = prevInsideLoop
+    blockStack.pop()
+
+    if (at('word', 'end')) advance()
+    output.push(`${indent}})`)
+    if (at('newline')) advance()
+  }
+
   function parseBlock(): void {
     skipNewlines()
     while (!at('eof') && !at('word', 'end') && !at('word', 'elsif') && !at('word', 'else')) {
@@ -847,6 +874,12 @@ function addBuilderPrefixes(line: string, insideLoop: boolean): string {
 
   // ring without parens: (ring 1, 2, 3) → (b.ring(1, 2, 3))
   result = result.replace(/(?<=\(|^)(ring|spread)\s+([^(].+?)(?=\)|$)/g, 'b.$1($2)')
+
+  // Ruby block syntax: .map { |var| expr } → .map((var) => expr)
+  result = result.replace(/\.map\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.map(($1) => $2)')
+  result = result.replace(/\.select\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.filter(($1) => $2)')
+  result = result.replace(/\.reject\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.filter(($1) => !($2))')
+  result = result.replace(/\.collect\s*\{\s*\|(\w+)\|\s*(.+?)\s*\}/g, '.map(($1) => $2)')
 
   return result
 }
