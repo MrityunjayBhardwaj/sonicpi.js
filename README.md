@@ -5,11 +5,13 @@
 <!-- badges -->
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
+**[Try it at sonicpi.cc](https://sonicpi.cc)**
+
 ---
 
 ## What is this?
 
-SonicPi.js is a browser-native reimplementation of [Sonic Pi](https://sonic-pi.net/)'s live coding environment. It runs real SuperCollider synthesis in the browser via SuperSonic (scsynth compiled to WebAssembly) with a scheduler-controlled Promise architecture that gives JavaScript cooperative concurrency with virtual time. Zero install -- open a browser and start making music.
+SonicPi.js is a browser-native reimplementation of [Sonic Pi](https://sonic-pi.net/)'s live coding environment. It runs real SuperCollider synthesis in the browser via SuperSonic (scsynth compiled to WebAssembly) with a scheduler-controlled Promise architecture that gives JavaScript cooperative concurrency with virtual time. Zero install — open [sonicpi.cc](https://sonicpi.cc) and start making music.
 
 ## Quick Start
 
