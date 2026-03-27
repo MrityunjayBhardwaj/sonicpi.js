@@ -120,6 +120,13 @@ export class SonicPiEngine {
           schedAheadTime: this.schedAheadTime,
         })
 
+        this.scheduler.onLoopError((loopName, err) => {
+          const msg = `Error in loop '${loopName}': ${err.message}`
+          if (this.runtimeErrorHandler) this.runtimeErrorHandler(err)
+          if (this.printHandler) this.printHandler(msg)
+          else console.error('[SonicPi]', msg)
+        })
+
         this.loopBuilders.clear()
         this.loopSeeds.clear()
       }
