@@ -14,6 +14,7 @@ import { MidiBridge } from './MidiBridge'
 import { spread } from './EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq } from './NoteToFreq'
 import { chord, scale, chord_invert, note, note_range } from './ChordScale'
+import { getSampleNames, getCategories } from './SampleCatalog'
 import type { Program } from './Program'
 
 // ---------------------------------------------------------------------------
@@ -291,6 +292,18 @@ export class SonicPiEngine {
       const get_pitch_bend = (channel: number = 1): number =>
         this.midiBridge.getPitchBend(channel)
 
+      // ----- Sample catalog -----
+      const sample_names = (): string[] => getSampleNames()
+      const sample_groups = (): string[] => getCategories()
+      const sample_loaded = (name: string): boolean => {
+        if (!this.bridge) return false
+        return this.bridge.isSampleLoaded(name)
+      }
+      const sample_duration = (name: string): number => {
+        if (!this.bridge) return 0
+        return this.bridge.getSampleDuration(name) ?? 0
+      }
+
       // ----- MIDI output (opts object carries keyword args from transpiler) -----
       type MidiOpts = { channel?: number }
       const midi_note_on = (note: number | string, velocity: number = 100, opts: MidiOpts = {}) => {
@@ -317,6 +330,11 @@ export class SonicPiEngine {
       const midi_continue = () => this.midiBridge.midiContinue()
       const midi_all_notes_off = (opts: MidiOpts = {}) =>
         this.midiBridge.allNotesOff(opts.channel ?? 1)
+      const midi_notes_off = (opts: MidiOpts = {}) =>
+        this.midiBridge.allNotesOff(opts.channel ?? 1)
+      const midi_devices = () => this.midiBridge.getDevices()
+      const get_note_on = (channel: number = 1) => this.midiBridge.getLastNoteOn(channel)
+      const get_note_off = (channel: number = 1) => this.midiBridge.getLastNoteOff(channel)
 
       // Build DSL parameter names and values for the executor
       const dslNames = [
@@ -326,14 +344,16 @@ export class SonicPiEngine {
         'chord', 'scale', 'chord_invert', 'note', 'note_range',
         'noteToMidi', 'midiToFreq', 'noteToFreq',
         'puts', 'stop',
+        // Sample catalog
+        'sample_names', 'sample_groups', 'sample_loaded', 'sample_duration',
         // MIDI input
-        'get_cc', 'get_pitch_bend',
+        'get_cc', 'get_pitch_bend', 'get_note_on', 'get_note_off',
         // MIDI output
         'midi_note_on', 'midi_note_off', 'midi_cc',
         'midi_pitch_bend', 'midi_channel_pressure', 'midi_poly_pressure',
         'midi_prog_change', 'midi_clock_tick',
         'midi_start', 'midi_stop', 'midi_continue',
-        'midi_all_notes_off',
+        'midi_all_notes_off', 'midi_notes_off', 'midi_devices',
       ]
       const dslValues = [
         fxAwareWrappedLiveLoop, topLevelWithFx, topLevelUseBpm, topLevelUseSynth, topLevelUseRandomSeed,
@@ -342,14 +362,16 @@ export class SonicPiEngine {
         chord, scale, chord_invert, note, note_range,
         noteToMidi, midiToFreq, noteToFreq,
         topLevelPuts, topLevelStop,
+        // Sample catalog
+        sample_names, sample_groups, sample_loaded, sample_duration,
         // MIDI input
-        get_cc, get_pitch_bend,
+        get_cc, get_pitch_bend, get_note_on, get_note_off,
         // MIDI output
         midi_note_on, midi_note_off, midi_cc,
         midi_pitch_bend, midi_channel_pressure, midi_poly_pressure,
         midi_prog_change, midi_clock_tick,
         midi_start, midi_stop, midi_continue,
-        midi_all_notes_off,
+        midi_all_notes_off, midi_notes_off, midi_devices,
       ]
 
       const executor = createSandboxedExecutor(transpiledCode, dslNames)
