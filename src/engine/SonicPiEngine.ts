@@ -58,6 +58,8 @@ export class SonicPiEngine {
   private loopTicks = new Map<string, Map<string, number>>()
   /** MIDI I/O bridge — lazily accessible from DSL via get_cc() */
   readonly midiBridge = new MidiBridge()
+  /** Global key-value store — shared across all loops via get/set */
+  private globalStore = new Map<string | symbol, unknown>()
 
   get schedAhead(): number { return this.schedAheadTime }
 
@@ -293,6 +295,16 @@ export class SonicPiEngine {
         }
       }
 
+      // ----- Global store (get/set) -----
+      // get[:key] returns the stored value (or nil). get is a Proxy so get[:key] works.
+      // set(:key, value) stores it. Shared across all loops.
+      const set = (key: string | symbol, value: unknown): void => {
+        this.globalStore.set(key, value)
+      }
+      const get = new Proxy({} as Record<string | symbol, unknown>, {
+        get: (_target, key) => this.globalStore.get(key) ?? null,
+      })
+
       // ----- MIDI input readers -----
       const get_cc = (controller: number, channel: number = 1): number =>
         this.midiBridge.getCCValue(controller, channel)
@@ -351,6 +363,8 @@ export class SonicPiEngine {
         'chord', 'scale', 'chord_invert', 'note', 'note_range',
         'noteToMidi', 'midiToFreq', 'noteToFreq',
         'puts', 'stop',
+        // Global store
+        'get', 'set',
         // Sample catalog
         'sample_names', 'sample_groups', 'sample_loaded', 'sample_duration',
         // MIDI input
@@ -369,6 +383,8 @@ export class SonicPiEngine {
         chord, scale, chord_invert, note, note_range,
         noteToMidi, midiToFreq, noteToFreq,
         topLevelPuts, topLevelStop,
+        // Global store
+        get, set,
         // Sample catalog
         sample_names, sample_groups, sample_loaded, sample_duration,
         // MIDI input
@@ -448,6 +464,7 @@ export class SonicPiEngine {
     this.loopBuilders.clear()
     this.loopSeeds.clear()
     this.loopTicks.clear()
+    this.globalStore.clear()
   }
 
   dispose(): void {
@@ -461,6 +478,7 @@ export class SonicPiEngine {
     this.currentStratum = Stratum.S3  // Reset to S3 so capture is unavailable
     this.loopBuilders.clear()
     this.loopSeeds.clear()
+    this.globalStore.clear()
   }
 
   setRuntimeErrorHandler(handler: (err: Error) => void): void {
