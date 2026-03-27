@@ -50,11 +50,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/MrityunjayBhardwaj/sonic-pi-web.git"
+    "url": "https://github.com/MrityunjayBhardwaj/sonicpi.js.git"
   },
   "bugs": {
-    "url": "https://github.com/MrityunjayBhardwaj/sonic-pi-web/issues"
+    "url": "https://github.com/MrityunjayBhardwaj/sonicpi.js/issues"
   },
-  "homepage": "https://github.com/MrityunjayBhardwaj/sonic-pi-web#readme",
+  "homepage": "https://github.com/MrityunjayBhardwaj/sonicpi.js#readme",
   "license": "MIT"
 }
