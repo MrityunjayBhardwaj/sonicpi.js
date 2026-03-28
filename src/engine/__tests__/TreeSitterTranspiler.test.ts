@@ -141,7 +141,7 @@ end`)
 end`)
       expect(result.ok).toBe(true)
       expect(result.code).toContain('b.scale("c4", "minor_pentatonic")')
-      expect(result.code).toContain('.choose()')
+      expect(result.code).toContain('b.choose(')
     })
 
     it('rrand', () => {

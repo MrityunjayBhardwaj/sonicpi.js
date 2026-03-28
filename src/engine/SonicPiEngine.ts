@@ -283,6 +283,11 @@ export class SonicPiEngine {
             printHandler: this.printHandler ?? undefined,
             nodeRefMap: this.nodeRefMap,
           })
+
+          // Auto-cue the loop name after each iteration.
+          // In Sonic Pi, `live_loop :foo` auto-cues `:foo` on each iteration
+          // so that `live_loop :bar, sync: :foo` can synchronize to it.
+          scheduler.fireCue(name, name)
         }
 
         if (isReEvaluate) {

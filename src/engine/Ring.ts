@@ -146,7 +146,8 @@ export function knit<T>(...args: (T | number)[]): Ring<T> {
  * range(1, 5) → Ring([1, 2, 3, 4])
  * range(1, 10, 2) → Ring([1, 3, 5, 7, 9])
  */
-export function range(start: number, end: number, step: number = 1): Ring<number> {
+export function range(start: number, end: number, stepOrOpts: number | { step?: number; inclusive?: boolean } = 1): Ring<number> {
+  const step = typeof stepOrOpts === 'number' ? stepOrOpts : (stepOrOpts.step ?? 1)
   const result: number[] = []
   const maxSize = 10_000
   if (step > 0) {
@@ -164,7 +165,8 @@ export function range(start: number, end: number, step: number = 1): Ring<number
  * Line: generate a line of N values between start and end.
  * line(60, 72, 5) → Ring([60, 63, 66, 69, 72])
  */
-export function line(start: number, finish: number, steps: number = 4): Ring<number> {
+export function line(start: number, finish: number, stepsOrOpts: number | { steps?: number; inclusive?: boolean } = 4): Ring<number> {
+  const steps = typeof stepsOrOpts === 'number' ? stepsOrOpts : (stepsOrOpts.steps ?? 4)
   const result: number[] = []
   for (let i = 0; i < steps; i++) {
     result.push(start + (finish - start) * (i / (steps - 1)))
