@@ -7,8 +7,10 @@
  * 3. Reports a compatibility matrix at the end.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import { autoTranspile } from '../RubyTranspiler'
+import { initTreeSitter, isTreeSitterReady, treeSitterTranspile } from '../TreeSitterTranspiler'
+import { resolve } from 'path'
 
 interface TestCase {
   name: string
@@ -1190,5 +1192,59 @@ describe('Real-world Sonic Pi compatibility matrix', () => {
     }
 
     expect(pct).toBeGreaterThanOrEqual(80)
+  })
+})
+
+// -----------------------------------------------------------------------
+// Tree-sitter compatibility matrix
+// -----------------------------------------------------------------------
+
+describe('Tree-sitter compatibility matrix', () => {
+  const tsWasm = resolve(__dirname, '../../../node_modules/web-tree-sitter/tree-sitter.wasm')
+  const rubyWasm = resolve(__dirname, '../../../node_modules/tree-sitter-wasms/out/tree-sitter-ruby.wasm')
+
+  beforeAll(async () => {
+    await initTreeSitter({ treeSitterWasmUrl: tsWasm, rubyWasmUrl: rubyWasm })
+  })
+
+  const results: { name: string; ok: boolean; error?: string }[] = []
+
+  for (const tc of testCases) {
+    it(`[tree-sitter] ${tc.name}`, () => {
+      if (!isTreeSitterReady()) {
+        results.push({ name: tc.name, ok: false, error: 'tree-sitter not ready' })
+        return
+      }
+
+      const result = treeSitterTranspile(tc.code)
+      results.push({
+        name: tc.name,
+        ok: result.ok,
+        error: result.ok ? undefined : result.errors[0],
+      })
+
+      // All programs that the regex transpiler handles should also work with tree-sitter
+      if (tc.shouldTranspile) {
+        expect(result.ok).toBe(true)
+      }
+    })
+  }
+
+  it('tree-sitter compatibility summary: at least 90% transpile successfully', () => {
+    const total = results.length
+    const passing = results.filter(r => r.ok).length
+    const pct = (passing / total) * 100
+
+    console.log(`\n=== Tree-sitter Compatibility Matrix ===`)
+    console.log(`${passing}/${total} programs transpile successfully (${pct.toFixed(0)}%)`)
+    const failures = results.filter(r => !r.ok)
+    if (failures.length > 0) {
+      console.log(`\nTree-sitter failures:`)
+      for (const f of failures) {
+        console.log(`  - ${f.name}: ${f.error}`)
+      }
+    }
+
+    expect(pct).toBeGreaterThanOrEqual(90)
   })
 })
