@@ -132,7 +132,11 @@ export async function runProgram(
         const prevOutBus = task.outBus
         const newBus = ctx.bridge.allocateBus()
         try {
-          await ctx.bridge.applyFx(step.name, step.opts, newBus, prevOutBus)
+          const fxNodeId = await ctx.bridge.applyFx(step.name, step.opts, newBus, prevOutBus)
+          // Store FX node ID so control() can target it via nodeRefMap
+          if (step.nodeRef && fxNodeId !== undefined) {
+            ctx.nodeRefMap.set(step.nodeRef, fxNodeId)
+          }
           task.outBus = newBus
           await runProgram(step.body, ctx)
         } finally {

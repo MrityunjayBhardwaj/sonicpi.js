@@ -15,7 +15,7 @@ export type Step =
   | { tag: 'control'; nodeRef: number; params: Record<string, number> }
   | { tag: 'cue'; name: string; args?: unknown[] }
   | { tag: 'sync'; name: string }
-  | { tag: 'fx'; name: string; opts: Record<string, number>; body: Program }
+  | { tag: 'fx'; name: string; opts: Record<string, number>; body: Program; nodeRef?: number }
   | { tag: 'thread'; body: Program }
   | { tag: 'print'; message: string }
   | { tag: 'liveAudio'; name: string; opts: Record<string, number> }

@@ -937,6 +937,26 @@ end`)
       expect(steps[0].tag).toBe('sample')
     })
 
+    it('with_fx block param captures FX node ref for control', () => {
+      const { steps, error } = executeTranspiled(`live_loop :t do
+  with_fx :reverb, room: 0.8 do |r|
+    play 60
+    control r, mix: 0.5
+    sleep 1
+  end
+end`)
+      expect(error).toBeUndefined()
+      const fxStep = steps.find((s: any) => s.tag === 'fx')
+      expect(fxStep).toBeDefined()
+      expect(fxStep!.name).toBe('reverb')
+      expect(fxStep!.nodeRef).toBeDefined()
+      // The inner body should have a control step targeting the FX ref
+      const controlStep = fxStep!.body.find((s: any) => s.tag === 'control')
+      expect(controlStep).toBeDefined()
+      expect(controlStep!.nodeRef).toBe(fxStep!.nodeRef)
+      expect(controlStep!.params.mix).toBe(0.5)
+    })
+
     it('play_pattern_timed plays notes with timing', () => {
       const { steps, error } = executeTranspiled(`live_loop :t do
   play_pattern_timed [60, 64, 67], [0.5]

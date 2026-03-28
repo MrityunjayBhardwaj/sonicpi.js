@@ -142,15 +142,15 @@ export class ProgramBuilder {
     return this
   }
 
-  with_fx(name: string, opts: Record<string, number>, buildFn: (b: ProgramBuilder) => ProgramBuilder): this
-  with_fx(name: string, buildFn: (b: ProgramBuilder) => ProgramBuilder): this
+  with_fx(name: string, opts: Record<string, number>, buildFn: (b: ProgramBuilder, fxRef?: number) => ProgramBuilder): this
+  with_fx(name: string, buildFn: (b: ProgramBuilder, fxRef?: number) => ProgramBuilder): this
   with_fx(
     name: string,
-    optsOrFn: Record<string, number> | ((b: ProgramBuilder) => ProgramBuilder),
-    maybeFn?: (b: ProgramBuilder) => ProgramBuilder
+    optsOrFn: Record<string, number> | ((b: ProgramBuilder, fxRef?: number) => ProgramBuilder),
+    maybeFn?: (b: ProgramBuilder, fxRef?: number) => ProgramBuilder
   ): this {
     let opts: Record<string, number>
-    let fn: (b: ProgramBuilder) => ProgramBuilder
+    let fn: (b: ProgramBuilder, fxRef?: number) => ProgramBuilder
     if (typeof optsOrFn === 'function') {
       opts = {}
       fn = optsOrFn
@@ -158,11 +158,14 @@ export class ProgramBuilder {
       opts = optsOrFn
       fn = maybeFn!
     }
+    // Assign a nodeRef so the FX can be targeted by control()
+    const fxRef = this.nextRef++
+    this._lastRef = fxRef
     const inner = new ProgramBuilder(this.rng.next() * 0xFFFFFFFF)
     inner.currentSynth = this.currentSynth
     inner.densityFactor = this.densityFactor
-    fn(inner)
-    this.steps.push({ tag: 'fx', name, opts, body: inner.build() })
+    fn(inner, fxRef)
+    this.steps.push({ tag: 'fx', name, opts, body: inner.build(), nodeRef: fxRef })
     return this
   }
 

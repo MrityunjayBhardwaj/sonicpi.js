@@ -1288,8 +1288,14 @@ function transpileWithBlock(
   const optsStr = opts.length > 0 ? `{ ${opts.join(', ')} }` : ''
   const posStr = positional.join(', ')
 
-  // with_fx("name", {opts}, (b) => { ... })
-  const argParts = [posStr, optsStr, '(b) => {\n' + bodyStr + '\n' + ctx.indent + '}'].filter(Boolean)
+  // Check for block parameter: with_fx :reverb do |lv| → (b, lv) => { ... }
+  // The block param receives the FX node ref for later control()
+  const blockParams = blockNode?.namedChildren.find((c: any) => c.type === 'block_parameters')
+  const fxParamName = blockParams?.namedChildren[0]?.text
+  const callbackParams = fxParamName ? `(b, ${fxParamName})` : '(b)'
+
+  // with_fx("name", {opts}, (b, lv) => { ... })
+  const argParts = [posStr, optsStr, `${callbackParams} => {\n` + bodyStr + '\n' + ctx.indent + '}'].filter(Boolean)
   return `${prefix}${methodName}(${argParts.join(', ')})`
 }
 
