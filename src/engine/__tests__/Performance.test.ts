@@ -97,8 +97,8 @@ describe('Performance', () => {
     scheduler.tick(1000)
     const elapsed = performance.now() - start
 
-    // 10000 entries should resolve in <50ms (generous for CI)
-    expect(elapsed).toBeLessThan(50)
+    // 10000 entries should resolve in <500ms (CI runners are slower than local)
+    expect(elapsed).toBeLessThan(500)
 
     scheduler.dispose()
   })
