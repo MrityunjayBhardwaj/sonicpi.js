@@ -244,6 +244,12 @@ const DSL_FUNCTIONS = new Set([
   'set', 'get',
   'tick_reset', 'tick_reset_all',
   'load_samples', 'load_sample',
+  'use_transpose', 'with_transpose',
+  'factor_q',
+  'play_pattern_timed',
+  'sample_duration',
+  'use_synth_defaults',
+  'use_debug',
 ])
 
 // DSL methods that are always top-level (never get b. prefix)
@@ -453,17 +459,25 @@ function transpileNode(node: any, ctx: TranspileContext): string {
     case 'element_reference': {
       // a[b]
       const obj = transpileNode(node.namedChildren[0], ctx)
-      const args = node.namedChildren.slice(1)
-        .map((c: any) => transpileNode(c, ctx))
       // Handle range slice: a[1..-1] → a.slice(1)
-      if (args.length === 1 && node.namedChildren[1]?.type === 'range') {
+      if (node.namedChildren[1]?.type === 'range') {
         const rangeNode = node.namedChildren[1]
         const from = transpileNode(rangeNode.namedChildren[0], ctx)
-        const to = rangeNode.namedChildren[1]?.text
-        if (to === '-1') {
+        const toNode = rangeNode.namedChildren[1]
+        const toStr = transpileNode(toNode, ctx)
+        // Negative index: a[1..-1] → a.slice(1)
+        if (toStr === '-1' || (toNode.type === 'unary' && toNode.namedChildren[0]?.text === '1')) {
           return `${obj}.slice(${from})`
         }
+        // Other negative: a[0..-2] → a.slice(0, -1)
+        if (toStr.startsWith('-')) {
+          const absVal = parseInt(toStr.slice(1))
+          return `${obj}.slice(${from}, ${-(absVal - 1) || undefined})`
+        }
+        return `${obj}.slice(${from}, ${toStr} + 1)`
       }
+      const args = node.namedChildren.slice(1)
+        .map((c: any) => transpileNode(c, ctx))
       return `${obj}[${args.join(', ')}]`
     }
 
@@ -770,10 +784,11 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
       return '/* commented out */'
     }
 
-    // loop do ... end
+    // loop do ... end  OR  loop { ... }
     if (methodName === 'loop') {
-      if (blockNode) {
-        const bodyStr = transpileBlockBody(blockNode, ctx)
+      const block = blockNode ?? node.namedChildren.find((c: any) => c.type === 'block')
+      if (block) {
+        const bodyStr = transpileBlockBody(block, ctx)
         return `while (true) {\n${ctx.indent}  b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
       }
     }
@@ -868,6 +883,26 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
     // tick_reset_all
     if (methodName === 'tick_reset_all') {
       return `b.tick_reset_all()`
+    }
+
+    // tick_reset
+    if (methodName === 'tick_reset') {
+      return `b.tick_reset()`
+    }
+
+    // Methods ending with ? — rename to _q and add b. prefix
+    if (methodName.endsWith('?')) {
+      const cleanName = methodName.slice(0, -1) + '_q'
+      const args = argsNode ? transpileArgList(argsNode, ctx) : ''
+      const prefix = ctx.insideLoop ? 'b.' : ''
+      return `${prefix}${cleanName}(${args})`
+    }
+
+    // use_transpose
+    if (methodName === 'use_transpose') {
+      const args = argsNode ? transpileArgList(argsNode, ctx) : ''
+      const prefix = ctx.insideLoop ? 'b.' : ''
+      return `${prefix}use_transpose(${args})`
     }
 
     // Generic: unknown bare function call — emit as-is
