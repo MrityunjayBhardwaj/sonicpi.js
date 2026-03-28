@@ -1314,19 +1314,31 @@ function transpileWithBlock(
   }
 
   const prefix = ctx.insideLoop ? 'b.' : ''
-  const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
+
+  // Inside a loop, the block body is inside ProgramBuilder context (insideLoop: true).
+  // At top level, with_fx just wraps live_loops — the body stays at top-level context.
+  // The engine's topLevelWithFx passes null to the callback, so `b` is not available.
+  const bodyCtx: TranspileContext = ctx.insideLoop
+    ? { ...ctx, insideLoop: true }
+    : { ...ctx }  // keep insideLoop false — live_loops inside will set their own
   const bodyStr = blockNode ? transpileBlockBody(blockNode, bodyCtx) : ''
 
   const optsStr = opts.length > 0 ? `{ ${opts.join(', ')} }` : ''
   const posStr = positional.join(', ')
 
   // Check for block parameter: with_fx :reverb do |lv| → (b, lv) => { ... }
-  // The block param receives the FX node ref for later control()
   const blockParams = blockNode?.namedChildren.find((c: any) => c.type === 'block_parameters')
   const fxParamName = blockParams?.namedChildren[0]?.text
-  const callbackParams = fxParamName ? `(b, ${fxParamName})` : '(b)'
 
-  // with_fx("name", {opts}, (b, lv) => { ... })
+  let callbackParams: string
+  if (ctx.insideLoop) {
+    // Inside loop: callback receives ProgramBuilder + optional FX ref
+    callbackParams = fxParamName ? `(b, ${fxParamName})` : '(b)'
+  } else {
+    // Top level: engine passes null, we use _ to discard it
+    callbackParams = fxParamName ? `(${fxParamName})` : '()'
+  }
+
   const argParts = [posStr, optsStr, `${callbackParams} => {\n` + bodyStr + '\n' + ctx.indent + '}'].filter(Boolean)
   return `${prefix}${methodName}(${argParts.join(', ')})`
 }
