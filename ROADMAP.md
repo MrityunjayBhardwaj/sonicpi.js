@@ -8,28 +8,18 @@
 
 These must be fixed before community launch. They are correctness or safety issues.
 
-### Execution Budget (System-Wide)
-- [ ] AST-level operation counting at every loop back-edge (Luerl-inspired reduction model)
-- [ ] Per-loop iteration budget — resets on each `sleep()` call
-- [ ] ReDoS guard on transpiler regex patterns
-- [ ] Iterator guard on DSL helpers (`note_range`, `ring`, `spread` with degenerate inputs)
-- [ ] Scheduler internal loop guard (`tick`, `runLoop`)
+### ~~Execution Budget (System-Wide)~~ DONE
+### ~~Silent Parser Fallback~~ DONE
+### ~~Per-Loop Scope Isolation~~ DONE
+### ~~Verify DSL Compatibility~~ DONE (82% on real community code — motivates tree-sitter)
 
-### Silent Parser Fallback
-- [ ] When recursive descent parser fails, emit a visible warning to the user
-- [ ] Log which constructs caused the fallback
-- [ ] Track fallback rate in Plausible as a custom event
-
-### Per-Loop Scope Isolation
-- [ ] Each `live_loop` gets its own Proxy scope (no shared `scopeBase`)
-- [ ] Variables set in one loop cannot bleed into another
-- [ ] `get`/`set` global store remains the explicit cross-loop channel
-
-### Verify DSL Compatibility
-- [ ] Collect 50+ real Sonic Pi programs from the community/tutorials
-- [ ] Run each through the transpiler and record pass/fail
-- [ ] Publish actual compatibility % (replace "~95%" with measured number)
-- [ ] Document unsupported constructs explicitly
+### Tree-sitter Ruby Transpiler (#21)
+- [ ] Replace regex transpiler with `web-tree-sitter` + `tree-sitter-ruby` AST walker
+- [ ] Walk AST and emit JS for Sonic Pi subset (~30-40 node types)
+- [ ] Inject execution budget at AST loop nodes (replaces regex injection)
+- [ ] Cover all 20 unsupported constructs found in community stress tests
+- [ ] Target: all 10 community programs transpile, overall ≥95%
+- [ ] Preserve regex transpiler as last-resort fallback with warning
 
 ---
 
