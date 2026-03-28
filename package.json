@@ -37,7 +37,8 @@
     "build:lib": "vite build --config vite.lib.config.ts && tsc -p tsconfig.lib.json",
     "build:docs": "vitepress build docs",
     "dev:docs": "vitepress dev docs",
-    "build:all": "npm run build:single && npm run build:docs"
+    "build:all": "npm run build:single && npm run build:docs",
+    "postinstall": "cp node_modules/web-tree-sitter/web-tree-sitter.wasm public/tree-sitter.wasm 2>/dev/null; cp node_modules/tree-sitter-wasms/out/tree-sitter-ruby.wasm public/tree-sitter-ruby.wasm 2>/dev/null; true"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -54,6 +55,7 @@
   ],
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "tree-sitter-wasms": "^0.1.13",
     "typescript": "^5.7.0",
     "vite": "^7.3.1",
     "vite-plugin-singlefile": "^2.3.2",
@@ -68,5 +70,8 @@
     "url": "https://github.com/MrityunjayBhardwaj/SonicPi.js/issues"
   },
   "homepage": "https://sonicpi.cc",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "web-tree-sitter": "^0.22.6"
+  }
 }

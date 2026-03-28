@@ -1,0 +1,515 @@
+/**
+ * TreeSitterTranspiler tests — validates the catamorphism over the Ruby grammar.
+ *
+ * Uses WASM files from node_modules (not public/) for test-time loading.
+ */
+
+import { describe, it, expect, beforeAll } from 'vitest'
+import { initTreeSitter, treeSitterTranspile, isTreeSitterReady } from '../TreeSitterTranspiler'
+import { resolve } from 'path'
+
+// Resolve WASM paths for Node.js test environment (plain file paths, not URLs)
+const tsWasm = resolve(__dirname, '../../../node_modules/web-tree-sitter/tree-sitter.wasm')
+const rubyWasm = resolve(__dirname, '../../../node_modules/tree-sitter-wasms/out/tree-sitter-ruby.wasm')
+
+/** Strip whitespace variations for test comparison. */
+const normalize = (s: string) => s.replace(/\s+/g, ' ').trim()
+
+describe('TreeSitterTranspiler', () => {
+  beforeAll(async () => {
+    const ok = await initTreeSitter({
+      treeSitterWasmUrl: tsWasm,
+      rubyWasmUrl: rubyWasm,
+    })
+    expect(ok).toBe(true)
+    expect(isTreeSitterReady()).toBe(true)
+  })
+
+  describe('Task 1: Setup & Prototype', () => {
+    it('parses and transpiles a basic live_loop', () => {
+      const ruby = `live_loop :drums do
+  sample :bd_haus
+  sleep 0.5
+end`
+      const result = treeSitterTranspile(ruby)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('live_loop("drums"')
+      expect(result.code).toContain('b.sample("bd_haus")')
+      expect(result.code).toContain('b.sleep(0.5)')
+    })
+
+    it('output is valid JS (can be parsed by new Function)', () => {
+      const ruby = `live_loop :drums do
+  sample :bd_haus
+  sleep 0.5
+  sample :sn_dub
+  sleep 0.5
+end`
+      const result = treeSitterTranspile(ruby)
+      expect(result.ok).toBe(true)
+      expect(() => new Function(result.code)).not.toThrow()
+    })
+  })
+
+  describe('Literals', () => {
+    it('transpiles symbols to strings', () => {
+      const result = treeSitterTranspile(`live_loop :test do
+  sample :bd_haus
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('"bd_haus"')
+    })
+
+    it('transpiles nil to null', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  x = nil
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('null')
+    })
+  })
+
+  describe('DSL functions', () => {
+    it('play with note and opts', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  play 60, release: 0.3, amp: 0.8
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.play(60')
+      expect(result.code).toContain('release: 0.3')
+      expect(result.code).toContain('amp: 0.8')
+    })
+
+    it('use_synth outside loop has no b. prefix', () => {
+      const result = treeSitterTranspile(`use_synth :prophet
+live_loop :t do
+  play 60
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('use_synth("prophet")')
+      // Inside the loop, play gets b. prefix
+      expect(result.code).toContain('b.play(60')
+    })
+
+    it('use_bpm', () => {
+      const result = treeSitterTranspile(`use_bpm 120
+live_loop :t do
+  play 60
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('use_bpm(120)')
+    })
+
+    it('sync and cue', () => {
+      const result = treeSitterTranspile(`live_loop :a do
+  cue :tick
+  sleep 1
+end
+live_loop :b do
+  sync :tick
+  play 60
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.cue("tick")')
+      expect(result.code).toContain('b.sync("tick")')
+    })
+
+    it('ring and tick', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  play (ring 60, 64, 67).tick
+  sleep 0.25
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.ring(60, 64, 67)')
+      expect(result.code).toContain('.at(b.tick())')
+    })
+
+    it('scale and choose', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  play scale(:c4, :minor_pentatonic).choose
+  sleep 0.25
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.scale("c4", "minor_pentatonic")')
+      expect(result.code).toContain('.choose()')
+    })
+
+    it('rrand', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  play rrand(50, 80)
+  sleep 0.25
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.rrand(50, 80)')
+    })
+
+    it('spread pattern', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  pattern = spread(5, 8)
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.spread(5, 8)')
+    })
+  })
+
+  describe('Control flow', () => {
+    it('if statement', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  if one_in(3)
+    sample :drum_heavy_kick
+  end
+  sleep 0.5
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('if (')
+      expect(result.code).toContain('b.one_in(3)')
+    })
+
+    it('trailing if modifier', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  sample :bd_haus if one_in(2)
+  sleep 0.25
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('if (')
+      expect(result.code).toContain('b.sample("bd_haus")')
+    })
+
+    it('unless modifier', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  sample :bd_haus unless one_in(4)
+  sleep 0.5
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('!(')
+    })
+
+    it('case/when', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  x = rrand_i(1, 3)
+  case x
+  when 1
+    play 60
+  when 2
+    play 64
+  when 3
+    play 67
+  end
+  sleep 0.5
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('if (')
+      expect(result.code).toContain('else if')
+    })
+  })
+
+  describe('Blocks', () => {
+    it('with_fx', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  with_fx :reverb, room: 0.8 do
+    play 60
+    sleep 1
+  end
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.with_fx("reverb"')
+      expect(result.code).toContain('room: 0.8')
+    })
+
+    it('N.times do', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  4.times do
+    play 60
+    sleep 0.25
+  end
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('for (let')
+      expect(result.code).toContain('< 4')
+      expect(result.code).toContain('b.__checkBudget__()')
+    })
+
+    it('.each do |n|', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  [60, 64, 67].each do |n|
+    play n
+    sleep 0.25
+  end
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('for (const n of')
+      expect(result.code).toContain('b.__checkBudget__()')
+    })
+
+    it('in_thread', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  in_thread do
+    play 60
+    sleep 1
+  end
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.in_thread(')
+    })
+
+    it('define with block params', () => {
+      const result = treeSitterTranspile(`define :bass_hit do
+  sample :bd_haus, amp: 2
+end
+
+live_loop :groove do
+  bass_hit
+  sleep 0.5
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('function bass_hit(b)')
+      // Call to defined function should inject b
+      expect(result.code).toContain('bass_hit(b)')
+    })
+  })
+
+  describe('Expressions', () => {
+    it('variable assignment', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  n = 60
+  play n
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('const n = 60')
+    })
+
+    it('binary operators', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  play 60 + 12
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('60 + 12')
+    })
+
+    it('string interpolation', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  n = 60
+  puts "playing #{n}"
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('`playing ${n}`')
+    })
+
+    it('array access', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  x = [60, 64, 67]
+  play x[0]
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('x[0]')
+    })
+  })
+
+  describe('Comments', () => {
+    it('full-line comment', () => {
+      const result = treeSitterTranspile(`# This is a comment
+live_loop :t do
+  play 60
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('//')
+    })
+  })
+
+  describe('Advanced constructs', () => {
+    it('define with default parameters', () => {
+      const result = treeSitterTranspile(`define :ocean do |num, amp_mul=1|
+  num.times do
+    play 60, amp: amp_mul
+    sleep 1
+  end
+end
+
+live_loop :t do
+  ocean 3
+  sleep 4
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('function ocean(b, num, amp_mul = 1)')
+    })
+
+    it('begin/rescue', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  begin
+    play 60
+    sleep 0.5
+  rescue
+    sleep 1
+  end
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('try {')
+      expect(result.code).toContain('catch')
+    })
+
+    it('live_loop with sync option', () => {
+      const result = treeSitterTranspile(`live_loop :kick, sync: :met1 do
+  sample :bd_haus
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('live_loop("kick"')
+      expect(result.code).toContain('b.sync("met1")')
+    })
+
+    it('nested with_fx', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  with_fx :reverb do
+    with_fx :echo do
+      play 60
+      sleep 1
+    end
+  end
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.with_fx("reverb"')
+      expect(result.code).toContain('b.with_fx("echo"')
+    })
+
+    it('use_synth_defaults', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  use_synth_defaults mod_phase: 0.125, pulse_width: 0.8
+  play 60
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.use_synth_defaults(')
+      expect(result.code).toContain('mod_phase: 0.125')
+    })
+
+    it('control with node ref', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  s = play 60, release: 4, note_slide: 1
+  sleep 1
+  control s, note: 65
+  sleep 3
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('b.play(')
+      expect(result.code).toContain('b.control(')
+    })
+
+    it('with_fx at top level (outside live_loop)', () => {
+      const result = treeSitterTranspile(`with_fx :reverb, mix: 0.7 do
+  live_loop :t do
+    play 60
+    sleep 1
+  end
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('with_fx("reverb"')
+    })
+  })
+
+  describe('Built-in examples compatibility', () => {
+    const examples = [
+      {
+        name: 'Hello Beep',
+        code: `play 60
+sleep 1
+play 64
+sleep 1
+play 67`,
+      },
+      {
+        name: 'Basic Beat',
+        code: `live_loop :drums do
+  sample :bd_haus
+  sleep 0.5
+  sample :sn_dub
+  sleep 0.5
+end`,
+      },
+      {
+        name: 'Ambient Pad',
+        code: `use_synth :prophet
+live_loop :pad do
+  play chord(:e3, :minor), release: 4, amp: 0.6
+  sleep 4
+end`,
+      },
+      {
+        name: 'Arpeggio with tick',
+        code: `use_synth :tb303
+live_loop :arp do
+  play (ring 60, 64, 67, 72).tick, release: 0.2, cutoff: 80
+  sleep 0.25
+end`,
+      },
+      {
+        name: 'Random Melody',
+        code: `use_random_seed 42
+live_loop :melody do
+  use_synth :pluck
+  play scale(:c4, :minor_pentatonic).choose, release: 0.3
+  sleep 0.25
+end`,
+      },
+      {
+        name: 'FX Chain',
+        code: `live_loop :fx_demo do
+  with_fx :reverb, room: 0.8 do
+    with_fx :distortion, distort: 0.5 do
+      play 50, release: 0.5
+      sleep 0.5
+      play 55, release: 0.5
+      sleep 0.5
+    end
+  end
+end`,
+      },
+      {
+        name: 'Minimal Techno',
+        code: `use_bpm 130
+
+live_loop :kick do
+  sample :bd_haus, amp: 1.5
+  sleep 1
+end
+
+live_loop :hats do
+  pattern = spread(7, 16)
+  16.times do |i|
+    sample :hat_snap, amp: 0.4 if pattern[i]
+    sleep 0.25
+  end
+end
+
+live_loop :acid do
+  use_synth :tb303
+  notes = ring(:e2, :e2, :e3, :e2, :g2, :e2, :a2, :e2)
+  play notes.tick, release: 0.2, cutoff: rrand(40, 120), res: 0.3
+  sleep 0.25
+end`,
+      },
+    ]
+
+    for (const ex of examples) {
+      it(`transpiles "${ex.name}" to valid JS`, () => {
+        const result = treeSitterTranspile(ex.code)
+        expect(result.ok).toBe(true)
+        expect(result.errors).toEqual([])
+        expect(() => new Function(result.code)).not.toThrow()
+      })
+    }
+  })
+})
