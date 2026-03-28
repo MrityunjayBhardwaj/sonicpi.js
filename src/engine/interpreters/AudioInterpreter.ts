@@ -52,7 +52,9 @@ export async function runProgram(
           const params: Record<string, number> = { ...step.opts }
           ctx.bridge.triggerSynth(synth, audioTime, { ...params, out_bus: task.outBus })
             .then(realNodeId => ctx.nodeRefMap.set(nodeRef, realNodeId))
-            .catch(() => {})
+            .catch((err: Error) => {
+              ctx.printHandler?.(`Synth '${synth}' failed: ${err.message}`)
+            })
         }
 
         // Emit sound event
@@ -73,7 +75,9 @@ export async function runProgram(
         const audioTime = task.virtualTime + ctx.schedAheadTime
         if (ctx.bridge) {
           ctx.bridge.playSample(step.name, audioTime, step.opts, currentBpm)
-            .catch(() => {})
+            .catch((err: Error) => {
+              ctx.printHandler?.(`Sample '${step.name}' failed: ${err.message}`)
+            })
         }
 
         const audioCtxTime = ctx.bridge?.audioContext?.currentTime ?? 0
