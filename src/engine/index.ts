@@ -67,6 +67,7 @@ export { transpile, createExecutor } from './Transpiler'
 export { transpileRubyToJS, detectLanguage, autoTranspile, autoTranspileDetailed, type TranspileResult } from './RubyTranspiler'
 export { parseAndTranspile } from './Parser'
 export type { ParseError } from './Parser'
+export { initTreeSitter, isTreeSitterReady, treeSitterTranspile, type TreeSitterTranspileResult } from './TreeSitterTranspiler'
 
 // Sandbox — Proxy-based global blocking for user code execution
 export { createSandboxedExecutor, createIsolatedExecutor, validateCode, BLOCKED_GLOBALS, type ScopeHandle } from './Sandbox'

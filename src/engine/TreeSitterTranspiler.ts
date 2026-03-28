@@ -55,9 +55,17 @@ async function _doInit(opts?: {
     const tsWasm = opts?.treeSitterWasmUrl ?? '/tree-sitter.wasm'
     const rubyWasm = opts?.rubyWasmUrl ?? '/tree-sitter-ruby.wasm'
 
-    await TSParser.init({
-      locateFile: (_filename: string, _scriptDir: string) => tsWasm,
-    })
+    // Race init with a 5-second timeout to avoid hanging in test environments
+    const initWithTimeout = Promise.race([
+      TSParser.init({
+        locateFile: (_filename: string, _scriptDir: string) => tsWasm,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('tree-sitter init timeout')), 5000)
+      ),
+    ])
+
+    await initWithTimeout
 
     // Language is only available after init() in older versions
     const TSLanguage = mod.Language ?? TSParser.Language
