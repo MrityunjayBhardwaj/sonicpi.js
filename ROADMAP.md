@@ -13,20 +13,9 @@ These must be fixed before community launch. They are correctness or safety issu
 ### ~~Per-Loop Scope Isolation~~ DONE
 ### ~~Verify DSL Compatibility~~ DONE (82% on real community code — motivates tree-sitter)
 
-### Tree-sitter Ruby Transpiler (#21)
-- [ ] Install web-tree-sitter + tree-sitter-ruby WASM
-- [ ] Define Sonic Pi AST as TypeScript discriminated union (~40-50 node types from ~150)
-- [ ] Implement transpiler as catamorphism — exhaustive switch with `never` default
-- [ ] Compile-time completeness: TypeScript enforces every node type is handled
-- [ ] Budget injection at AST loop nodes (replaces regex injection)
-- [ ] Cover all 20 unsupported constructs from community stress tests
-- [ ] Target: all 10 community programs transpile, overall ≥95%
-- [ ] Preserve regex transpiler as last-resort fallback with warning
-- [ ] Incremental parsing for hot-swap (<0.1ms re-parse on edit)
-
-Architecture: the transpiler is a catamorphism (fold) over the initial algebra of the
-Ruby grammar — the same mathematical structure used by our QueryInterpreter (see thesis §2.4).
-Exhaustive pattern matching provides provable syntactic completeness.
+### ~~Tree-sitter Ruby Transpiler~~ DONE (#21, PR #35)
+Partial fold over Sonic Pi subset of Ruby grammar (~60 semantic handlers).
+100% transpile compatibility on community programs. Falls back to regex with warning.
 
 ---
 
@@ -147,5 +136,22 @@ These make the project look maintained and trustworthy to developers evaluating 
 - 10 built-in examples, CLI launcher
 - Content Security Policy documentation
 - 489 tests passing (479 unit + Playwright E2E)
+
+</details>
+
+<details>
+<summary>Audio Parameter Pipeline (PR #29, #35) — 2026-03-30</summary>
+
+- Notes sent to SuperSonic — `step.note` included in synth params (#23)
+- QueryInterpreter tick advancement via ProgramFactory (#22)
+- Redundant `freq` removed — synthdefs convert MIDI internally (#24)
+- Recursive FX duration calculation (#26)
+- BPM propagation out of FX blocks (#34)
+- Sample duration → null instead of misleading 1s (#27)
+- ProgramFactory seed advances per iteration (#30)
+- Note override protection — step.note wins over opts (#31)
+- Diagnose tool: seconds not beats, top-level use_bpm/use_synth captured (#33)
+- Diagnostic tools: capture.ts, diagnose-audio.ts, spectrogram.ts
+- 622 tests passing (578 unit + 44 Playwright E2E)
 
 </details>
