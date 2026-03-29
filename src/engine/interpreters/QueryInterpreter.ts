@@ -13,7 +13,8 @@ import type { Program, Step } from '../Program'
 export interface QueryEvent {
   type: 'synth' | 'sample'
   time: number
-  duration: number
+  /** Duration in seconds. null for samples (real duration depends on sample file). */
+  duration: number | null
   params: Record<string, unknown>
 }
 
@@ -54,7 +55,7 @@ export function queryProgram(
           events.push({
             type: 'sample',
             time,
-            duration: 1, // approximate — real duration depends on sample file
+            duration: null, // real duration depends on sample file
             params: { name: step.name, ...step.opts },
           })
         }
