@@ -39,11 +39,20 @@ These affect how the app feels on first use. Fix before sharing widely.
 - [ ] Display estimated time remaining
 - [ ] Pre-warm AudioContext on first user interaction
 
-### Audio Latency Optimization
+### Sample-Accurate Audio Scheduling
+Currently `SuperSonicBridge.triggerSynth()` calls `sonic.send()` which fires immediately —
+the `audioTime` parameter is computed but never used. Desktop Sonic Pi achieves zero-jitter
+playback via timestamped OSC bundles that scsynth executes at exact sample boundaries.
+SuperSonic supports this via `sonic.sendOSC(bytes)` with NTP timetags.
+
+- [ ] Build OSC bundle encoder (binary format with NTP timetag header)
+- [ ] Convert `audioTime` (AudioContext seconds) → NTP epoch time
+- [ ] Replace `sonic.send()` with `sonic.sendOSC(bytes)` in `triggerSynth()`, `playSample()`, `applyFx()`
 - [ ] Verify SuperSonic creates AudioContext with `latencyHint: 'interactive'`
 - [ ] Expose `ctx.baseLatency + ctx.outputLatency` in console on init
 - [ ] Evaluate reducing `schedAheadTime` from 100ms to 50ms
 - [ ] Evaluate tightening tick interval from 25ms to 10ms
+- [ ] Measure before/after jitter with spectrogram tool (target: ±0ms like desktop Sonic Pi)
 - [ ] Document actual latency per platform in docs
 
 ### Tab Backgrounding
