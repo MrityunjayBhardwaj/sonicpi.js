@@ -120,7 +120,8 @@ const SCALE_TYPES: Record<string, number[]> = {
  *
  * chord(:c4, :major) → Ring([60, 64, 67])
  */
-export function chord(root: string | number, type: string = 'major', numOctaves: number = 1): Ring<number> {
+export function chord(root: string | number, type: string = 'major', numOctavesOrOpts: number | { num_octaves?: number } = 1): Ring<number> {
+  const numOctaves = typeof numOctavesOrOpts === 'number' ? numOctavesOrOpts : (numOctavesOrOpts.num_octaves ?? 1)
   const rootMidi = noteToMidi(root)
   const intervals = CHORD_TYPES[type]
   if (!intervals) {
@@ -143,7 +144,8 @@ export function chord(root: string | number, type: string = 'major', numOctaves:
  *
  * scale(:c4, :minor_pentatonic) → Ring([60, 63, 65, 67, 70])
  */
-export function scale(root: string | number, type: string = 'major', numOctaves: number = 1): Ring<number> {
+export function scale(root: string | number, type: string = 'major', numOctavesOrOpts: number | { num_octaves?: number } = 1): Ring<number> {
+  const numOctaves = typeof numOctavesOrOpts === 'number' ? numOctavesOrOpts : (numOctavesOrOpts.num_octaves ?? 1)
   const rootMidi = noteToMidi(root)
   const intervals = SCALE_TYPES[type]
   if (!intervals) {

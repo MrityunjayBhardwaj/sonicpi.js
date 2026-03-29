@@ -6,6 +6,7 @@ import { SuperSonicBridge, type SuperSonicBridgeOptions } from './SuperSonicBrid
 import { transpile } from './Transpiler'
 import { createIsolatedExecutor, validateCode, type ScopeHandle } from './Sandbox'
 import { autoTranspileDetailed } from './RubyTranspiler'
+import { initTreeSitter, isTreeSitterReady, treeSitterTranspile } from './TreeSitterTranspiler'
 import { friendlyError, formatFriendlyError, type FriendlyError } from './FriendlyErrors'
 import { detectStratum, Stratum } from './Stratum'
 import { SoundEventStream } from './SoundEventStream'
@@ -98,16 +99,26 @@ export class SonicPiEngine {
 
     this.bridge = new SuperSonicBridge(this.bridgeOptions)
 
-    try {
-      await this.bridge.init()
-      // Apply any volume set before init
-      if (this.pendingVolume !== null) {
-        this.bridge.setMasterVolume(this.pendingVolume)
-      }
-    } catch (err) {
-      console.warn('[SonicPi] SuperSonic init failed, running without audio:', err)
-      this.bridge = null
-    }
+    // Initialize SuperSonic and tree-sitter in parallel
+    const bridgeInit = this.bridge.init()
+      .then(() => {
+        if (this.pendingVolume !== null) {
+          this.bridge!.setMasterVolume(this.pendingVolume)
+        }
+      })
+      .catch((err) => {
+        console.warn('[SonicPi] SuperSonic init failed, running without audio:', err)
+        this.bridge = null
+      })
+
+    // Only init tree-sitter in browser environments where WASM is served via HTTP.
+    // In Node (tests), tree-sitter must be initialized explicitly with file paths.
+    const isBrowser = typeof window !== 'undefined'
+    const treeSitterInit = isBrowser
+      ? initTreeSitter().catch(() => { /* Non-fatal — regex fallback */ })
+      : Promise.resolve()
+
+    await Promise.all([bridgeInit, treeSitterInit])
 
     // Wire MIDI input events → scheduler cues so `sync '/midi/note_on'` works.
     // The handler reads this.scheduler at fire-time (always the current scheduler).
@@ -172,13 +183,30 @@ export class SonicPiEngine {
       }
 
       // Transpile: Ruby DSL → JS builder chain
-      const transpileResult = autoTranspileDetailed(code)
-      if (transpileResult.usedFallback) {
-        const warnMsg = `[Warning] Parser fell back to regex transpiler: ${transpileResult.fallbackReason}`
-        if (this.printHandler) this.printHandler(warnMsg)
-        else console.warn('[SonicPi]', warnMsg)
+      // Primary: tree-sitter catamorphism. Fallback: regex transpiler.
+      let transpiledCode: string
+      if (isTreeSitterReady()) {
+        const tsResult = treeSitterTranspile(code)
+        if (tsResult.ok) {
+          transpiledCode = tsResult.code
+        } else {
+          // Tree-sitter failed — fall back to regex
+          const warnMsg = `[Warning] Tree-sitter transpile failed (${tsResult.errors[0] ?? 'unknown'}), using regex fallback`
+          if (this.printHandler) this.printHandler(warnMsg)
+          else console.warn('[SonicPi]', warnMsg)
+          const regexResult = autoTranspileDetailed(code)
+          transpiledCode = transpile(regexResult.code).code
+        }
+      } else {
+        // Tree-sitter not available — use regex transpiler
+        const regexResult = autoTranspileDetailed(code)
+        if (regexResult.usedFallback) {
+          const warnMsg = `[Warning] Parser fell back to regex transpiler: ${regexResult.fallbackReason}`
+          if (this.printHandler) this.printHandler(warnMsg)
+          else console.warn('[SonicPi]', warnMsg)
+        }
+        transpiledCode = transpile(regexResult.code).code
       }
-      const { code: transpiledCode } = transpile(transpileResult.code)
 
       // Top-level DSL state
       let defaultBpm = 60
@@ -255,6 +283,11 @@ export class SonicPiEngine {
             printHandler: this.printHandler ?? undefined,
             nodeRefMap: this.nodeRefMap,
           })
+
+          // Auto-cue the loop name after each iteration.
+          // In Sonic Pi, `live_loop :foo` auto-cues `:foo` on each iteration
+          // so that `live_loop :bar, sync: :foo` can synchronize to it.
+          scheduler.fireCue(name, name)
         }
 
         if (isReEvaluate) {
@@ -607,12 +640,14 @@ export class SonicPiEngine {
         async queryRange(begin: number, end: number): Promise<QueryEvent[]> {
           const events: QueryEvent[] = []
           for (const [name, builderFn] of loopBuilders) {
-            const builder = new ProgramBuilder(0)
-            builderFn(builder)
-            const program = builder.build()
             const task = scheduler?.getTask(name)
             const bpm = task?.bpm ?? 60
-            events.push(...queryLoopProgram(program, begin, end, bpm))
+            const factory = (ticks?: Map<string, number>, iteration?: number) => {
+              const builder = new ProgramBuilder(iteration ?? 0, ticks)
+              builderFn(builder)
+              return { program: builder.build(), ticks: builder.getTicks() }
+            }
+            events.push(...queryLoopProgram(factory, begin, end, bpm))
           }
           return events.sort((a, b) => a.time - b.time)
         },

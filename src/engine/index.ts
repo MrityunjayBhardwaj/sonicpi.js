@@ -52,6 +52,7 @@ export type { Step, Program, LoopProgram } from './Program'
 export { ProgramBuilder, InfiniteLoopError, DEFAULT_LOOP_BUDGET } from './ProgramBuilder'
 export { runProgram } from './interpreters/AudioInterpreter'
 export { queryProgram, queryLoopProgram, captureAll } from './interpreters/QueryInterpreter'
+export type { ProgramFactory } from './interpreters/QueryInterpreter'
 
 // Audio bridge — direct SuperSonic access
 export { SuperSonicBridge } from './SuperSonicBridge'
@@ -67,6 +68,7 @@ export { transpile, createExecutor } from './Transpiler'
 export { transpileRubyToJS, detectLanguage, autoTranspile, autoTranspileDetailed, type TranspileResult } from './RubyTranspiler'
 export { parseAndTranspile } from './Parser'
 export type { ParseError } from './Parser'
+export { initTreeSitter, isTreeSitterReady, treeSitterTranspile, type TreeSitterTranspileResult } from './TreeSitterTranspiler'
 
 // Sandbox — Proxy-based global blocking for user code execution
 export { createSandboxedExecutor, createIsolatedExecutor, validateCode, BLOCKED_GLOBALS, type ScopeHandle } from './Sandbox'

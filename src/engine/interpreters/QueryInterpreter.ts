@@ -10,10 +10,21 @@
 
 import type { Program, Step } from '../Program'
 
+/**
+ * Factory that builds a fresh Program with advancing tick/seed state.
+ * Called once per loop iteration — receives the previous iteration's tick
+ * snapshot and iteration index, returns the new program + updated ticks.
+ */
+export type ProgramFactory = (ticks?: Map<string, number>, iteration?: number) => {
+  program: Program
+  ticks: Map<string, number>
+}
+
 export interface QueryEvent {
   type: 'synth' | 'sample'
   time: number
-  duration: number
+  /** Duration in seconds. null for samples (real duration depends on sample file). */
+  duration: number | null
   params: Record<string, unknown>
 }
 
@@ -54,7 +65,7 @@ export function queryProgram(
           events.push({
             type: 'sample',
             time,
-            duration: 1, // approximate — real duration depends on sample file
+            duration: null, // real duration depends on sample file
             params: { name: step.name, ...step.opts },
           })
         }
@@ -72,17 +83,16 @@ export function queryProgram(
         currentBpm = step.bpm
         break
 
-      case 'fx':
+      case 'fx': {
         // Walk the sub-program
         const fxEvents = queryProgram(step.body, begin, end, currentBpm, time)
         events.push(...fxEvents)
-        // Advance time by the sub-program's total duration
-        let fxDuration = 0
-        for (const s of step.body) {
-          if (s.tag === 'sleep') fxDuration += s.beats * beatDuration()
-        }
-        time += fxDuration
+        // Advance time and propagate BPM changes from FX body back to parent
+        const fxResult = programDurationAndBpm(step.body, currentBpm)
+        time += fxResult.duration
+        currentBpm = fxResult.finalBpm
         break
+      }
 
       case 'thread': {
         // Thread starts at current time, runs in parallel
@@ -103,27 +113,57 @@ export function queryProgram(
 }
 
 /**
+ * Calculate total duration of a Program in seconds and track final BPM.
+ * Handles nested FX bodies and BPM changes recursively.
+ */
+function programDurationAndBpm(program: Program, bpm: number): { duration: number; finalBpm: number } {
+  let dur = 0
+  let currentBpm = bpm
+  for (const step of program) {
+    if (step.tag === 'sleep') dur += step.beats * (60 / currentBpm)
+    if (step.tag === 'useBpm') currentBpm = step.bpm
+    if (step.tag === 'fx') {
+      const inner = programDurationAndBpm(step.body, currentBpm)
+      dur += inner.duration
+      currentBpm = inner.finalBpm
+    }
+    // threads are parallel — don't add to parent duration
+  }
+  return { duration: dur, finalBpm: currentBpm }
+}
+
+/** Convenience wrapper when only duration is needed. */
+function programDuration(program: Program, bpm: number): number {
+  return programDurationAndBpm(program, bpm).duration
+}
+
+/**
  * Query a looping Program across a time range.
  * Tiles the program's duration to cover [begin, end).
+ *
+ * Accepts either a static Program (backward-compat, no tick advancement)
+ * or a ProgramFactory that rebuilds each iteration with advancing tick state.
  */
 export function queryLoopProgram(
-  program: Program,
+  input: Program | ProgramFactory,
   begin: number,
   end: number,
   bpm: number
 ): QueryEvent[] {
-  // Calculate one iteration's duration
-  let iterDuration = 0
-  const beatDuration = 60 / bpm
-  for (const step of program) {
-    if (step.tag === 'sleep') iterDuration += step.beats * beatDuration
-    if (step.tag === 'fx') {
-      for (const s of step.body) {
-        if (s.tag === 'sleep') iterDuration += s.beats * beatDuration
-      }
-    }
+  const isFactory = typeof input === 'function'
+
+  // Get the first program to measure iteration duration
+  let ticks: Map<string, number> | undefined
+  let firstProgram: Program
+  if (isFactory) {
+    const result = input(undefined, 0)
+    firstProgram = result.program
+    ticks = result.ticks
+  } else {
+    firstProgram = input
   }
 
+  const iterDuration = programDuration(firstProgram, bpm)
   if (iterDuration <= 0) return [] // no sleep = infinite loop, can't tile
 
   const events: QueryEvent[] = []
@@ -132,6 +172,16 @@ export function queryLoopProgram(
 
   for (let i = firstIter; i <= lastIter; i++) {
     const iterStart = i * iterDuration
+
+    let program: Program
+    if (isFactory && i > firstIter) {
+      const result = input(ticks, i)
+      program = result.program
+      ticks = result.ticks
+    } else {
+      program = firstProgram
+    }
+
     const iterEvents = queryProgram(program, begin, end, bpm, iterStart)
     events.push(...iterEvents)
   }
@@ -144,9 +194,9 @@ export function queryLoopProgram(
  * One-liner replacement for CaptureScheduler.
  */
 export function captureAll(
-  program: Program,
+  input: Program | ProgramFactory,
   duration: number,
   bpm: number
 ): QueryEvent[] {
-  return queryLoopProgram(program, 0, duration, bpm)
+  return queryLoopProgram(input, 0, duration, bpm)
 }

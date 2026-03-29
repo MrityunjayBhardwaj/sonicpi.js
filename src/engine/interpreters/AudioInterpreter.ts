@@ -49,10 +49,12 @@ export async function runProgram(
         const nodeRef = nextNodeRef++
 
         if (ctx.bridge) {
-          const params: Record<string, number> = { ...step.opts }
+          const params: Record<string, number> = { ...step.opts, note: step.note }
           ctx.bridge.triggerSynth(synth, audioTime, { ...params, out_bus: task.outBus })
             .then(realNodeId => ctx.nodeRefMap.set(nodeRef, realNodeId))
-            .catch(() => {})
+            .catch((err: Error) => {
+              ctx.printHandler?.(`Synth '${synth}' failed: ${err.message}`)
+            })
         }
 
         // Emit sound event
@@ -73,7 +75,9 @@ export async function runProgram(
         const audioTime = task.virtualTime + ctx.schedAheadTime
         if (ctx.bridge) {
           ctx.bridge.playSample(step.name, audioTime, step.opts, currentBpm)
-            .catch(() => {})
+            .catch((err: Error) => {
+              ctx.printHandler?.(`Sample '${step.name}' failed: ${err.message}`)
+            })
         }
 
         const audioCtxTime = ctx.bridge?.audioContext?.currentTime ?? 0
@@ -132,7 +136,11 @@ export async function runProgram(
         const prevOutBus = task.outBus
         const newBus = ctx.bridge.allocateBus()
         try {
-          await ctx.bridge.applyFx(step.name, step.opts, newBus, prevOutBus)
+          const fxNodeId = await ctx.bridge.applyFx(step.name, step.opts, newBus, prevOutBus)
+          // Store FX node ID so control() can target it via nodeRefMap
+          if (step.nodeRef && fxNodeId !== undefined) {
+            ctx.nodeRefMap.set(step.nodeRef, fxNodeId)
+          }
           task.outBus = newBus
           await runProgram(step.body, ctx)
         } finally {
