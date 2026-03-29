@@ -57,15 +57,15 @@ async function getExpectedEvents(code: string, duration: number): Promise<{
     return { events: [], loops: [], transpileErrors: tsResult.errors }
   }
 
-  // Execute transpiled code to capture builder functions
-  const loops: { name: string; builder: ProgramBuilder }[] = []
+  // Execute transpiled code to capture builder factory functions
+  const loops: { name: string; builderFn: (b: ProgramBuilder) => void }[] = []
   const live_loop = (name: string, fn: (b: ProgramBuilder) => void) => {
-    const b = new ProgramBuilder(42)
-    try { fn(b) } catch { /* stop signals etc */ }
-    loops.push({ name, builder: b })
+    loops.push({ name, builderFn: fn })
   }
-  const use_bpm = () => {}
-  const use_synth = () => {}
+  let topLevelBpm = 60
+  const use_bpm = (bpm: number) => { topLevelBpm = bpm }
+  let topLevelSynth = 'beep'
+  const use_synth = (name: string) => { topLevelSynth = name }
   const use_random_seed = () => {}
   const puts = () => {}
   const stop = () => {}
@@ -104,17 +104,22 @@ async function getExpectedEvents(code: string, duration: number): Promise<{
     return { events: [], loops: [], transpileErrors: [`Execution error: ${e.message}`] }
   }
 
-  // Query each loop for events in the time range
-  const bpm = 60
-  const beatsInDuration = (duration / 1000) * (bpm / 60)
+  // Query each loop for events in seconds (queryLoopProgram works in seconds, not beats)
+  const bpm = topLevelBpm
+  const durationSec = duration / 1000
   const allEvents: ExpectedEvent[] = []
   const loopNames: string[] = []
 
   for (const loop of loops) {
     loopNames.push(loop.name)
-    const program = loop.builder.build()
-    // Query multiple iterations by tiling
-    const events = queryLoopProgram(program, 0, beatsInDuration, bpm)
+    // Build a factory that advances tick/seed state between iterations
+    const factory = (ticks?: Map<string, number>, iteration?: number) => {
+      const b = new ProgramBuilder(iteration ?? 0, ticks)
+      b.use_synth(topLevelSynth)
+      try { loop.builderFn(b) } catch { /* stop signals etc */ }
+      return { program: b.build(), ticks: b.getTicks() }
+    }
+    const events = queryLoopProgram(factory, 0, durationSec, bpm)
     for (const e of events) {
       allEvents.push({
         time: e.time,

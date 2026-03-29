@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { queryProgram, queryLoopProgram, captureAll } from '../interpreters/QueryInterpreter'
+import { queryProgram, queryLoopProgram, captureAll, type ProgramFactory } from '../interpreters/QueryInterpreter'
 import { ProgramBuilder } from '../ProgramBuilder'
+import { ring } from '../Ring'
 import type { Program } from '../Program'
 import { detectStratum, Stratum } from '../Stratum'
 
@@ -164,6 +165,69 @@ describe('queryProgram — fx sub-programs', () => {
     // note 72 should be at t=1.0 (after the fx body's sleep)
     expect(events[3].time).toBe(1.0)
   })
+
+  it('nested fx durations are counted recursively', () => {
+    const b = new ProgramBuilder()
+    b.play(48) // t=0
+    b.with_fx('reverb', (outer) => {
+      outer.with_fx('delay', (inner) => {
+        inner.play(60)
+        inner.sleep(0.5)
+        return inner
+      })
+      outer.sleep(0.5) // total fx = 1.0s
+      return outer
+    })
+    b.play(72) // should be at t=1.0
+    const program = b.build()
+
+    const events = queryProgram(program, 0, 2, 60)
+    const note72 = events.find(e => e.params.note === 72)
+    expect(note72).toBeDefined()
+    expect(note72!.time).toBe(1.0)
+  })
+
+  it('bpm change inside fx affects duration calculation', () => {
+    const b = new ProgramBuilder()
+    b.play(48) // t=0
+    b.with_fx('reverb', (inner) => {
+      inner.use_bpm(120) // 1 beat = 0.5s
+      inner.play(60)
+      inner.sleep(1) // 0.5s at 120bpm
+      return inner
+    })
+    b.play(72) // should be at t=0.5
+    const program = b.build()
+
+    const events = queryProgram(program, 0, 2, 60)
+    const note72 = events.find(e => e.params.note === 72)
+    expect(note72).toBeDefined()
+    expect(note72!.time).toBe(0.5)
+  })
+
+  it('bpm change inside fx propagates to code after fx block', () => {
+    const b = new ProgramBuilder()
+    // Start at 60 BPM (1 beat = 1s)
+    b.play(48) // t=0
+    b.with_fx('reverb', (inner) => {
+      inner.use_bpm(120) // switch to 120 BPM (1 beat = 0.5s)
+      inner.sleep(1) // 0.5s at 120bpm
+      return inner
+    })
+    // After FX: BPM should still be 120
+    b.play(60) // should be at t=0.5
+    b.sleep(1) // 0.5s at 120bpm (not 1s at 60bpm)
+    b.play(72) // should be at t=1.0
+    const program = b.build()
+
+    const events = queryProgram(program, 0, 3, 60)
+    const note60 = events.find(e => e.params.note === 60)
+    const note72 = events.find(e => e.params.note === 72)
+    expect(note60).toBeDefined()
+    expect(note60!.time).toBe(0.5)
+    expect(note72).toBeDefined()
+    expect(note72!.time).toBe(1.0) // 0.5 + 0.5 (120bpm sleep)
+  })
 })
 
 describe('queryLoopProgram', () => {
@@ -215,6 +279,63 @@ describe('queryLoopProgram', () => {
     for (let i = 1; i < events.length; i++) {
       expect(events[i].time).toBeGreaterThanOrEqual(events[i - 1].time)
     }
+  })
+})
+
+describe('queryLoopProgram — ProgramFactory (tick advancement)', () => {
+  it('advances tick state across iterations via factory', () => {
+    // ring(:e2, :g2, :a2).tick should cycle 40→43→45→40→43→45
+    const factory: ProgramFactory = (ticks, iteration) => {
+      const b = new ProgramBuilder(iteration ?? 0, ticks)
+      const notes = ring(40, 43, 45)
+      b.play(notes.at(b.tick()))
+      b.sleep(1)
+      return { program: b.build(), ticks: b.getTicks() }
+    }
+
+    // 6 beats at 60bpm → 6 iterations
+    const events = queryLoopProgram(factory, 0, 6, 60)
+    const notes = events.map(e => e.params.note)
+    expect(notes).toEqual([40, 43, 45, 40, 43, 45, 40])
+  })
+
+  it('static Program still works (backward compat)', () => {
+    const b = new ProgramBuilder()
+    b.play(60)
+    b.sleep(1)
+    const program = b.build()
+
+    const events = queryLoopProgram(program, 0, 3, 60)
+    expect(events.length).toBeGreaterThanOrEqual(3)
+    expect(events.every(e => e.params.note === 60)).toBe(true)
+  })
+
+  it('factory with single-element ring repeats same note', () => {
+    const factory: ProgramFactory = (ticks, iteration) => {
+      const b = new ProgramBuilder(iteration ?? 0, ticks)
+      const notes = ring(60)
+      b.play(notes.at(b.tick()))
+      b.sleep(1)
+      return { program: b.build(), ticks: b.getTicks() }
+    }
+
+    const events = queryLoopProgram(factory, 0, 4, 60)
+    expect(events.every(e => e.params.note === 60)).toBe(true)
+  })
+
+  it('seeded random produces different values across iterations', () => {
+    const factory: ProgramFactory = (ticks, iteration) => {
+      const b = new ProgramBuilder(iteration ?? 0, ticks)
+      b.play(b.rrand_i(60, 72))
+      b.sleep(1)
+      return { program: b.build(), ticks: b.getTicks() }
+    }
+
+    const events = queryLoopProgram(factory, 0, 4, 60)
+    const notes = events.map(e => e.params.note)
+    // With different seeds per iteration, not all notes should be identical
+    const unique = new Set(notes)
+    expect(unique.size).toBeGreaterThan(1)
   })
 })
 
