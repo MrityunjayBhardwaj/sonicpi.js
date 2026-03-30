@@ -136,9 +136,10 @@ export async function runProgram(
         }
         const prevOutBus = task.outBus
         const newBus = ctx.bridge.allocateBus()
+        let fxNodeId: number | undefined
         try {
           const audioTime = task.virtualTime + ctx.schedAheadTime
-          const fxNodeId = await ctx.bridge.applyFx(step.name, audioTime, step.opts, newBus, prevOutBus)
+          fxNodeId = await ctx.bridge.applyFx(step.name, audioTime, step.opts, newBus, prevOutBus)
           // Store FX node ID so control() can target it via nodeRefMap
           if (step.nodeRef && fxNodeId !== undefined) {
             ctx.nodeRefMap.set(step.nodeRef, fxNodeId)
@@ -148,6 +149,11 @@ export async function runProgram(
         } finally {
           task.outBus = prevOutBus
           ctx.bridge.freeBus(newBus)
+          // Free FX node after inner block completes — prevents zombie FX accumulation.
+          // Without this, every loop iteration creates a new reverb/echo/etc that lives forever.
+          if (fxNodeId !== undefined) {
+            ctx.bridge.freeNode(fxNodeId)
+          }
         }
         break
       }
