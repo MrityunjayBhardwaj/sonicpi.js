@@ -211,6 +211,8 @@ export class SuperSonicBridge {
   private splitter: ChannelSplitterNode | null = null
   private masterMerger: ChannelMergerNode | null = null
   private masterGainNode: GainNode | null = null
+  /** Hard limiter on master output — matches Sonic Pi's safe-mode limiter. */
+  private limiterNode: DynamicsCompressorNode | null = null
   /** SuperSonic.osc encoder (preferred) or fallback */
   private oscEncoder: {
     encodeSingleBundle(timetag: number, address: string, args: (string | number)[]): Uint8Array
@@ -286,12 +288,22 @@ export class SuperSonicBridge {
     this.masterGainNode = audioCtx.createGain()
     this.masterGainNode.gain.value = 0.8
 
-    // Master analyser taps the mixed stereo → gain → speakers
+    // Hard limiter — matches Sonic Pi's safe-mode limiter on the master bus.
+    // Without this, overlapping synths/samples easily clip the output.
+    this.limiterNode = audioCtx.createDynamicsCompressor()
+    this.limiterNode.threshold.value = -6   // start limiting at -6 dB
+    this.limiterNode.knee.value = 3         // soft knee for natural sound
+    this.limiterNode.ratio.value = 20       // near-infinite ratio = hard limit
+    this.limiterNode.attack.value = 0.003   // fast attack catches transients
+    this.limiterNode.release.value = 0.25   // moderate release avoids pumping
+
+    // Master analyser taps the mixed stereo → limiter → gain → speakers
     this.analyserNode = audioCtx.createAnalyser()
     this.analyserNode.fftSize = 2048
     this.analyserNode.smoothingTimeConstant = 0.8
     this.masterMerger.connect(this.analyserNode)
-    this.analyserNode.connect(this.masterGainNode)
+    this.analyserNode.connect(this.limiterNode)
+    this.limiterNode.connect(this.masterGainNode)
     this.masterGainNode.connect(audioCtx.destination)
   }
 
@@ -561,6 +573,10 @@ export class SuperSonicBridge {
     // Stop all live audio streams
     for (const name of this.liveAudioStreams.keys()) {
       this.stopLiveAudio(name)
+    }
+    if (this.limiterNode) {
+      this.limiterNode.disconnect()
+      this.limiterNode = null
     }
     if (this.masterGainNode) {
       this.masterGainNode.disconnect()
