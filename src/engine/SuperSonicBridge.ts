@@ -284,13 +284,17 @@ export class SuperSonicBridge {
     this.sonic.send('/g_new', 100, 2, 101)          // synths group before FX
 
     // Load and create the master mixer synth — same synthdef as desktop Sonic Pi.
-    // Signal chain: bus 0 → pre_amp → HPF → LPF → Limiter.ar(0.99, 0.01) → LeakDC → amp → ReplaceOut
+    // Signal chain: in_bus+out_bus → pre_amp → HPF → LPF → Limiter.ar(0.99) → LeakDC → amp → ReplaceOut
+    // IMPORTANT: in_bus must be a SEPARATE private bus, not bus 0.
+    // The synthdef sums in(out_bus) + in(in_bus). If both are 0, signal is doubled.
+    // Sonic Pi allocates @mixer_bus = new_bus(:audio) for in_bus.
     await this.sonic.loadSynthDef('sonic-pi-mixer')
+    const mixerBus = this.allocateBus() // private bus — nothing writes to it, reads as silence
     this.mixerNodeId = this.sonic.nextNodeId()
     this.sonic.send('/s_new', 'sonic-pi-mixer', this.mixerNodeId, 0, mixerGroupId,
-      'in_bus', 0,
-      'amp', 6,          // Sonic Pi default: amp=6 at trigger time
-      'pre_amp', 0.2,    // Sonic Pi default: set_volume!(1) → pre_amp = 1 * 0.2
+      'in_bus', mixerBus,  // private bus (silence) — only out_bus=0 carries audio
+      'amp', 6,            // Sonic Pi default: amp=6 at trigger time
+      'pre_amp', 0.2,      // Sonic Pi default: set_volume!(1) → pre_amp = 1 * 0.2
     )
     await this.sonic.sync()
 
