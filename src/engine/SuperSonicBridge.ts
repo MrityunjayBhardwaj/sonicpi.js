@@ -6,7 +6,7 @@
  * FX, AnalyserNode tap, and cleanup.
  */
 
-import { audioTimeToNTP, encodeSingleBundle as fallbackEncodeSingleBundle } from './osc'
+import { audioTimeToNTP, encodeSingleBundle as fallbackEncodeSingleBundle, encodeBundle as fallbackEncodeBundle } from './osc'
 
 // SuperSonic types — declared here since we load it at runtime via CDN
 interface SuperSonic {
@@ -219,6 +219,13 @@ export class SuperSonicBridge {
   } | null = null
   /** SuperSonic constructor ref — needed for static osc access */
   private SuperSonicClass: SuperSonicConstructor | null = null
+  /**
+   * Delayed message queue — matches Sonic Pi's __delayed_messages.
+   * Messages are queued during computation and flushed as a single
+   * OSC bundle on sleep, so all events between sleeps share one NTP timetag.
+   */
+  private messageQueue: Array<{ address: string; args: (string | number)[] }> = []
+  private messageQueueAudioTime: number = 0
 
   constructor(options: SuperSonicBridgeOptions = {}) {
     this.options = options
@@ -323,19 +330,40 @@ export class SuperSonicBridge {
   }
 
   /**
-   * Send an OSC message as a timestamped bundle.
-   * Converts audioTime (AudioContext seconds) → NTP, encodes the bundle,
-   * and sends via sonic.sendOSC() for sample-accurate scheduling.
+   * Queue an OSC message for batched dispatch.
+   * Sonic Pi's model: all play/sample calls between sleeps are collected,
+   * then dispatched as ONE OSC bundle on sleep — sharing a single NTP timetag.
    */
-  private sendTimedBundle(
+  private queueMessage(
     audioTime: number,
     address: string,
     args: (string | number)[],
   ): void {
-    if (!this.sonic) return
-    const ntpTime = audioTimeToNTP(audioTime, this.sonic.audioContext.currentTime)
-    const bundle = this.oscEncoder!.encodeSingleBundle(ntpTime, address, args)
-    this.sonic.sendOSC(bundle)
+    this.messageQueueAudioTime = audioTime
+    this.messageQueue.push({ address, args })
+  }
+
+  /**
+   * Flush all queued messages as a single OSC bundle.
+   * Called by the interpreter on sleep/sync/end-of-iteration.
+   * Matches Sonic Pi's __schedule_delayed_blocks_and_messages!
+   */
+  flushMessages(audioTime?: number): void {
+    if (!this.sonic || this.messageQueue.length === 0) return
+    const t = audioTime ?? this.messageQueueAudioTime
+    const ntpTime = audioTimeToNTP(t, this.sonic.audioContext.currentTime)
+
+    if (this.messageQueue.length === 1) {
+      // Single message — use the lighter encodeSingleBundle
+      const msg = this.messageQueue[0]
+      const bundle = this.oscEncoder!.encodeSingleBundle(ntpTime, msg.address, msg.args)
+      this.sonic.sendOSC(bundle)
+    } else {
+      // Multiple messages — batch into one bundle
+      const bundle = fallbackEncodeBundle(ntpTime, this.messageQueue)
+      this.sonic.sendOSC(bundle)
+    }
+    this.messageQueue.length = 0
   }
 
   private async ensureSynthDefLoaded(name: string): Promise<void> {
@@ -391,7 +419,7 @@ export class SuperSonicBridge {
       paramList.push(key, value)
     }
 
-    this.sendTimedBundle(audioTime, '/s_new', [fullName, nodeId, 0, 100, ...paramList])
+    this.queueMessage(audioTime, '/s_new', [fullName, nodeId, 0, 100, ...paramList])
     return nodeId
   }
 
@@ -415,7 +443,7 @@ export class SuperSonicBridge {
       paramList.push(key, value)
     }
 
-    this.sendTimedBundle(audioTime, '/s_new', ['sonic-pi-basic_stereo_player', nodeId, 0, 100, ...paramList])
+    this.queueMessage(audioTime, '/s_new', ['sonic-pi-basic_stereo_player', nodeId, 0, 100, ...paramList])
     return nodeId
   }
 
@@ -437,7 +465,7 @@ export class SuperSonicBridge {
       paramList.push(key, value)
     }
 
-    this.sendTimedBundle(audioTime, '/s_new', [fullName, nodeId, 0, 101, ...paramList])
+    this.queueMessage(audioTime, '/s_new', [fullName, nodeId, 0, 101, ...paramList])
     return nodeId
   }
 
@@ -555,9 +583,23 @@ export class SuperSonicBridge {
     this.sonic.send('/g_freeAll', 101)  // FX group
   }
 
-  /** Send a timestamped /n_set control message. */
+  /** Create a new group inside the FX group (101). Returns group ID. */
+  createFxGroup(): number {
+    if (!this.sonic) throw new Error('SuperSonic not initialized')
+    const groupId = this.sonic.nextNodeId()
+    // Add to tail of FX group 101
+    this.sonic.send('/g_new', groupId, 1, 101)
+    return groupId
+  }
+
+  /** Kill an entire group and all its contents. */
+  freeGroup(groupId: number): void {
+    this.sonic?.send('/n_free', groupId)
+  }
+
+  /** Queue a timestamped /n_set control message for batched dispatch. */
   sendTimedControl(audioTime: number, nodeId: number, params: (string | number)[]): void {
-    this.sendTimedBundle(audioTime, '/n_set', [nodeId, ...params])
+    this.queueMessage(audioTime, '/n_set', [nodeId, ...params])
   }
 
   /** Send raw OSC message to SuperSonic (immediate, no timestamp). */

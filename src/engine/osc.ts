@@ -88,3 +88,67 @@ export function encodeSingleBundle(
 
   return new Uint8Array(buf, 0, off)
 }
+
+/**
+ * Encode an OSC message (without bundle wrapping).
+ * Returns the raw message bytes for embedding in a multi-message bundle.
+ */
+export function encodeMessage(
+  address: string,
+  args: (string | number)[],
+): Uint8Array {
+  const buf = new ArrayBuffer(4096)
+  const dv = new DataView(buf)
+  let off = 0
+
+  off = writeString(dv, off, address)
+
+  let types = ','
+  for (const a of args) types += typeof a === 'string' ? 's' : (Number.isInteger(a) ? 'i' : 'f')
+  off = writeString(dv, off, types)
+
+  for (const a of args) {
+    if (typeof a === 'string') {
+      off = writeString(dv, off, a)
+    } else if (Number.isInteger(a)) {
+      dv.setInt32(off, a, false); off += 4
+    } else {
+      dv.setFloat32(off, a, false); off += 4
+    }
+  }
+
+  return new Uint8Array(buf, 0, off)
+}
+
+/**
+ * Encode multiple OSC messages into a single bundle with one NTP timetag.
+ * This is how Sonic Pi dispatches — all events between sleeps share one timestamp.
+ */
+export function encodeBundle(
+  ntpTime: number,
+  messages: Array<{ address: string; args: (string | number)[] }>,
+): Uint8Array {
+  const buf = new ArrayBuffer(65536) // large enough for many messages
+  const dv = new DataView(buf)
+  let off = 0
+
+  // "#bundle\0"
+  const tag = '#bundle\0'
+  for (let i = 0; i < 8; i++) dv.setUint8(off++, tag.charCodeAt(i))
+
+  // NTP timetag
+  const secs = Math.floor(ntpTime) >>> 0
+  const frac = ((ntpTime - Math.floor(ntpTime)) * 0x100000000) >>> 0
+  dv.setUint32(off, secs, false); off += 4
+  dv.setUint32(off, frac, false); off += 4
+
+  // Each message: 4-byte size prefix + message bytes
+  for (const msg of messages) {
+    const msgBytes = encodeMessage(msg.address, msg.args)
+    dv.setUint32(off, msgBytes.length, false); off += 4
+    new Uint8Array(buf, off, msgBytes.length).set(msgBytes)
+    off += msgBytes.length
+  }
+
+  return new Uint8Array(buf, 0, off)
+}

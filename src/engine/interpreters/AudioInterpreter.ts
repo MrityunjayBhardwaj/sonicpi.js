@@ -94,6 +94,10 @@ export async function runProgram(
       }
 
       case 'sleep':
+        // Flush queued OSC messages BEFORE sleeping — matches Sonic Pi's
+        // __schedule_delayed_blocks_and_messages! All events since last
+        // sleep share one NTP timetag in a single OSC bundle.
+        ctx.bridge?.flushMessages()
         await ctx.scheduler.scheduleSleep(ctx.taskId, step.beats)
         break
 
@@ -125,6 +129,7 @@ export async function runProgram(
         break
 
       case 'sync':
+        ctx.bridge?.flushMessages()
         await ctx.scheduler.waitForSync(step.name, ctx.taskId)
         break
 
@@ -136,30 +141,32 @@ export async function runProgram(
         }
         const prevOutBus = task.outBus
         const newBus = ctx.bridge.allocateBus()
+        // Create container group for this FX chain — matches Sonic Pi's fx_container_group.
+        // All FX nodes + inner synths live inside this group.
+        // On cleanup, killing the group atomically frees everything.
+        const fxGroupId = ctx.bridge.createFxGroup()
         let fxNodeId: number | undefined
         try {
           const audioTime = task.virtualTime + ctx.schedAheadTime
           fxNodeId = await ctx.bridge.applyFx(step.name, audioTime, step.opts, newBus, prevOutBus)
-          // Store FX node ID so control() can target it via nodeRefMap
           if (step.nodeRef && fxNodeId !== undefined) {
             ctx.nodeRefMap.set(step.nodeRef, fxNodeId)
           }
           task.outBus = newBus
+          // Flush FX creation message before running inner program
+          ctx.bridge.flushMessages()
           await runProgram(step.body, ctx)
         } finally {
           task.outBus = prevOutBus
-          // Free FX node after kill_delay — lets reverb/echo tails decay naturally.
-          // Sonic Pi uses a GC thread with Kernel.sleep(kill_delay) before group.kill(true).
-          // Default kill_delay: 1 second (matches Sonic Pi's default of 1 beat at 60 BPM).
+          // Flush any remaining inner messages
+          ctx.bridge.flushMessages()
+          // Kill FX container group after kill_delay — lets tails decay.
+          // Matches Sonic Pi: Kernel.sleep(kill_delay) then fx_container_group.kill(true)
           const killDelay = (step.opts.kill_delay as number) ?? 1.0
-          if (fxNodeId !== undefined) {
-            setTimeout(() => {
-              ctx.bridge!.freeNode(fxNodeId!)
-              ctx.bridge!.freeBus(newBus)
-            }, killDelay * 1000)
-          } else {
-            ctx.bridge.freeBus(newBus)
-          }
+          setTimeout(() => {
+            ctx.bridge!.freeGroup(fxGroupId)
+            ctx.bridge!.freeBus(newBus)
+          }, killDelay * 1000)
         }
         break
       }
@@ -199,8 +206,11 @@ export async function runProgram(
         break
 
       case 'stop':
+        ctx.bridge?.flushMessages()
         if (task) task.running = false
         return
     }
   }
+  // Flush any remaining queued messages at end of program
+  ctx.bridge?.flushMessages()
 }

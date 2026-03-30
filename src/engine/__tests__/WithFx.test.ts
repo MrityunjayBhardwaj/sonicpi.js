@@ -29,6 +29,9 @@ function createMockBridge(): SuperSonicBridge & { calls: string[] } {
       return id
     },
     freeNode(id: number) { calls.push(`freeNode:${id}`) },
+    createFxGroup() { const g = nextNode++; calls.push(`createGroup:${g}`); return g },
+    freeGroup(id: number) { calls.push(`freeGroup:${id}`) },
+    flushMessages() { calls.push('flush') },
     async triggerSynth(_name: string, _time: number, params: Record<string, number>) {
       return nextNode++
     },
@@ -87,8 +90,10 @@ describe('with_fx', () => {
     // FX bridge should have been called
     expect(bridge.calls).toContain('alloc:16')
     expect(bridge.calls).toContain('fx:reverb:in16:out0')
-    // Bus freeing is delayed by kill_delay (default 1s) — advance timers
+    expect(bridge.calls).toContain('createGroup:5000')
+    // Group freeing is delayed by kill_delay (default 1s) — advance timers
     await new Promise(r => setTimeout(r, 1100))
+    expect(bridge.calls).toContain('freeGroup:5000')
     expect(bridge.calls).toContain('free:16')
   })
 
