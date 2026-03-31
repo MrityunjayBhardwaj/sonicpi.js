@@ -70,6 +70,42 @@ const COMMON_SYNTHDEFS = [
 const MAX_TRACK_OUTPUTS = 6
 const NUM_OUTPUT_CHANNELS = 2 + MAX_TRACK_OUTPUTS * 2 // 14 channels total
 
+// ---------------------------------------------------------------------------
+// Mixer gain staging — matching desktop Sonic Pi's output level
+// ---------------------------------------------------------------------------
+
+/**
+ * Desktop Sonic Pi's mixer: pre_amp × amp = 0.2 × 6 = 1.2 effective gain.
+ *
+ * SuperSonic's scsynth WASM produces raw synth output at ~2.3x the level
+ * of desktop scsynth (same synthdefs, same samples, same params). The cause
+ * is that WASM outputs float32 directly to the AudioWorklet with no
+ * driver-level normalization, while desktop scsynth goes through CoreAudio/
+ * ALSA/JACK which may attenuate. Emscripten's own docs warn about this:
+ * "scale down audio volume by factor of 0.2, raw noise can be really loud."
+ *
+ * Full investigation: artifacts/ref/RESEARCH_WASM_OUTPUT_LEVEL.md
+ * A/B data: tools/audio_comparison/latest_test/
+ *
+ * To compensate, we reduce pre_amp so the effective gain matches desktop:
+ *   Desktop effective = 0.2 × 6 = 1.2
+ *   Our raw signal is WASM_OUTPUT_LEVEL_FACTOR hotter
+ *   → compensated pre_amp = SONIC_PI_DEFAULT_PRE_AMP / WASM_OUTPUT_LEVEL_FACTOR
+ *   → effective gain = compensated_pre_amp × SONIC_PI_MIXER_AMP ≈ desktop effective
+ */
+
+/** Measured ratio: SuperSonic WASM raw output RMS / desktop scsynth raw output RMS. */
+const WASM_OUTPUT_LEVEL_FACTOR = 2.3
+
+/** Desktop Sonic Pi: set_volume!(1) → pre_amp = vol * 0.2 */
+const SONIC_PI_DEFAULT_PRE_AMP = 0.2
+
+/** Desktop Sonic Pi: amp=6 set at mixer trigger time. */
+const SONIC_PI_MIXER_AMP = 6
+
+/** Compensated pre_amp that produces desktop-equivalent output from WASM scsynth. */
+const WASM_COMPENSATED_PRE_AMP = SONIC_PI_DEFAULT_PRE_AMP / WASM_OUTPUT_LEVEL_FACTOR
+
 export class SuperSonicBridge {
   private sonic: SuperSonic | null = null
   private loadedSynthDefs = new Set<string>()
@@ -168,10 +204,10 @@ export class SuperSonicBridge {
     const mixerBus = this.allocateBus() // private bus — nothing writes to it, reads as silence
     this.mixerNodeId = this.sonic.nextNodeId()
     this.sonic.send('/s_new', 'sonic-pi-mixer', this.mixerNodeId, 0, mixerGroupId,
-      'out_bus', 0,        // explicit — don't rely on compiled default
-      'in_bus', mixerBus,  // private bus (silence) — only out_bus=0 carries audio
-      'amp', 6,            // Sonic Pi default: amp=6 at trigger time
-      'pre_amp', 0.2,      // Sonic Pi default: set_volume!(1) → pre_amp = 1 * 0.2
+      'out_bus', 0,
+      'in_bus', mixerBus,
+      'amp', SONIC_PI_MIXER_AMP,
+      'pre_amp', WASM_COMPENSATED_PRE_AMP,  // compensate for WASM's ~2.3x hotter output
     )
     await this.sonic.sync()
 
@@ -220,9 +256,11 @@ export class SuperSonicBridge {
   /** Set master volume (0-1). Controls both scsynth mixer pre_amp and Web Audio gain. */
   setMasterVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(1, volume))
-    // Sonic Pi: set_volume!(vol) → pre_amp = vol * 0.2 (with amp=6, effective gain = vol * 1.2)
-    this.sonic?.send('/n_set', this.mixerNodeId, 'pre_amp', clamped * 0.2)
-    // Web Audio gain as backup (for UI slider feedback)
+    // Desktop Sonic Pi: set_volume!(vol) → pre_amp = vol * 0.2
+    // We apply WASM compensation: pre_amp = vol * 0.2 / WASM_OUTPUT_LEVEL_FACTOR
+    const compensatedPreAmp = clamped * SONIC_PI_DEFAULT_PRE_AMP / WASM_OUTPUT_LEVEL_FACTOR
+    this.sonic?.send('/n_set', this.mixerNodeId, 'pre_amp', compensatedPreAmp)
+    // Web Audio gain for UI slider feedback (not the primary volume control)
     if (this.masterGainNode) {
       this.masterGainNode.gain.setTargetAtTime(clamped, this.masterGainNode.context.currentTime, 0.02)
     }
