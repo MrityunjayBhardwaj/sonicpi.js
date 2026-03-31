@@ -286,6 +286,29 @@ Load the Anvikshiki cognitive OS for this project. This is not optional.
 - Lenses: @~/.claude/anvi/cognitive-os/modes/
 - Project catalogues: @artifacts/.anvi/
 
+### Anvi Catalogues — KEEP UPDATED (MANDATORY)
+
+The project catalogues at `artifacts/.anvi/` are the project's accumulated knowledge:
+- `hetvabhasa.md` — Error patterns. When you discover a new bug pattern, ADD it here.
+- `vyapti.md` — Invariants. When you discover or validate a structural rule, ADD it here.
+- `krama.md` — Lifecycle patterns. When execution order matters, DOCUMENT it here.
+
+**These catalogues MUST be updated as part of every debugging session and every fix.**
+They are not documentation — they are active diagnostic tools. The next debug session
+reads them FIRST to check if the current bug matches a known pattern.
+
+**When to update:**
+- After fixing a bug: add the error pattern to `hetvabhasa.md` with root cause, detection signal, trap, and fix
+- After discovering an invariant: add to `vyapti.md` with statement, causal status, and when it breaks
+- After tracing a lifecycle: add to `krama.md` with numbered steps and common violations
+- After a research finding: update the relevant catalogue with the new knowledge
+- Mark invariants as NOT YET IMPLEMENTED if they describe target behavior we haven't built
+
+**When to read:**
+- BEFORE debugging: check `hetvabhasa.md` for known patterns matching the symptoms
+- BEFORE implementing: check `vyapti.md` for invariants the implementation must maintain
+- BEFORE changing execution order: check `krama.md` for lifecycle dependencies
+
 ### Use Anvi for ALL work
 
 **Before starting any non-trivial work:**
