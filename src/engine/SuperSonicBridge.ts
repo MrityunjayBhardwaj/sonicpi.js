@@ -94,7 +94,30 @@ const NUM_OUTPUT_CHANNELS = 2 + MAX_TRACK_OUTPUTS * 2 // 14 channels total
  *   → effective gain = compensated_pre_amp × SONIC_PI_MIXER_AMP ≈ desktop effective
  */
 
-/** Measured ratio: SuperSonic WASM raw output RMS / desktop scsynth raw output RMS. */
+/**
+ * Measured ratio: SuperSonic WASM raw output RMS / desktop scsynth raw output RMS.
+ *
+ * WHY THIS EXISTS:
+ * Desktop scsynth outputs through native audio drivers (CoreAudio/ALSA/JACK)
+ * which include driver-level output processing before reaching hardware.
+ * SuperSonic's WASM build bypasses all native drivers — scsynth writes float32
+ * samples directly to WASM memory, the AudioWorklet copies them verbatim to
+ * Web Audio output (verified: zero scaling in scsynth_audio_worklet.js).
+ *
+ * The result: identical synths, samples, and params produce ~2.3x louder
+ * raw output in WASM vs desktop. This was measured with proper A/B recordings
+ * (Rec button on both platforms) using the same DJ Dave kick+clap code at
+ * 130 BPM. Desktop RMS: 0.19, WASM RMS: 0.42, ratio: 2.21x.
+ *
+ * Without compensation: mixer's Limiter.ar(0.99) triggers on every beat,
+ * amp×6 overshoots clip2(1), output clips at 3.4% — squashing dynamics
+ * and introducing harmonic distortion.
+ *
+ * With compensation: RMS matches desktop within ±11%, clipping drops to 0.25%.
+ *
+ * EVIDENCE: artifacts/ref/RESEARCH_WASM_OUTPUT_LEVEL.md
+ * A/B WAVs: tools/audio_comparison/latest_test/
+ */
 const WASM_OUTPUT_LEVEL_FACTOR = 2.3
 
 /** Desktop Sonic Pi: set_volume!(1) → pre_amp = vol * 0.2 */
@@ -103,7 +126,13 @@ const SONIC_PI_DEFAULT_PRE_AMP = 0.2
 /** Desktop Sonic Pi: amp=6 set at mixer trigger time. */
 const SONIC_PI_MIXER_AMP = 6
 
-/** Compensated pre_amp that produces desktop-equivalent output from WASM scsynth. */
+/**
+ * Compensated pre_amp that produces desktop-equivalent output from WASM scsynth.
+ * = SONIC_PI_DEFAULT_PRE_AMP / WASM_OUTPUT_LEVEL_FACTOR = 0.2 / 2.3 ≈ 0.087
+ *
+ * Effective gain: 0.087 × 6 = 0.52. With 2.3x hotter raw signal: 0.52 × 2.3 ≈ 1.2
+ * — matching desktop's pre_amp(0.2) × amp(6) = 1.2 effective gain.
+ */
 const WASM_COMPENSATED_PRE_AMP = SONIC_PI_DEFAULT_PRE_AMP / WASM_OUTPUT_LEVEL_FACTOR
 
 export class SuperSonicBridge {
