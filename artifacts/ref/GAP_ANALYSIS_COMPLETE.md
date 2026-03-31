@@ -632,3 +632,121 @@ Without it, their internal noise generators may not produce correct output.
 | **P2** | G_NEW.11: duration: → sustain calc | duration: parameter doesn't work |
 | **P2** | G_NEW.12: rand_buf injection | Specific synths may produce wrong noise |
 | **P2** | G4.2: sched_ahead_time 0.1 vs 0.5 | May miss deadlines under load |
+
+---
+
+## ADDENDUM: Final Research Findings (Round 3 — 5 agents)
+
+### NEW P0 GAP
+
+#### G_NEW.13: `env_curve` compiled default is 1 (linear), Sonic Pi sends 2 (exponential)
+Every SynthDef has `env_curve 1` (linear) as the compiled default. But Sonic Pi's synthinfo.rb
+sets `env_curve: 2` (exponential) and the Ruby layer sends it explicitly. We never send `env_curve`.
+
+**Result:** Every synth's attack and release envelope is LINEAR instead of EXPONENTIAL.
+Linear envelopes sound "mechanical and flat". Exponential envelopes sound "natural" —
+they rise fast and decay slowly, matching how acoustic instruments behave.
+
+This affects ALL synths: beep, saw, tb303, prophet, supersaw, pluck, etc.
+
+### NEW P1 GAPS
+
+#### G_NEW.14: FX synths use `t_minus_delta` — created slightly BEFORE inner synths
+Desktop Sonic Pi: `osc_bundle(sched_time - control_delta, '/s_new', fx_synth)`. The FX synth's
+bundle timestamp is slightly earlier than the inner synths, ensuring the FX is ready to process
+audio when the first note arrives. We don't do this — FX and synths share the same timestamp.
+
+#### G_NEW.15: Control messages have staggered deltas per node
+Multiple `/n_set` to the same node get increasingly offset timestamps:
+`sched_time + 1*delta, sched_time + 2*delta, ...` via `sched_ahead_time_for_node_mod`.
+This guarantees ordering. We send all controls at the same timestamp.
+
+#### G_NEW.16: `spread` rotate: option counts true-rotations, not raw rotations
+Our `spread` may rotate differently. Sonic Pi's `rotate: 1` finds the next rotation where a `true`
+lands at position 0 (strong-beat alignment), not just `array.rotate(1)`.
+
+#### G_NEW.17: Bus exhaustion graceful degradation
+When all buses are allocated, Sonic Pi catches `AllocationError` and runs the `with_fx` block
+WITHOUT the FX (graceful degradation + warning). We would crash or behave unpredictably.
+
+#### G_NEW.18: `live_audio` uses `/n_order` to move synths into FX context
+On subsequent calls, `live_audio` doesn't recreate — it MOVES the existing synth into the
+new FX group via `/n_order`. One synth per name, persists across `with_fx` scope changes.
+
+### NEW P2 GAPS
+
+#### G_NEW.19: Node lifecycle tracking via `/n_end` notifications
+Sonic Pi requests `/notify 1` from scsynth and tracks every node's state (pending→running→destroyed)
+via `/n_go`, `/n_end`, `/n_on`, `/n_off`, `/n_move` events. SynthNodes fire `on_destroyed` callbacks.
+We fire-and-forget — no node state tracking.
+
+#### G_NEW.20: Groups emit synthetic `/n_end` for pending children on group death
+When a group is killed, Ruby emits fake `/n_end` for nodes that were created but never confirmed.
+Prevents orphaned Ruby objects. We have no equivalent.
+
+#### G_NEW.21: `__no_kill_block` protects critical sections from thread kill
+Thread killing is deferred while inside `__no_kill_block` (synth trigger, FX setup, error handling).
+Prevents half-initialized state. We have no thread kill protection.
+
+#### G_NEW.22: tb303 compiled `attack` default is 0.01, synthinfo says 0
+Minor — 10ms difference. Ruby layer sends 0 explicitly.
+
+#### G_NEW.23: Recording uses DiskOut UGen inside MONITOR group
+Desktop Sonic Pi records via a synthdef in the monitor group, streaming to disk via a ring buffer.
+We use Web Audio MediaRecorder — different mechanism, same result.
+
+#### G_NEW.24: MIDI goes through Tau (Erlang) for timing
+Desktop Sonic Pi routes MIDI through `@tau_api.send_midi_at(t, ...)`. Tau handles real-time delivery.
+Our MidiBridge uses Web MIDI API directly — timing is different but adequate for v1.
+
+### FINAL COMPLETE PRIORITY RANKING
+
+| P | ID | Gap | Impact |
+|---|-----|-----|--------|
+| **P0** | G_NEW.1 | BPM doesn't scale time params | Envelopes 2x+ too long at non-60 BPM |
+| **P0** | G_NEW.2 | Top-level FX recreated per iteration | Hundreds of zombie FX nodes per minute |
+| **P0** | G_NEW.4 | No Symbol resolution (decay_level etc.) | Wrong envelope shape for 37 synths |
+| **P0** | G_NEW.13 | env_curve not sent (linear vs exponential) | All envelopes sound flat/mechanical |
+| **P1** | G_NEW.3 | Inner synths not in FX group | Wrong scope, can't atomically kill |
+| **P1** | G_NEW.5 | No note transposition chain | use_transpose/use_octave broken |
+| **P1** | G_NEW.6 | sc808 cutoff→lpf aliasing | 808 drum filter broken |
+| **P1** | G_NEW.7 | Per-FX kill_delay values | Reverb/echo tails wrong length |
+| **P1** | G_NEW.14 | FX t_minus_delta timing | FX may not be ready when first note arrives |
+| **P1** | G_NEW.15 | Control delta staggering | Multiple controls to same node may misordered |
+| **P1** | G_NEW.16 | spread rotate: strong-beat counting | Euclidean patterns may rotate differently |
+| **P1** | G_NEW.17 | Bus exhaustion graceful degradation | Crash instead of graceful fallback |
+| **P1** | G2.3 | normalizeSynthParams only TB303 | Parameter aliasing incomplete |
+| **P2** | G_NEW.8 | on: param not stripped | Unrecognized param to scsynth |
+| **P2** | G_NEW.9 | Sample defaults separate from synth | use_sample_defaults broken |
+| **P2** | G_NEW.10 | slide: propagation | Global slide doesn't apply |
+| **P2** | G_NEW.11 | duration: → sustain calc | duration: parameter broken |
+| **P2** | G_NEW.12 | rand_buf injection | Specific synths wrong noise |
+| **P2** | G_NEW.18 | live_audio /n_order for FX context | live_audio FX integration incomplete |
+| **P2** | G_NEW.19 | No node lifecycle tracking | Fire-and-forget, no on_destroyed |
+| **P2** | G_NEW.20 | No synthetic /n_end for pending nodes | Potential orphaned state |
+| **P2** | G_NEW.21 | No __no_kill_block equivalent | Half-initialized state on stop |
+| **P2** | G_NEW.22 | tb303 attack default 0.01 vs 0 | 10ms difference |
+| **P2** | G_NEW.23 | Recording via DiskOut vs MediaRecorder | Different mechanism, same result |
+| **P2** | G_NEW.24 | MIDI via Tau vs Web MIDI API | Timing model differs |
+| **P2** | G4.2 | sched_ahead_time 0.1 vs 0.5 | May miss deadlines |
+
+### Research Coverage Summary
+
+17 research agents across 3 rounds covered:
+- Tau API / OSC routing ✓
+- Time-state system (set/get/sync/cue) ✓
+- Studio node tree / mixer synthdef ✓
+- Random system / hot-swap ✓
+- SuperSonic NTP / clock / samples ✓
+- sound.rb trigger pipeline (full chain) ✓
+- All synth munge_opts / parameter aliasing ✓
+- FX lifecycle / top-level FX persistence ✓
+- Thread model / thread-locals / __no_kill_block ✓
+- Sleep / BPM / beat / density math ✓
+- SynthDef compiled defaults verification ✓
+- server.rb node management / OSC commands ✓
+- SynthNode / Group / SynthTracker / BlankNode ✓
+- at / time_warp / control timing / control_delta ✓
+- spread / Euclidean algorithm ✓
+- MIDI output pipeline ✓
+- live_audio / recording / error recovery ✓
