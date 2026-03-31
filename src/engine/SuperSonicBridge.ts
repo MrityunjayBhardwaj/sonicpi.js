@@ -7,7 +7,7 @@
  */
 
 import { audioTimeToNTP, encodeSingleBundle as fallbackEncodeSingleBundle, encodeBundle as fallbackEncodeBundle } from './osc'
-import { normalizeSampleParams, selectSamplePlayer } from './SoundLayer'
+import { normalizeSampleParams, selectSamplePlayer, translateSampleOpts } from './SoundLayer'
 
 // SuperSonic types — declared here since we load it at runtime via CDN
 interface SuperSonic {
@@ -64,104 +64,6 @@ const COMMON_SYNTHDEFS = [
   'sonic-pi-basic_stereo_player',
 ]
 
-/**
- * Translate Sonic Pi sample opts to scsynth params.
- *
- * Sonic Pi → scsynth mappings:
- * - beat_stretch: N → rate = (1/N) * existing_rate * (bpm / (60 / duration))
- *     Exact formula from Sonic Pi sound.rb. Requires sample duration.
- *     Falls back to (existing_rate / N) when duration is unknown (first play only).
- * - pitch_stretch: N → same rate as beat_stretch + pitch compensation
- *     pitch_shift = 12 * log2(rate), then pitch -= pitch_shift to cancel it.
- *     Preserves pitch exactly via scsynth's :pitch parameter.
- * - rpitch: N → pitch shift in semitones (rate = 2^(N/12))
- * - start/finish → normalized start/end points [0..1]
- * - amp, pan, rate, pitch → pass through directly
- * - attack, sustain, decay, release → envelope params
- */
-function translateSampleOpts(
-  opts: Record<string, number> | undefined,
-  bpm: number,
-  sampleDuration: number | null  // seconds — null = unknown (first play), use fallback
-): Record<string, number> {
-  if (!opts) return {}
-
-  const result: Record<string, number> = {}
-
-  for (const [key, value] of Object.entries(opts)) {
-    switch (key) {
-      case 'beat_stretch': {
-        // Sonic Pi sound.rb exact formula:
-        //   rate = (1.0 / beat_stretch) * existing_rate * (bpm / (60.0 / duration))
-        const existingRate = result['rate'] ?? 1
-        if (sampleDuration !== null) {
-          result['rate'] = (1.0 / value) * existingRate * (bpm / (60.0 / sampleDuration))
-        } else {
-          // Duration not yet cached (first play) — approximate until next iteration
-          result['rate'] = existingRate / value
-        }
-        break
-      }
-
-      case 'pitch_stretch': {
-        // Sonic Pi sound.rb exact formula:
-        //   new_rate    = (1.0 / pitch_stretch) * (bpm / (60.0 / duration))
-        //   pitch_shift = 12 * log2(new_rate)          — semitones the rate would cause
-        //   rate        = new_rate * existing_rate
-        //   pitch      -= pitch_shift                  — compensate exactly
-        const existingRate = result['rate'] ?? 1
-        const existingPitch = result['pitch'] ?? 0
-        if (sampleDuration !== null) {
-          const newRate = (1.0 / value) * (bpm / (60.0 / sampleDuration))
-          const pitchShift = 12 * Math.log2(newRate)
-          result['rate'] = newRate * existingRate
-          result['pitch'] = existingPitch - pitchShift
-        } else {
-          // Duration not yet cached — rate only, pitch will drift this iteration
-          result['rate'] = existingRate / value
-        }
-        break
-      }
-
-      case 'rpitch':
-        // Pitch shift in semitones via rate change (matches Sonic Pi rpitch behaviour)
-        result['rate'] = (result['rate'] ?? 1) * Math.pow(2, value / 12)
-        break
-
-      // Direct pass-through params (scsynth understands these)
-      case 'rate':
-      case 'amp':
-      case 'pan':
-      case 'pitch':
-      case 'attack':
-      case 'sustain':
-      case 'decay':
-      case 'release':
-      case 'lpf':
-      case 'hpf':
-      case 'res':
-      case 'start':
-      case 'finish':
-      case 'loop':
-        result[key] = value
-        break
-
-      // Sonic Pi aliases: basic_stereo_player uses 'lpf'/'hpf', not 'cutoff'/'hpf'
-      case 'cutoff':
-        result['lpf'] = value
-        break
-      case 'cutoff_slide':
-        result['lpf_slide'] = value
-        break
-
-      default:
-        result[key] = value
-        break
-    }
-  }
-
-  return result
-}
 
 
 /** Max stereo track outputs (beyond master). Channels 0-1 = master, 2-3 = track 0, etc. */

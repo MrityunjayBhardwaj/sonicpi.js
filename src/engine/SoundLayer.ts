@@ -273,7 +273,78 @@ function scaleTimeParamsToBpm(
 }
 
 // ---------------------------------------------------------------------------
-// Sample player selection — moved from SuperSonicBridge
+// Sample opt translation — moved from SuperSonicBridge
+// ---------------------------------------------------------------------------
+
+/**
+ * Translate Sonic Pi sample opts to scsynth params.
+ *
+ * Sonic Pi → scsynth mappings:
+ * - beat_stretch: N → rate = (1/N) * existing_rate * (bpm / (60 / duration))
+ * - pitch_stretch: N → same rate as beat_stretch + pitch compensation
+ * - rpitch: N → pitch shift in semitones (rate = 2^(N/12))
+ * - cutoff → lpf (sample players use lpf, not cutoff)
+ * - cutoff_slide → lpf_slide
+ * - Everything else passes through.
+ */
+export function translateSampleOpts(
+  opts: Record<string, number> | undefined,
+  bpm: number,
+  sampleDuration: number | null
+): Record<string, number> {
+  if (!opts) return {}
+
+  const result: Record<string, number> = {}
+
+  for (const [key, value] of Object.entries(opts)) {
+    switch (key) {
+      case 'beat_stretch': {
+        const existingRate = result['rate'] ?? 1
+        if (sampleDuration !== null) {
+          result['rate'] = (1.0 / value) * existingRate * (bpm / (60.0 / sampleDuration))
+        } else {
+          result['rate'] = existingRate / value
+        }
+        break
+      }
+
+      case 'pitch_stretch': {
+        const existingRate = result['rate'] ?? 1
+        const existingPitch = result['pitch'] ?? 0
+        if (sampleDuration !== null) {
+          const newRate = (1.0 / value) * (bpm / (60.0 / sampleDuration))
+          const pitchShift = 12 * Math.log2(newRate)
+          result['rate'] = newRate * existingRate
+          result['pitch'] = existingPitch - pitchShift
+        } else {
+          result['rate'] = existingRate / value
+        }
+        break
+      }
+
+      case 'rpitch':
+        result['rate'] = (result['rate'] ?? 1) * Math.pow(2, value / 12)
+        break
+
+      // Sonic Pi aliases: sample players use 'lpf'/'hpf', not 'cutoff'
+      case 'cutoff':
+        result['lpf'] = value
+        break
+      case 'cutoff_slide':
+        result['lpf_slide'] = value
+        break
+
+      default:
+        result[key] = value
+        break
+    }
+  }
+
+  return result
+}
+
+// ---------------------------------------------------------------------------
+// Sample player selection
 // ---------------------------------------------------------------------------
 
 /** Complex opts that require stereo_player instead of basic_stereo_player. */
