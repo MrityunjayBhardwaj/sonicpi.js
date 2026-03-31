@@ -244,6 +244,9 @@ function scaleTimeParamsToBpm(
   let p = params
   for (const key of TIME_PARAMS) {
     if (key in p) {
+      // Guard: negative values are sentinels (e.g., sustain: -1 = "play full duration").
+      // Don't scale sentinels — synthdef interprets them specially.
+      if (p[key] < 0) continue
       if (p === params) p = { ...params }
       p[key] = p[key] * factor
     }

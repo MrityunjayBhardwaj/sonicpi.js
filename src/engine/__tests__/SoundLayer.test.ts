@@ -80,6 +80,18 @@ describe('BPM time scaling', () => {
     expect(p.release).toBeCloseTo(60 / 130, 10)
     expect(p.attack).toBeCloseTo(0.2 * 60 / 130, 10)
   })
+
+  it('does NOT scale negative sentinel values (sustain: -1)', () => {
+    const p = normalizePlayParams('beep', { sustain: -1, release: 1 }, 130)
+    expect(p.sustain).toBe(-1) // sentinel preserved
+    expect(p.release).toBeCloseTo(60 / 130, 10) // positive value scaled
+  })
+
+  it('does NOT scale negative sample sustain sentinel', () => {
+    const p = normalizeSampleParams({ sustain: -1, attack: 0.1 }, 120)
+    expect(p.sustain).toBe(-1)
+    expect(p.attack).toBe(0.05) // 0.1 * 60/120
+  })
 })
 
 // ---------------------------------------------------------------------------
