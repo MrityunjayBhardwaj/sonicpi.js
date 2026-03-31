@@ -57,11 +57,18 @@ const SYMBOL_DEFAULTS: Array<[string, string]> = [
 /** Params that Sonic Pi uses internally but scsynth doesn't recognize. */
 const STRIP_PARAMS = new Set([
   'on',           // conditional trigger flag — should_trigger? mutates args_h
-  'slide',        // global slide propagation (not an scsynth param)
+  'slide',        // global slide propagation (expanded before stripping)
   'beat_stretch', // handled by translateSampleOpts before this stage
   'pitch_stretch',
   'rpitch',
 ])
+
+/** All individual slide params that `slide:` expands to. */
+const SLIDE_PARAMS = [
+  'amp_slide', 'pan_slide', 'cutoff_slide', 'lpf_slide', 'hpf_slide',
+  'res_slide', 'note_slide', 'pitch_slide',
+  'attack_slide', 'decay_slide', 'sustain_slide', 'release_slide',
+]
 
 // ---------------------------------------------------------------------------
 // Synth-specific aliases (munge_opts)
@@ -88,6 +95,7 @@ export function normalizePlayParams(
   bpm: number,
 ): Record<string, number> {
   let p = { ...params }
+  p = expandSlideParam(p)
   p = stripNonScynthParams(p)
   p = resolveSymbolDefaults(p)
   p = injectMandatoryDefaults(p)
@@ -146,6 +154,21 @@ export function normalizeFxParams(
 // ---------------------------------------------------------------------------
 // Internal pipeline steps
 // ---------------------------------------------------------------------------
+
+/**
+ * Step 0.5: Expand `slide:` to individual `*_slide` params.
+ * Sonic Pi: `play 60, slide: 0.5` sets all *_slide params to 0.5
+ * unless explicitly overridden. Then `slide:` itself is stripped.
+ */
+function expandSlideParam(params: Record<string, number>): Record<string, number> {
+  if (!('slide' in params)) return params
+  const slideValue = params.slide
+  const p = { ...params }
+  for (const key of SLIDE_PARAMS) {
+    if (!(key in p)) p[key] = slideValue
+  }
+  return p
+}
 
 /** Step 1: Remove params that scsynth doesn't recognize. */
 function stripNonScynthParams(params: Record<string, number>): Record<string, number> {

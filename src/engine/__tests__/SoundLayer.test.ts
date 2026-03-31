@@ -240,6 +240,37 @@ describe('tb303 munging', () => {
 // Strip non-scsynth params
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// slide: propagation
+// ---------------------------------------------------------------------------
+
+describe('slide: propagation', () => {
+  it('expands slide: to all *_slide params', () => {
+    const p = normalizePlayParams('beep', { note: 60, slide: 0.5 }, 60)
+    expect(p.amp_slide).toBe(0.5)
+    expect(p.pan_slide).toBe(0.5)
+    expect(p.note_slide).toBe(0.5)
+    expect(p.cutoff_slide).toBe(0.5)
+    expect(p.slide).toBeUndefined() // stripped after expansion
+  })
+
+  it('does not override explicit *_slide params', () => {
+    const p = normalizePlayParams('beep', { note: 60, slide: 0.5, amp_slide: 1.0 }, 60)
+    expect(p.amp_slide).toBe(1.0) // explicit wins
+    expect(p.pan_slide).toBe(0.5) // from slide:
+  })
+
+  it('expanded slide values get BPM-scaled', () => {
+    const p = normalizePlayParams('beep', { note: 60, slide: 1.0 }, 120)
+    expect(p.amp_slide).toBe(0.5) // 1.0 * 60/120
+    expect(p.note_slide).toBe(0.5)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Strip non-scsynth params
+// ---------------------------------------------------------------------------
+
 describe('strip non-scsynth params', () => {
   it('removes on: param', () => {
     const p = normalizePlayParams('beep', { note: 60, on: 1 }, 60)
