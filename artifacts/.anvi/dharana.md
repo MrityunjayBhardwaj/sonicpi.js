@@ -1,0 +1,144 @@
+# Dharana — Focused Attention: Sonic Pi Web
+
+Project-specific instantiation of global principles. Every entry carries ORIGIN/WHY/HOW.
+Derived from hetvabhasa (14 patterns), vyapti (13 invariants), krama (9 lifecycles).
+
+---
+
+## 1. Project Boundaries
+
+### B1: Transpiler ↔ Engine
+ORIGIN: SP7 (browser engine differences in strict mode variable binding).
+WHY: Transpiled JS must be valid across Chrome, Firefox, and Node. If transpiler output uses constructs one engine rejects, the failure is silent (syntax error inside `new Function()`). Removing this entry means transpiler regressions bypass detection until a user reports "works in Chrome, broken in Firefox."
+HOW: Transpiler outputs JS consumed by Sandbox. Observation targets: run transpiled output through Firefox AND Chrome. Check that `new Function()` doesn't throw.
+
+**Known silent-failure modes:** `var eval` / `let eval` silently fails in Firefox. Bare assignment semantics differ between strict and sloppy mode.
+**Observe THEIR side:** Execute the transpiled code in the target engine. Syntax errors inside `new Function()` are swallowed unless you catch them.
+
+### B2: AudioInterpreter ↔ SuperSonicBridge (FATALITY — 5 patterns cluster here)
+ORIGIN: SP8, SP9, SP10, SP11, SP12 all cluster at this boundary. 5 patterns exceeds the 3+ fatality threshold.
+WHY: This is the single highest-concentration error boundary. Parameter names change meaning across it (SP9). Time units change across it (SP10). Observation granularity drops across it — event log (our side) diverges from audio output (their side) (SP8). Compiled defaults diverge from documented defaults (SP12). FX lifecycle semantics differ (SP11). Without this boundary tracked as fatality-level, each bug is diagnosed from scratch instead of recognized as a structural class.
+HOW: Consolidation target: SoundLayer module. All parameter transformation consolidated into one module whose boundary matches the span of SV12 and SV13. Observation targets: for EVERY param change, verify the receiver's actual vocabulary and defaults.
+
+**Known silent-failure modes:** scsynth ignores unrecognized params without error. Compiled synthdef defaults differ from synthinfo.rb documentation. Missing params use compiled defaults, not Sonic Pi's intended defaults.
+**Observe THEIR side:** Capture WAV output and analyze. The event log is OUR side (inference). The audio is THEIR side (observation).
+
+### B3: SuperSonicBridge ↔ scsynth WASM
+ORIGIN: SP5 (synthdef not loaded), SP9 (param name mismatch at synthdef level), SP12 (compiled default divergence).
+WHY: scsynth is a black box — no error on unrecognized params, no error on wrong defaults, no error on missing synthdefs until runtime. Without observation at this boundary, every audio discrepancy requires end-to-end debugging instead of boundary isolation.
+HOW: Observation targets: verify synthdef is loaded before `/s_new`. Verify param names match synthdef's actual params (not the DSL aliases). Compare our sent values against synthinfo.rb's documented defaults.
+
+**Known silent-failure modes:** `/s_new` with unloaded synthdef: scsynth logs "SynthDef not found" but JS gets no error. Unrecognized param names: silently ignored. Wrong bus routing: audio plays but doesn't reach output.
+**Observe THEIR side:** WAV analysis is the only observation of scsynth's actual output. No other tap point exists.
+
+### B4: SonicPiEngine ↔ VirtualTimeScheduler
+ORIGIN: SP1 (Promise resolution ordering), SP4 (hot-swap timing gap).
+WHY: Scheduler controls when async functions resume. If resolution ordering is non-deterministic (SP1) or hot-swap breaks timing continuity (SP4), the symptom is audio glitches — hard to distinguish from other audio bugs without isolating this boundary.
+HOW: Observation targets: verify task.virtualTime is monotonic after hot-swap. Verify resolution order is deterministic (sorted by virtualTime, then taskId).
+
+**Known silent-failure modes:** Non-deterministic ordering manifests as subtle timing drift — not an error, just wrong music. Hot-swap gap manifests as audible glitch on code change.
+**Observe THEIR side:** Compare event timestamps across runs (determinism check). Listen for glitch on re-evaluate.
+
+---
+
+## 2. Active Invariant Spans
+
+### SV12: BPM Scales Time Parameters — MISALIGNED
+**Span:** AudioInterpreter (reads currentBpm) + SuperSonicBridge (sends params) + SonicPiEngine (sets default BPM)
+**Current boundary:** BPM is read in AudioInterpreter, but time params are sent unscaled by SuperSonicBridge.
+**Where invariant says boundary should be:** Single module (SoundLayer) that receives raw params + BPM and outputs scaled params. The invariant's span = the module's boundary.
+**Status:** MISALIGNED → CONSOLIDATION PLANNED (SoundLayer phase)
+
+### SV13: Top-Level FX Persists Across Iterations — MISALIGNED
+**Span:** SonicPiEngine (registers loops with FX wrapping) + AudioInterpreter (creates FX per iteration)
+**Current boundary:** FX creation is in AudioInterpreter but persistence decision should be in SonicPiEngine.
+**Where invariant says boundary should be:** FX creation for top-level wrapping at registration time (SonicPiEngine), not at iteration time (AudioInterpreter).
+**Status:** MISALIGNED → CONSOLIDATION PLANNED (SoundLayer phase, task 4)
+
+### SV9: Message Batching — ALIGNED
+**Span:** AudioInterpreter (calls flushMessages on sleep) + SuperSonicBridge (maintains queue, encodes bundle)
+**Current boundary:** Clean split — interpreter controls timing, bridge controls encoding.
+**Status:** ALIGNED
+
+### SV10: Mixer Inside scsynth — ALIGNED
+**Span:** SuperSonicBridge only (creates mixer node, sets params)
+**Status:** ALIGNED — contained in single module.
+
+### SV8: WAV Over Event Log — EPISTEMIC (cross-cutting)
+**Span:** All observation code. Not a module boundary — an observation discipline.
+**Status:** ALIGNED as practice, enforced by Testing Protocol Level 3.
+
+---
+
+## 3. Lens Configuration
+
+### Active Axes (ordered by frequency in this project)
+1. **Boundary** — 5 hetvabhasa patterns (SP8, SP9, SP10, SP11, SP12). Primary axis.
+2. **Timing/lifecycle** — 3 patterns (SP1, SP4, SP11). Secondary axis.
+3. **Data-flow** — 2 patterns (SP3, SP14). Tertiary.
+4. **Ownership** — 2 patterns (SP11, SP13). Tertiary.
+
+### Instantiated Lens Steps
+
+**Diagnose phase 3 (scan boundaries) → for this project:**
+- B1 (transpiler↔engine): Does transpiled output parse in all target engines?
+- B2 (interpreter↔bridge): Do param names match synthdef vocabulary? Are time params scaled by BPM? Is env_curve sent?
+- B3 (bridge↔scsynth): Is synthdef loaded? Do sent values match synthinfo.rb expectations?
+- B4 (engine↔scheduler): Is virtual time monotonic? Is resolution order deterministic?
+
+**Review check 5 (error susceptibility) → for this project:**
+- At B2: SP9 trap (assume param names pass through unchanged). SP12 trap (assume compiled default matches intent).
+- At B3: SP5 trap (assume synthdef is pre-loaded). Silent failure if not.
+- At B1: SP7 trap (assume JS runs identically across engines).
+
+**Design phase 2 (invariants) → for this project:**
+- SV12 MISALIGNED: any new design touching params MUST either respect the current misalignment or resolve it via SoundLayer.
+- SV13 MISALIGNED: any new design touching FX MUST either respect per-iteration creation or resolve it via persistent FX.
+
+### Observation Tools and Gaps
+
+| Assertion level | Tool | Status |
+|----------------|------|--------|
+| Logic (correct transforms) | Vitest — 638+ tests | EXISTS |
+| Data flow (param pipeline) | Unit tests for SoundLayer | TO BUILD |
+| Integration (engine E2E) | `tools/capture.ts` — Chromium + events | EXISTS |
+| System boundary (both sides) | WAV analysis in capture tool | EXISTS |
+| Runtime output (actual audio) | WAV frequency/RMS analysis | EXISTS |
+| Temporal (timing correctness) | `tools/spectrogram.ts` — timing jitter | EXISTS (event-level only) |
+| Composition (changes together) | E2E capture with all 4 P0 fixes active | TO BUILD (run capture after all fixes land) |
+| Resource (no leaks) | No tool — count scsynth nodes over time | BLIND SPOT |
+
+**Blind spot: resource leak detection.** No tool currently counts scsynth node accumulation over time. SP11 (FX zombie nodes) was caught by ear (audio gets washy), not by measurement. ORIGIN: SP11 diagnosis required observation but no tool existed. WHY: without this, resource leaks are detected by symptom (degraded audio, CPU spike), not by direct measurement. HOW: tool that queries scsynth node count at intervals during capture, flags monotonic growth.
+
+---
+
+## 4. Organizational Health
+
+### Fatality Test Results
+
+| Test | Result | Detail |
+|------|--------|--------|
+| Hetvabhasa clustering (3+ at boundary) | **FATALITY at B2** | 5 patterns: SP8, SP9, SP10, SP11, SP12 |
+| Vyapti spanning (invariant across 3+ modules) | **FATALITY at SV12** | Spans 3 modules: AudioInterpreter, SuperSonicBridge, SonicPiEngine |
+| Krama crossing (lifecycle crosses 3+ boundaries) | **WARNING at SK4** | Audio message pipeline crosses 4 boundaries: DSL → ProgramBuilder → AudioInterpreter → SuperSonicBridge → scsynth |
+
+### Approaching Threshold (watch list)
+- B4 (engine↔scheduler): 2 patterns (SP1, SP4). One more → fatality.
+- B1 (transpiler↔engine): 1 pattern (SP7). Currently safe.
+
+### Planned Interventions
+- **SoundLayer module** resolves B2 fatality + SV12 span mismatch + SV13 span mismatch.
+- **After SoundLayer:** re-run fatality test. B2 should drop below threshold. SK4 crossing count should reduce by 1 (SoundLayer absorbs one boundary).
+
+---
+
+## 5. Composition Pairs — SoundLayer Phase
+
+The 4 P0 fixes interact. These pairs need composition verification:
+
+| Fix A | Fix B | Interaction | Observation needed |
+|-------|-------|-------------|-------------------|
+| BPM scaling (G_NEW.1) | Symbol resolution (G_NEW.4) | Symbol resolves `decay_level: :sustain_level` THEN BPM scales the resolved value. Order matters. | Unit test: resolve symbols first, then scale. Verify scaled value = resolved_value × 60/BPM. |
+| BPM scaling (G_NEW.1) | env_curve injection (G_NEW.13) | env_curve is NOT a time param. BPM scaling must NOT scale it. | Unit test: env_curve value unchanged after BPM scaling pass. |
+| BPM scaling (G_NEW.1) | FX persistence (G_NEW.2) | Persistent FX node receives params from loops running at different BPMs. FX params shouldn't be BPM-scaled (FX runs in real-time). | Capture: set BPM 130, verify FX reverb time isn't scaled by 60/130. |
+| FX persistence (G_NEW.2) | Symbol resolution (G_NEW.4) | FX params might contain symbol references. Resolution must happen before FX creation. | Unit test: FX opts with symbol refs resolve correctly at creation time. |
