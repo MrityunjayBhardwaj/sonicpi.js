@@ -259,7 +259,10 @@ export class SonicPiEngine {
           syncTarget = (builderFnOrOpts.sync as string) ?? null
           builderFn = maybeFn!
         }
-        const trackBus = this.bridge?.allocateTrackBus(name) ?? 0
+        // Allocate track bus for per-loop AnalyserNode (visualization only).
+        // Synths write to bus 0 so the scsynth mixer (Limiter.ar, gain staging) processes them.
+        // Track buses are NOT used as outBus — that would bypass the mixer entirely.
+        this.bridge?.allocateTrackBus(name)
 
         // Store builder function for capture path
         this.loopBuilders.set(name, builderFn)
@@ -366,7 +369,7 @@ export class SonicPiEngine {
           if (task) {
             task.bpm = defaultBpm
             task.currentSynth = defaultSynth
-            task.outBus = trackBus
+            task.outBus = 0
           }
         }
       }
@@ -627,13 +630,13 @@ export class SonicPiEngine {
         // Commit: hot-swap same-named, stop removed, start new
         scheduler.reEvaluate(pendingLoops, { bpm: defaultBpm, synth: defaultSynth })
 
-        // Apply per-loop defaults + track bus
+        // Apply per-loop defaults (synths write to bus 0 for mixer processing)
         for (const [name, defaults] of pendingDefaults) {
           const task = scheduler.getTask(name)
           if (task) {
             task.bpm = defaults.bpm
             task.currentSynth = defaults.synth
-            task.outBus = this.bridge?.allocateTrackBus(name) ?? 0
+            task.outBus = 0
           }
         }
 

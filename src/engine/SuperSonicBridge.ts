@@ -185,12 +185,12 @@ export class SuperSonicBridge {
     this.splitter = audioCtx.createChannelSplitter(NUM_OUTPUT_CHANNELS)
     workletNode.connect(this.splitter)
 
-    // Mix all channel pairs to stereo for speakers
+    // Mix channel pair 0-1 (mixer output) to stereo for speakers.
+    // All synths write to bus 0, mixer processes bus 0, outputs to bus 0.
+    // Only bus 0 channels carry audio — other channels are for per-track AnalyserNode taps.
     this.masterMerger = audioCtx.createChannelMerger(2)
-    for (let ch = 0; ch < NUM_OUTPUT_CHANNELS; ch += 2) {
-      this.splitter.connect(this.masterMerger, ch, 0)     // left
-      this.splitter.connect(this.masterMerger, ch + 1, 1) // right
-    }
+    this.splitter.connect(this.masterMerger, 0, 0)     // bus 0 left
+    this.splitter.connect(this.masterMerger, 1, 1)     // bus 0 right
 
     // Master gain control — volume is now handled by the scsynth mixer synthdef
     // (pre_amp * amp = 0.2 * 6 = 1.2 effective gain + Limiter.ar at 0.99).
