@@ -40,7 +40,7 @@
 2. ProgramBuilder creates Step data — SYNC
 3. AudioInterpreter processes step:
    a. Compute audioTime = T + schedAheadTime — SYNC
-   b. **SoundLayer:** normalizePlayParams/normalizeSampleParams/normalizeControlParams/normalizeFxParams — resolve symbols, inject defaults, alias, munge, BPM scale
+   b. **SoundLayer:** normalizePlayParams/normalizeSampleParams/normalizeControlParams/normalizeFxParams — resolve symbols, inject defaults, alias, munge, BPM scale (ALL four functions scale time params by 60/BPM, including FX phase/decay/max_phase)
    c. Queue OSC message via bridge.queueMessage(audioTime, '/s_new', args) — SYNC
 4. On sleep/sync/end: bridge.flushMessages() — SYNC
    a. Encode ALL queued messages as ONE OSC bundle with single NTP timetag

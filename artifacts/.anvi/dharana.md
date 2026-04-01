@@ -1,7 +1,7 @@
 # Dharana — Focused Attention: Sonic Pi Web
 
 Project-specific instantiation of global principles. Every entry carries ORIGIN/WHY/HOW.
-Derived from hetvabhasa (17 patterns), vyapti (14 invariants), krama (9 lifecycles).
+Derived from hetvabhasa (18 patterns), vyapti (14 invariants), krama (9 lifecycles).
 
 ---
 
@@ -44,9 +44,10 @@ HOW: Observation targets: verify task.virtualTime is monotonic after hot-swap. V
 ## 2. Active Invariant Spans
 
 ### SV12: BPM Scales Time Parameters — ALIGNED
-**Span:** SoundLayer (normalizePlayParams, normalizeSampleParams, normalizeControlParams)
-**Current boundary:** SoundLayer receives raw params + BPM, outputs scaled params. AudioInterpreter calls SoundLayer before passing to bridge.
-**Status:** ALIGNED — SoundLayer.scaleTimeParamsToBpm() scales TIME_PARAMS allowlist by 60/BPM.
+**Span:** SoundLayer (normalizePlayParams, normalizeSampleParams, normalizeControlParams, normalizeFxParams)
+**Current boundary:** SoundLayer receives raw params + BPM, outputs scaled params. ALL four normalize functions call scaleTimeParamsToBpm. AudioInterpreter and SonicPiEngine both pass currentBpm.
+**Status:** ALIGNED — scaleTimeParamsToBpm scales TIME_PARAMS set + any `*_slide` suffix by 60/BPM. Covers synths, samples, control messages, AND FX.
+**Lesson (SP17):** The original implementation claimed FX was exempt. This was wrong — verified against desktop source (synthinfo.rb tags FX phase/decay/max_phase with :bpm_scale => true). Fixed in #66.
 
 ### SV13: Top-Level FX Persists Across Iterations — ALIGNED
 **Span:** SonicPiEngine (pendingFxChains + persistentFx state)
@@ -84,31 +85,44 @@ HOW: Observation targets: verify task.virtualTime is monotonic after hot-swap. V
 
 **Diagnose phase 3 (scan boundaries) → for this project:**
 - B1 (transpiler↔engine): Does transpiled output parse in all target engines?
-- B2 (interpreter↔bridge): Do param names match synthdef vocabulary? Are time params scaled by BPM? Is env_curve sent?
+- B2 (interpreter↔bridge): Do param names match synthdef vocabulary? Are time params scaled by BPM? Is env_curve sent? Are FX time params (phase, decay, max_phase) ALSO scaled?
 - B3 (bridge↔scsynth): Is synthdef loaded? Do sent values match synthinfo.rb expectations?
 - B4 (engine↔scheduler): Is virtual time monotonic? Is resolution order deterministic?
 
 **Review check 5 (error susceptibility) → for this project:**
-- At B2: SP9 trap (assume param names pass through unchanged). SP12 trap (assume compiled default matches intent).
+- At B2: SP9 trap (assume param names pass through unchanged). SP12 trap (assume compiled default matches intent). **SP17 trap (assume a code comment about desktop behavior is correct without verifying against desktop source).**
 - At B3: SP5 trap (assume synthdef is pre-loaded). Silent failure if not.
 - At B1: SP7 trap (assume JS runs identically across engines).
 
 **Design phase 2 (invariants) → for this project:**
-- SV12 ALIGNED: BPM scaling consolidated in SoundLayer. New designs touching params inherit correct scaling.
+- SV12 ALIGNED: BPM scaling consolidated in SoundLayer for ALL param types (synth, sample, control, FX). New designs touching params inherit correct scaling.
 - SV13 ALIGNED: Persistent FX via scope-based sharing. New designs touching FX inherit persistence.
+
+**Reference verification gate (SP17 prevention) → for this project:**
+- For EVERY normalization rule claiming to "match desktop," verify against the ACTUAL source:
+  - `synthinfo.rb` for `:bpm_scale` tags on each param
+  - `sound.rb` for the `normalise_and_resolve_synth_args` chain
+  - `sound.rb` for `trigger_fx` vs `trigger_synth` differences
+- Code comments are CLAIMS, not EVIDENCE. A comment saying "Sonic Pi does X" must cite the source file and line.
+- When A/B spectrogram comparison shows temporal (not just level) differences, the param transformation pipeline is the first suspect.
 
 ### Observation Tools and Gaps
 
 | Assertion level | Tool | Status |
 |----------------|------|--------|
-| Logic (correct transforms) | Vitest — 638+ tests | EXISTS |
-| Data flow (param pipeline) | Unit tests for SoundLayer (40 tests) | EXISTS |
+| Logic (correct transforms) | Vitest — 699+ tests | EXISTS |
+| Data flow (param pipeline) | Unit tests for SoundLayer (61 tests) | EXISTS |
 | Integration (engine E2E) | `tools/capture.ts` — Chromium + events | EXISTS |
 | System boundary (both sides) | WAV analysis in capture tool | EXISTS |
 | Runtime output (actual audio) | WAV frequency/RMS analysis | EXISTS |
-| Temporal (timing correctness) | `tools/spectrogram.ts` — timing jitter | EXISTS (event-level only) |
-| Composition (changes together) | E2E capture with all 4 P0 fixes active | TO BUILD (run capture after all fixes land) |
+| Temporal (timing correctness) | Spectrogram + temporal envelope analysis (scipy) | EXISTS |
+| Temporal (FX timing) | A/B echo/delay spacing comparison vs desktop | EXISTS (notebook Step 9) |
+| Reference verification | Desktop source audit (synthinfo.rb, sound.rb) | MANUAL (see SP17 gate) |
+| Composition (changes together) | E2E capture with all fixes active | TO BUILD |
 | Resource (no leaks) | No tool — count scsynth nodes over time | BLIND SPOT |
+| Isolation (bypass engine) | `tools/raw-osc-test.ts` — raw OSC to SuperSonic | EXISTS |
+
+**Blind spot (resolved): reference assumption verification.** SP17 — wrong claim about desktop behavior encoded in comments, tests, and catalogues. Caught by temporal envelope analysis showing FX timing diverged. Prevention: reference verification gate added above. Every "matches desktop" claim must cite desktop source.
 
 **Blind spot: resource leak detection.** No tool currently counts scsynth node accumulation over time. SP11 (FX zombie nodes) was caught by ear (audio gets washy), not by measurement. ORIGIN: SP11 diagnosis required observation but no tool existed. WHY: without this, resource leaks are detected by symptom (degraded audio, CPU spike), not by direct measurement. HOW: tool that queries scsynth node count at intervals during capture, flags monotonic growth.
 
@@ -120,7 +134,7 @@ HOW: Observation targets: verify task.virtualTime is monotonic after hot-swap. V
 
 | Test | Result | Detail |
 |------|--------|--------|
-| Hetvabhasa clustering (3+ at boundary) | **RESOLVED (was FATALITY at B2)** | SoundLayer consolidates SP9/SP10/SP12. SP11 fixed by persistentFx. SP8 mitigated by Level 3 testing protocol. New patterns SP15/SP16 at B2/B3 boundary (WASM output level, track bus bypass — both fixed). |
+| Hetvabhasa clustering (3+ at boundary) | **RESOLVED (was FATALITY at B2)** | SoundLayer consolidates SP9/SP10/SP12. SP11 fixed by persistentFx. SP8 mitigated by Level 3 testing protocol. SP15/SP16/SP17 at B2/B3 boundary — all fixed. SP17 (wrong assumption) added reference verification gate to prevent recurrence. |
 | Vyapti spanning (invariant across 3+ modules) | **RESOLVED (was FATALITY at SV12)** | SV12 now ALIGNED — single module (SoundLayer) owns BPM scaling. |
 | Krama crossing (lifecycle crosses 3+ boundaries) | **WARNING at SK4** | Audio message pipeline crosses 4 boundaries: DSL → ProgramBuilder → AudioInterpreter → SuperSonicBridge → scsynth |
 
@@ -144,5 +158,5 @@ The 4 P0 fixes interact. These pairs need composition verification:
 |-------|-------|-------------|-------------------|
 | BPM scaling (G_NEW.1) | Symbol resolution (G_NEW.4) | Symbol resolves `decay_level: :sustain_level` THEN BPM scales the resolved value. Order matters. | Unit test: resolve symbols first, then scale. Verify scaled value = resolved_value × 60/BPM. |
 | BPM scaling (G_NEW.1) | env_curve injection (G_NEW.13) | env_curve is NOT a time param. BPM scaling must NOT scale it. | Unit test: env_curve value unchanged after BPM scaling pass. |
-| BPM scaling (G_NEW.1) | FX persistence (G_NEW.2) | Persistent FX node receives params from loops running at different BPMs. FX params shouldn't be BPM-scaled (FX runs in real-time). | Capture: set BPM 130, verify FX reverb time isn't scaled by 60/130. |
+| BPM scaling (G_NEW.1) | FX persistence (G_NEW.2) | Persistent FX node created with BPM at creation time. FX time params (phase, decay, max_phase) ARE BPM-scaled — desktop Sonic Pi tags them :bpm_scale => true. Non-time FX params (room, damp, mix) are NOT scaled. | Capture: set BPM 130, verify echo phase is 0.25*60/130=0.115s, not 0.25s raw. |
 | FX persistence (G_NEW.2) | Symbol resolution (G_NEW.4) | FX params might contain symbol references. Resolution must happen before FX creation. | Unit test: FX opts with symbol refs resolve correctly at creation time. |

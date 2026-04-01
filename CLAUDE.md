@@ -161,3 +161,7 @@ Location: `artifacts/.anvi/`
 4. **Nested wrappers lose outer context.** A single `currentTopFx` variable loses outer FX in nested `with_fx`. A closure-local `didInitialSync` flag doesn't survive hot-swap. Always ask: "does this state survive nesting? Does it survive re-evaluation?"
 
 5. **scsynth group execution order matters.** Synths → FX → mixer must execute in that order. Groups at "head" execute first. `ReplaceOut` overwrites, `Out` adds. Getting the order wrong means the mixer processes an empty bus.
+
+6. **Code comments about desktop behavior are claims, not evidence.** The comment "Sonic Pi passes arg_bpm_scaling: false for FX" was wrong — desktop DOES BPM-scale FX time params (phase, decay, max_phase). This wrong assumption propagated into unit tests and catalogues, passing CI while producing incorrect audio. **Before writing "matches desktop Sonic Pi"**, verify against the actual source: `synthinfo.rb` for `:bpm_scale` tags, `sound.rb` for the normalization chain. When A/B spectrogram comparison shows temporal (not just level) differences, the param transformation pipeline is the first suspect.
+
+7. **Temporal structure reveals param bugs that level analysis misses.** RMS and peak comparisons showed the clap+FX was "1.8x louder" but didn't reveal WHY. Spectrogram analysis showed the echo timing pattern was completely different — echoes at 250ms instead of 115ms. This pointed directly at FX BPM scaling. When spectrograms match in frequency content but differ in temporal pattern, check time-based param handling.

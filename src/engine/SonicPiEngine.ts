@@ -313,7 +313,7 @@ export class SonicPiEngine {
               for (const fx of fxChain) {
                 const bus = this.bridge.allocateBus()
                 const groupId = this.bridge.createFxGroup()
-                const fxOpts = normalizeFxParams(fx.opts)
+                const fxOpts = normalizeFxParams(fx.opts, task.bpm)
                 await this.bridge.applyFx(fx.name, audioTime, fxOpts, bus, currentOutBus)
                 this.bridge.flushMessages()
                 buses.push(bus)

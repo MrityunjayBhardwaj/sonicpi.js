@@ -67,11 +67,11 @@
 **Implication:** Synced loops wait for the sync target's NEXT iteration, not the current one.
 
 ## SV12: BPM Scales Time Parameters
-**Statement:** All time-based synth parameters (attack, decay, sustain, release, slide times) must be multiplied by `60/BPM` before sending to scsynth. scsynth interprets them as seconds.
-**Causal status:** CAUSAL — matches Sonic Pi's `scale_time_args_to_bpm!`.
-**Breaks when:** Raw beat values are sent to scsynth as seconds.
-**Implication:** At BPM 130, `release: 1` (1 beat) becomes 0.4615 seconds, not 1.0 seconds. Without this, all envelopes are ~2x too long at typical BPMs.
-**Status:** IMPLEMENTED — SoundLayer.scaleTimeParamsToBpm() in src/engine/SoundLayer.ts.
+**Statement:** All time-based parameters — synth ADSR (attack, decay, sustain, release), ALL `*_slide` params, AND FX time params (phase, max_phase, delay, pre_delay) — must be multiplied by `60/BPM` before sending to scsynth. scsynth interprets them as seconds.
+**Causal status:** CAUSAL — matches Sonic Pi's `scale_time_args_to_bpm!`. Desktop tags every time param with `:bpm_scale => true` in synthinfo.rb. FX are NOT exempt — `trigger_fx` calls `scale_time_args_to_bpm!` when `arg_bpm_scaling` is true (default).
+**Breaks when:** Raw beat values are sent to scsynth as seconds. For FX: echo/delay phase is too slow, slicer/wobble/tremolo period is too wide.
+**Implication:** At BPM 130, `release: 1` becomes 0.4615 seconds; echo `phase: 0.25` becomes 0.115 seconds. Without this, all timing is ~2.17x too slow.
+**Status:** IMPLEMENTED — SoundLayer.scaleTimeParamsToBpm() for synths, samples, control, AND FX (#66).
 
 ## SV13: Top-Level FX Persists Across Loop Iterations
 **Statement:** A `with_fx` block wrapping a `live_loop` at the top level creates the FX node ONCE. The node persists for the lifetime of the live_loop. It is NOT recreated per iteration.

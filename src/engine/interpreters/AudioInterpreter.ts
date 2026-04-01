@@ -162,7 +162,7 @@ export async function runProgram(
         let fxNodeId: number | undefined
         try {
           const audioTime = task.virtualTime + ctx.schedAheadTime
-          const fxOpts = normalizeFxParams(step.opts)
+          const fxOpts = normalizeFxParams(step.opts, currentBpm)
           fxNodeId = await ctx.bridge.applyFx(step.name, audioTime, fxOpts, newBus, prevOutBus)
           if (step.nodeRef && fxNodeId !== undefined) {
             ctx.nodeRefMap.set(step.nodeRef, fxNodeId)

@@ -355,25 +355,42 @@ describe('normalizeControlParams', () => {
 
 describe('normalizeFxParams', () => {
   it('strips non-scsynth params', () => {
-    const p = normalizeFxParams({ room: 0.8, on: 1 })
+    const p = normalizeFxParams({ room: 0.8, on: 1 }, 60)
     expect(p.on).toBeUndefined()
     expect(p.room).toBe(0.8)
   })
 
   it('resolves symbol defaults', () => {
-    const p = normalizeFxParams({ sustain_level: 0.5 })
+    const p = normalizeFxParams({ sustain_level: 0.5 }, 60)
     expect(p.decay_level).toBe(0.5)
   })
 
-  it('does NOT BPM-scale any params', () => {
-    const p = normalizeFxParams({ phase: 0.5, decay: 1, room: 0.8 })
-    expect(p.phase).toBe(0.5)  // NOT scaled
-    expect(p.decay).toBe(1)    // NOT scaled
-    expect(p.room).toBe(0.8)   // NOT scaled
+  it('BPM-scales FX time params (phase, decay, max_phase, delay)', () => {
+    // Desktop Sonic Pi: trigger_fx → scale_time_args_to_bpm! for :bpm_scale => true params.
+    // At 130 BPM: phase: 0.25 (beats) → 0.25 * 60/130 = 0.1154 seconds.
+    // Verified from WAV: desktop echo at 115ms, not 250ms. See issue #66.
+    const p = normalizeFxParams({ phase: 0.25, decay: 2, max_phase: 1, room: 0.8 }, 130)
+    expect(p.phase).toBeCloseTo(0.25 * 60 / 130, 10)      // scaled
+    expect(p.decay).toBeCloseTo(2 * 60 / 130, 10)          // scaled
+    expect(p.max_phase).toBeCloseTo(1 * 60 / 130, 10)      // scaled
+    expect(p.room).toBe(0.8)                                 // NOT scaled (not a time param)
+  })
+
+  it('BPM-scales FX slide params', () => {
+    const p = normalizeFxParams({ phase_slide: 1, decay_slide: 0.5 }, 130)
+    expect(p.phase_slide).toBeCloseTo(60 / 130, 10)
+    expect(p.decay_slide).toBeCloseTo(0.5 * 60 / 130, 10)
+  })
+
+  it('does not scale at 60 BPM (identity)', () => {
+    const p = normalizeFxParams({ phase: 0.25, decay: 2, room: 0.8 }, 60)
+    expect(p.phase).toBe(0.25)
+    expect(p.decay).toBe(2)
+    expect(p.room).toBe(0.8)
   })
 
   it('does NOT inject env_curve', () => {
-    const p = normalizeFxParams({ room: 0.8 })
+    const p = normalizeFxParams({ room: 0.8 }, 60)
     expect(p.env_curve).toBeUndefined()
   })
 })
@@ -400,15 +417,23 @@ describe('composition pairs', () => {
     expect(p.env_curve).toBe(2) // NOT scaled
   })
 
-  it('BPM scaling × FX params: FX params NOT scaled', () => {
-    // FX params go through a different path (not normalizePlayParams)
-    // This test verifies that room/damp are not in TIME_PARAMS
+  it('BPM scaling × non-time params: room/damp NOT scaled', () => {
+    // Non-time FX params (room, damp) are not in TIME_PARAMS
     const p = normalizePlayParams('beep', {
       room: 0.8, damp: 0.5, release: 1,
     }, 130)
-    expect(p.room).toBe(0.8)    // NOT scaled
-    expect(p.damp).toBe(0.5)    // NOT scaled
+    expect(p.room).toBe(0.8)    // NOT scaled (not a time param)
+    expect(p.damp).toBe(0.5)    // NOT scaled (not a time param)
     expect(p.release).toBeCloseTo(60 / 130, 10) // IS scaled
+  })
+
+  it('BPM scaling × FX time params: phase/decay ARE scaled', () => {
+    // FX time params go through normalizeFxParams which also calls scaleTimeParamsToBpm.
+    // Desktop Sonic Pi: trigger_fx → scale_time_args_to_bpm! for :bpm_scale => true.
+    const p = normalizeFxParams({ phase: 0.5, decay: 2, room: 0.8 }, 130)
+    expect(p.phase).toBeCloseTo(0.5 * 60 / 130, 10)  // IS scaled (time param)
+    expect(p.decay).toBeCloseTo(2 * 60 / 130, 10)     // IS scaled (time param)
+    expect(p.room).toBe(0.8)                            // NOT scaled (not time)
   })
 
   it('Symbol resolution × tb303 munging: resolve then mirror then scale', () => {

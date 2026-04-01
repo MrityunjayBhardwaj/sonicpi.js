@@ -48,10 +48,11 @@
 **How it manifested:** `sample :bd_tek, cutoff: 130` sent `cutoff: 130` to scsynth. The basic_stereo_player synthdef expects `lpf`. The filter never activated. Samples played unfiltered — brighter and louder than intended.
 
 ## SP10: Missing BPM Time Scaling
-**Root cause:** Sonic Pi's `scale_time_args_to_bpm!` multiplies ALL time-based params (attack, decay, sustain, release, all slide times) by `60/BPM`. At 130 BPM, `release: 1` becomes 0.46 seconds. Our engine passes raw beat values as seconds.
-**Detection signal:** Notes ring for much longer than expected at non-60 BPM. Overlapping envelopes. Higher sustained RMS. Washy, smeared sound instead of tight rhythm.
-**The trap:** Assume time params are in seconds. Root fix: in the SoundLayer, multiply all time-based args by `60/currentBPM` before sending to scsynth. Only applies when `arg_bpm_scaling` is true (default).
-**Impact:** At 130 BPM, every envelope is 2.17x too long. This is likely the single biggest remaining audio discrepancy.
+**Root cause:** Sonic Pi's `scale_time_args_to_bpm!` multiplies ALL time-based params by `60/BPM`. This includes ADSR envelopes (attack, decay, sustain, release), ALL `*_slide` params, AND FX time params (phase, max_phase, delay, pre_delay). At 130 BPM, `release: 1` becomes 0.46s; echo `phase: 0.25` becomes 0.115s.
+**Detection signal:** Notes ring too long AND/OR FX timing wrong (echo too slow, slicer too wide) at non-60 BPM.
+**The trap:** (1) Assume time params are in seconds. (2) Assume FX params are NOT BPM-scaled — the comment "Sonic Pi passes arg_bpm_scaling: false for FX" was **wrong**. Desktop Sonic Pi's `trigger_fx` DOES call `scale_time_args_to_bpm!` (verified from source: `synthinfo.rb` tags echo phase/decay/max_phase with `:bpm_scale => true`).
+**Impact:** At 130 BPM, every unscaled time param is 2.17x too long/slow.
+**Status:** FIXED for synths/samples (SoundLayer scaleTimeParamsToBpm). FIXED for FX (#66 — normalizeFxParams now BPM-scales).
 
 ## SP11: Top-Level FX Recreated Per Iteration
 **Root cause:** `fxAwareWrappedLiveLoop` adds `b.with_fx()` to the ProgramBuilder on every loop iteration. AudioInterpreter creates a new FX synth node each time. Desktop Sonic Pi creates top-level FX ONCE — the GC thread's `subthread.join` blocks on the live_loop, so the FX persists forever.
@@ -81,17 +82,25 @@
 **How it manifested:** Discovered during desktop vs web comparison — spread() patterns are a core Sonic Pi idiom used in every tutorial. The pattern played a flat stream of notes instead of the rhythmic Euclidean pattern.
 **Status:** FIXED — AudioInterpreter.ts checks `step.opts.on` before triggering (#53).
 
-## SP16: WASM scsynth Output Level Difference (HYPOTHESIS — UNVERIFIED)
+## SP16: WASM scsynth Output Level Difference (CONFIRMED)
 
-**Hypothesis:** SuperSonic's scsynth WASM may produce 1.8-2.2x louder output than desktop scsynth. The factor is signal-dependent (drums 2.2x, clap+FX 1.8x). External stages (AudioWorklet, Web Audio, mixer) verified at unity gain, pointing to scsynth WASM internals — but our engine code has NOT been bypassed in testing. **Root cause unconfirmed until raw OSC isolation test is run.**
+**Root cause:** SuperSonic's scsynth WASM produces ~2x louder raw output than desktop scsynth for identical inputs. Desktop scsynth outputs through native audio drivers (CoreAudio/ALSA) which include driver-level processing. WASM scsynth writes float32 directly to AudioWorklet memory with zero attenuation. Emscripten docs warn: "scale down audio volume by factor of 0.2."
 **Detection signal:** Output RMS ~2x desktop, clipping 3%+ vs 0%, crest factor lower (squashed dynamics).
-**The trap:** Assume it's a simple constant gain factor and apply scalar compensation. The factor varies by signal (drums 2.2x, clap+FX 1.8x) — scalar compensation over-corrects FX-heavy signals.
-**How it manifested:** A/B recordings (Rec button both platforms) of DJ Dave code at 130 BPM. Desktop RMS 0.19, web RMS 0.42. Every external stage traced and verified: AudioWorklet (zero gain from source), Web Audio (unity), mixer (alive via amp=1 test). autoConnect vs manual routing: no difference. numOutputBusChannels 2 vs 14: no difference.
-**Current workaround:** WASM_COMPENSATED_PRE_AMP = 0.2/2.3 in mixer. Matches desktop within ±25% for mixed signals.
-**NEXT STEP:** Raw OSC isolation test — bypass entire engine, send OSC directly to SuperSonic, compare output. Only this proves whether the cause is in SuperSonic or our engine.
-**Full investigation:** artifacts/ref/RESEARCH_WASM_OUTPUT_LEVEL.md, tools/audio_comparison/wasm_output_level_analysis.ipynb
+**The trap:** Assume it's a simple constant gain factor. The factor varies somewhat by signal content due to the mixer's non-linear Limiter.ar + clip2.
+**How it was confirmed:** Raw OSC isolation test (`tools/raw-osc-test.ts`) bypasses the ENTIRE engine — loads SuperSonic directly from CDN, sends raw OSC with desktop-identical settings (pre_amp=0.2, amp=6). Per-second RMS consistently 2.0-2.2x louder than desktop. This proves the difference is in scsynth WASM, not our engine.
+**Note on clap+FX ratio:** The original 1.8x ratio for clap+FX was LOWER than drums (2.2x) partly because FX time params weren't BPM-scaled (SP10/issue #66) — echo was 2.17x too slow, spreading energy over more time and reducing RMS.
+**Workaround:** WASM_COMPENSATED_PRE_AMP = 0.2/2.3 in mixer.
+**Full investigation:** artifacts/ref/RESEARCH_WASM_OUTPUT_LEVEL.md, tools/audio_comparison/wasm_output_level_analysis.ipynb, tools/audio_comparison/raw_osc_test/RESULTS.md
 
-## SP17: Track Bus Mixer Bypass
+## SP17: Wrong Assumption Encoded as Truth (Meta-Pattern)
+**Root cause:** A wrong claim about desktop Sonic Pi's behavior ("FX params are NOT BPM-scaled, arg_bpm_scaling: false") was written in a code comment, propagated into unit tests (asserting the wrong behavior), and recorded in catalogue entries (SV12, dharana). No mechanism caught the divergence from the reference implementation until WAV temporal analysis revealed echo timing was 2.17x too slow.
+**Detection signal:** Spectrogram comparison shows TEMPORAL structure differs between platforms (not just level). Any time a structural pattern (rhythm, echo spacing, slicer rate) differs between desktop and web, suspect a wrong assumption about how desktop transforms params.
+**The trap:** Trust code comments and unit tests as "verified" because they pass. The comment "matches desktop Sonic Pi's trigger_fx" was never verified against the actual desktop source — it was an inference that happened to be wrong. Tests encoded the wrong assumption, so they passed while the behavior was incorrect.
+**Root fix:** Before claiming any normalization step "matches desktop," verify against the ACTUAL desktop source code (synthinfo.rb for param tags, sound.rb for the normalization chain). Never write "Sonic Pi does X" from inference — read the source. When A/B spectrogram analysis reveals temporal differences, check the param transformation pipeline for the specific FX/synth involved.
+**How it manifested:** Issue #66. `with_fx :echo, phase: 0.25` at 130 BPM produced echoes at 250ms (raw seconds) instead of 115ms (0.25 beats × 60/130). Discovered via spectrogram analysis showing clap+FX spectrograms looked "wildly different" while drums (no FX) matched.
+**Prevention:** Added to dharana observation targets: "For EVERY normalization rule, verify the claim against desktop source code (synthinfo.rb :bpm_scale tags, sound.rb normalization chain). Code comments are claims, not evidence."
+
+## SP18: Track Bus Mixer Bypass (was SP17)
 **Root cause:** allocateTrackBus assigned synth out_bus to buses 2,4,6... (track buses for per-loop visualization). The mixer only reads bus 0. All audio bypassed the mixer (Limiter.ar, gain staging) and reached speakers raw through the Web Audio ChannelMerger summing all 14 channels.
 **Detection signal:** RMS unchanged regardless of mixer settings. Clipping from hard clip at Web Audio output (not Limiter.ar).
 **The trap:** Assume the mixer processes all audio. Root fix: set task.outBus = 0 for all loops. Track buses used only for AnalyserNode taps, not audio routing. ChannelMerger connects only channels 0-1.

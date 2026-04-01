@@ -20,17 +20,24 @@
 // Time params — ALLOWLIST (only these get BPM-scaled)
 // ---------------------------------------------------------------------------
 
-/** Params that represent time durations. Scaled by 60/BPM before sending to scsynth. */
+/**
+ * Named time params — explicit durations that get BPM-scaled.
+ * All `*_slide` params are ALSO BPM-scaled (they represent glide time) —
+ * handled by suffix match in scaleTimeParamsToBpm, not listed here.
+ */
 const TIME_PARAMS = new Set([
   // ADSR envelope
   'attack', 'decay', 'sustain', 'release',
-  // ADSR slide times
-  'attack_slide', 'decay_slide', 'sustain_slide', 'release_slide',
-  // General slide times
-  'amp_slide', 'pan_slide', 'cutoff_slide', 'lpf_slide', 'hpf_slide',
-  'res_slide', 'note_slide', 'pitch_slide',
   // tb303 filter envelope
   'cutoff_attack', 'cutoff_decay', 'cutoff_sustain', 'cutoff_release',
+  // FX time params — tagged :bpm_scale => true in Sonic Pi's synthinfo.rb.
+  // Desktop Sonic Pi BPM-scales these via scale_time_args_to_bpm! in sound.rb.
+  // echo/delay/ping_pong: phase, max_phase
+  // slicer/wobble/tremolo/panslicer/ixi_techno/flanger: phase
+  // flanger: delay
+  'phase', 'max_phase',
+  'pre_delay',
+  'delay',
 ])
 
 // ---------------------------------------------------------------------------
@@ -141,16 +148,25 @@ export function normalizeControlParams(
 
 /**
  * Normalize FX params.
- * Strip + resolve symbols. NO BPM scaling (Sonic Pi passes arg_bpm_scaling: false for FX).
- * Matches desktop Sonic Pi's trigger_fx which calls normalise_and_resolve_synth_args
- * with bpm_scaling disabled.
+ * Strip + resolve symbols + BPM scale time params.
+ *
+ * Desktop Sonic Pi's trigger_fx calls normalise_and_resolve_synth_args which
+ * DOES BPM-scale params tagged :bpm_scale => true in synthinfo.rb (phase,
+ * decay, max_phase, delay, pre_delay and their slides). The default
+ * arg_bpm_scaling thread-local is true (runtime.rb:906).
+ *
+ * Verified from WAV analysis: desktop echo phase=0.25 at 130 BPM produces
+ * echoes at 115ms intervals (0.25 * 60/130). Without scaling, echoes are
+ * at 250ms — 2.17x too slow. See issue #66.
  */
 export function normalizeFxParams(
   params: Record<string, number>,
+  bpm: number,
 ): Record<string, number> {
   let p = { ...params }
   p = stripNonScynthParams(p)
   p = resolveSymbolDefaults(p)
+  p = scaleTimeParamsToBpm(p, bpm)
   return p
 }
 
@@ -295,8 +311,13 @@ function mungeSynthOpts(
 /**
  * Step 6: Scale time-based params by 60/BPM.
  * At BPM 130, release:1 (1 beat) becomes 0.4615 seconds.
- * Only params in the TIME_PARAMS allowlist are scaled.
- * FX params are NOT scaled (Sonic Pi passes arg_bpm_scaling: false for FX).
+ *
+ * Two matching rules (mirrors desktop Sonic Pi's synthinfo.rb :bpm_scale tags):
+ *   1. Named params in TIME_PARAMS (attack, decay, phase, max_phase, delay, etc.)
+ *   2. ANY param ending in `_slide` — all slide params represent glide TIME.
+ *      Desktop Sonic Pi tags every *_slide param with :bpm_scale => true.
+ *
+ * Applies to synths, samples, control messages, AND FX.
  */
 function scaleTimeParamsToBpm(
   params: Record<string, number>,
@@ -306,8 +327,8 @@ function scaleTimeParamsToBpm(
 
   const factor = 60 / bpm
   let p = params
-  for (const key of TIME_PARAMS) {
-    if (key in p) {
+  for (const key of Object.keys(params)) {
+    if (TIME_PARAMS.has(key) || key.endsWith('_slide')) {
       // Guard: negative values are sentinels (e.g., sustain: -1 = "play full duration").
       // Don't scale sentinels — synthdef interprets them specially.
       if (p[key] < 0) continue
