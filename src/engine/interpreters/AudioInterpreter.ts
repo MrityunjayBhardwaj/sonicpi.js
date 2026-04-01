@@ -77,9 +77,12 @@ export async function runProgram(
         const nodeRef = nextNodeRef++
 
         if (ctx.bridge) {
-          const rawParams: Record<string, number> = { ...step.opts, note: step.note }
-          const params = normalizePlayParams(synth, rawParams, currentBpm)
-          ctx.bridge.triggerSynth(synth, audioTime, { ...params, out_bus: task.outBus })
+          // Mutate step.opts directly — normalizePlayParams copies internally.
+          // Avoids 3 object spreads per event that cause GC pressure (#75).
+          step.opts.note = step.note
+          const params = normalizePlayParams(synth, step.opts, currentBpm)
+          params.out_bus = task.outBus
+          ctx.bridge.triggerSynth(synth, audioTime, params)
             .then(realNodeId => ctx.nodeRefMap.set(nodeRef, realNodeId))
             .catch((err: Error) => {
               ctx.printHandler?.(`Synth '${synth}' failed: ${err.message}`)
