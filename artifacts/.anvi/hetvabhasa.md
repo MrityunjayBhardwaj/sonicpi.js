@@ -74,7 +74,15 @@
 **Detection signal:** Output is 2x louder than expected. Clipping increases.
 **The trap:** Set `in_bus: 0` (same as out_bus default). Root fix: allocate a SEPARATE private bus for `in_bus`. Desktop Sonic Pi uses `@mixer_bus = new_bus(:audio)`.
 
-## SP15: WASM scsynth Output Level Difference (HYPOTHESIS — UNVERIFIED)
+## SP15: on: Conditional Trigger Silently Ignored
+**Root cause:** Sonic Pi's `should_trigger?` checks the `on:` param and skips the synth/sample trigger entirely if falsy. Our SoundLayer stripped `on:` from params (correct — scsynth doesn't know it) but never checked its value. Every trigger fired regardless of `on:`.
+**Detection signal:** `play 60, on: spread(3,8).tick` plays on ALL beats instead of the Euclidean pattern. `sample :hat_snap, on: false` still plays.
+**The trap:** Treat `on:` as just another non-scsynth param to strip. Root fix: check `on` value in AudioInterpreter BEFORE triggering. If `on` is present and falsy (0, false), skip the play/sample entirely. Strip happens later in SoundLayer.
+**How it manifested:** Discovered during desktop vs web comparison — spread() patterns are a core Sonic Pi idiom used in every tutorial. The pattern played a flat stream of notes instead of the rhythmic Euclidean pattern.
+**Status:** FIXED — AudioInterpreter.ts checks `step.opts.on` before triggering (#53).
+
+## SP16: WASM scsynth Output Level Difference (HYPOTHESIS — UNVERIFIED)
+
 **Hypothesis:** SuperSonic's scsynth WASM may produce 1.8-2.2x louder output than desktop scsynth. The factor is signal-dependent (drums 2.2x, clap+FX 1.8x). External stages (AudioWorklet, Web Audio, mixer) verified at unity gain, pointing to scsynth WASM internals — but our engine code has NOT been bypassed in testing. **Root cause unconfirmed until raw OSC isolation test is run.**
 **Detection signal:** Output RMS ~2x desktop, clipping 3%+ vs 0%, crest factor lower (squashed dynamics).
 **The trap:** Assume it's a simple constant gain factor and apply scalar compensation. The factor varies by signal (drums 2.2x, clap+FX 1.8x) — scalar compensation over-corrects FX-heavy signals.
@@ -83,7 +91,7 @@
 **NEXT STEP:** Raw OSC isolation test — bypass entire engine, send OSC directly to SuperSonic, compare output. Only this proves whether the cause is in SuperSonic or our engine.
 **Full investigation:** artifacts/ref/RESEARCH_WASM_OUTPUT_LEVEL.md, tools/audio_comparison/wasm_output_level_analysis.ipynb
 
-## SP16: Track Bus Mixer Bypass
+## SP17: Track Bus Mixer Bypass
 **Root cause:** allocateTrackBus assigned synth out_bus to buses 2,4,6... (track buses for per-loop visualization). The mixer only reads bus 0. All audio bypassed the mixer (Limiter.ar, gain staging) and reached speakers raw through the Web Audio ChannelMerger summing all 14 channels.
 **Detection signal:** RMS unchanged regardless of mixer settings. Clipping from hard clip at Web Audio output (not Limiter.ar).
 **The trap:** Assume the mixer processes all audio. Root fix: set task.outBus = 0 for all loops. Track buses used only for AnalyserNode taps, not audio routing. ChannelMerger connects only channels 0-1.

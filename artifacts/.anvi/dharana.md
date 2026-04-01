@@ -1,7 +1,7 @@
 # Dharana — Focused Attention: Sonic Pi Web
 
 Project-specific instantiation of global principles. Every entry carries ORIGIN/WHY/HOW.
-Derived from hetvabhasa (16 patterns), vyapti (14 invariants), krama (9 lifecycles).
+Derived from hetvabhasa (17 patterns), vyapti (14 invariants), krama (9 lifecycles).
 
 ---
 
