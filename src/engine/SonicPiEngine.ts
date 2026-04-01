@@ -342,8 +342,7 @@ export class SonicPiEngine {
           // Enter per-loop scope so variable writes are isolated
           scopeHandle?.enterScope(name)
           try {
-            // Await in case builderFn is async (backward compat with old JS code)
-            await Promise.resolve(builderFn(builder))
+            builderFn(builder)
           } finally {
             scopeHandle?.exitScope()
           }
@@ -737,6 +736,11 @@ export class SonicPiEngine {
   /** Format a friendly error as a display string. */
   static formatErrorString(err: Error): string {
     return formatFriendlyError(friendlyError(err))
+  }
+
+  /** Get SuperSonic scsynth metrics for diagnostics. */
+  getMetrics(): Record<string, unknown> | null {
+    return this.bridge?.getMetrics() ?? null
   }
 
   get components(): Partial<EngineComponents> {

@@ -22,6 +22,9 @@ export class Console {
   private autoScroll = true
   private runCount = 0
   private startTime = 0
+  /** Pending entries waiting for next animation frame flush (#73 — DOM throttling). */
+  private pendingEntries: LogEntry[] = []
+  private rafScheduled = false
 
   constructor(container: HTMLElement) {
     this.el = document.createElement('div')
@@ -93,12 +96,8 @@ export class Console {
   log(text: string, level: LogLevel = 'info'): void {
     const entry: LogEntry = { level, text, time: Date.now(), run: this.runCount }
     this.entries.push(entry)
-    if (this.entries.length > MAX_ENTRIES) {
-      this.entries = this.entries.slice(-MAX_ENTRIES)
-      this.rebuild()
-      return
-    }
-    this.appendLine(entry)
+    this.trimIfNeeded()
+    this.scheduleFlush(entry)
   }
 
   logEvent(type: string, detail: string, audioTime?: number): void {
@@ -110,12 +109,49 @@ export class Console {
       beat: audioTime,
     }
     this.entries.push(entry)
-    if (this.entries.length > MAX_ENTRIES) {
-      this.entries = this.entries.slice(-MAX_ENTRIES)
-      this.rebuild()
-      return
+    this.trimIfNeeded()
+    this.scheduleFlush(entry)
+  }
+
+  /**
+   * Trim entries array and remove oldest DOM children — O(1) per call.
+   * Previous approach called rebuild() which recreated ALL 500 DOM elements
+   * on every entry after the buffer filled — 43,000 DOM ops/sec at 86 entries/sec.
+   * This was the #75 main thread bottleneck. See issue #75.
+   */
+  private trimIfNeeded(): void {
+    while (this.entries.length > MAX_ENTRIES) {
+      this.entries.shift()
+      // Remove oldest DOM child to keep DOM in sync
+      if (this.body.firstChild) {
+        this.body.removeChild(this.body.firstChild)
+      }
     }
-    this.appendLine(entry)
+  }
+
+  /**
+   * Batch DOM updates to requestAnimationFrame — prevents 250+ DOM mutations
+   * per second from blocking the main thread. See issue #73.
+   */
+  private scheduleFlush(entry: LogEntry): void {
+    this.pendingEntries.push(entry)
+    if (!this.rafScheduled) {
+      this.rafScheduled = true
+      requestAnimationFrame(() => {
+        this.rafScheduled = false
+        // Use DocumentFragment to batch all appends into one reflow
+        const fragment = document.createDocumentFragment()
+        for (const e of this.pendingEntries) {
+          fragment.appendChild(this.createLine(e))
+        }
+        this.body.appendChild(fragment)
+        this.pendingEntries.length = 0
+        // Auto-scroll after batch
+        if (this.autoScroll) {
+          this.body.scrollTop = this.body.scrollHeight
+        }
+      })
+    }
   }
 
   logError(title: string, message: string): void {
@@ -136,6 +172,13 @@ export class Console {
   }
 
   private appendLine(entry: LogEntry): void {
+    this.body.appendChild(this.createLine(entry))
+    if (this.autoScroll) {
+      this.body.scrollTop = this.body.scrollHeight
+    }
+  }
+
+  private createLine(entry: LogEntry): HTMLDivElement {
     const line = document.createElement('div')
     line.style.cssText = `
       padding: 0.1rem 0.6rem;
@@ -185,11 +228,7 @@ export class Console {
 
     content.textContent = entry.text
     line.appendChild(content)
-    this.body.appendChild(line)
-
-    if (this.autoScroll) {
-      this.body.scrollTop = this.body.scrollHeight
-    }
+    return line
   }
 
   private rebuild(): void {
