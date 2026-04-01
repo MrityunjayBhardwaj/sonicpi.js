@@ -738,6 +738,11 @@ export class SonicPiEngine {
     return formatFriendlyError(friendlyError(err))
   }
 
+  /** Get SuperSonic scsynth metrics for diagnostics. */
+  getMetrics(): Record<string, unknown> | null {
+    return this.bridge?.getMetrics() ?? null
+  }
+
   get components(): Partial<EngineComponents> {
     const result: Partial<EngineComponents> = {
       streaming: { eventStream: this.eventStream },

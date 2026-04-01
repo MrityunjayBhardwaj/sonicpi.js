@@ -327,6 +327,16 @@ export class SuperSonicBridge {
     return this.analyserNode
   }
 
+  /** Expose SuperSonic metrics for diagnostics. Returns null if not available. */
+  getMetrics(): Record<string, unknown> | null {
+    if (!this.sonic) return null
+    const s = this.sonic as unknown as Record<string, unknown>
+    if (typeof s.getMetrics === 'function') {
+      return s.getMetrics() as Record<string, unknown>
+    }
+    return null
+  }
+
   /** Set master volume (0-1). Controls both scsynth mixer pre_amp and Web Audio gain. */
   setMasterVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(1, volume))
@@ -470,7 +480,7 @@ export class SuperSonicBridge {
     // Params are already BPM-scaled (in seconds) at this point.
     // Only during real playback (audioTime > 0) — not during tests.
     // Only during real playback — audioContext.currentTime is 0 in mocks/tests
-    if (this.sonic?.audioContext?.currentTime > 0) {
+    if ((this.sonic?.audioContext?.currentTime ?? 0) > 0) {
       this.scheduleNodeFree(nodeId, audioTime, params)
     }
 
@@ -553,7 +563,7 @@ export class SuperSonicBridge {
 
     // Schedule node free after expected sample duration (#73)
     // Only during real playback — audioContext.currentTime is 0 in mocks/tests
-    if (this.sonic?.audioContext?.currentTime > 0) {
+    if ((this.sonic?.audioContext?.currentTime ?? 0) > 0) {
       this.scheduleSampleNodeFree(nodeId, sampleName, audioTime, params)
     }
 

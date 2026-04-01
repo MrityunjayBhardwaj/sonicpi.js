@@ -332,6 +332,8 @@ export class App {
 
         await this.engine.init()
         await this.sessionLog.initSigning()
+        // Expose engine for diagnostics (thread monitor, metrics)
+        ;(globalThis as Record<string, unknown>).__spw_engine = this.engine
         this.toolbar.setLoading(false)
         this.console.logSystem('  Audio engine ready.')
         this.console.logSystem('  Session logging active. Ctrl+Shift+S to export.')
