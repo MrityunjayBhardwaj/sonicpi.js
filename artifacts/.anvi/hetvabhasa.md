@@ -100,7 +100,15 @@
 **How it manifested:** Issue #66. `with_fx :echo, phase: 0.25` at 130 BPM produced echoes at 250ms (raw seconds) instead of 115ms (0.25 beats × 60/130). Discovered via spectrogram analysis showing clap+FX spectrograms looked "wildly different" while drums (no FX) matched.
 **Prevention:** Added to dharana observation targets: "For EVERY normalization rule, verify the claim against desktop source code (synthinfo.rb :bpm_scale tags, sound.rb normalization chain). Code comments are claims, not evidence."
 
-## SP18: Track Bus Mixer Bypass (was SP17)
+## SP18: Exotic Diagnosis Before Simple Observation (Meta-Pattern)
+**Root cause:** Console.rebuild() recreated 500 DOM elements on every log entry after the 500-entry buffer filled (~6s at 86 entries/sec). 43,000 DOM ops/sec blocking the main thread. The rebuild() path bypassed the rAF batching added in the same session.
+**Detection signal:** Progressive main thread stalls at a FIXED time after playback begins (correlating with log buffer filling, not audio complexity).
+**The trap:** When performance degrades at ~20 seconds, assume exotic causes (V8 GC, WASM contention, SharedArrayBuffer). Run 12 experiments eliminating exotic causes while missing a DOM rebuild loop in code you JUST EDITED.
+**Root fix:** (1) When adding optimization, grep ALL callers — especially overflow/error paths. (2) Measure the hot function (performance.now) BEFORE theorizing about engine internals.
+**How it manifested:** Issue #75. 12 experiments investigated V8 GC, scsynth WASM, SharedArrayBuffer, allocation rates — all wrong. Answer was Console.rebuild() in code edited that same session.
+**Full case study:** `artifacts/ref/CASE_STUDY_PERFORMANCE_INVESTIGATION.md`
+
+## SP19: Track Bus Mixer Bypass (was SP18)
 **Root cause:** allocateTrackBus assigned synth out_bus to buses 2,4,6... (track buses for per-loop visualization). The mixer only reads bus 0. All audio bypassed the mixer (Limiter.ar, gain staging) and reached speakers raw through the Web Audio ChannelMerger summing all 14 channels.
 **Detection signal:** RMS unchanged regardless of mixer settings. Clipping from hard clip at Web Audio output (not Limiter.ar).
 **The trap:** Assume the mixer processes all audio. Root fix: set task.outBus = 0 for all loops. Track buses used only for AnalyserNode taps, not audio routing. ChannelMerger connects only channels 0-1.
