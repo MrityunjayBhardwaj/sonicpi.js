@@ -96,11 +96,7 @@ export class Console {
   log(text: string, level: LogLevel = 'info'): void {
     const entry: LogEntry = { level, text, time: Date.now(), run: this.runCount }
     this.entries.push(entry)
-    if (this.entries.length > MAX_ENTRIES) {
-      this.entries = this.entries.slice(-MAX_ENTRIES)
-      this.rebuild()
-      return
-    }
+    this.trimIfNeeded()
     this.scheduleFlush(entry)
   }
 
@@ -113,12 +109,24 @@ export class Console {
       beat: audioTime,
     }
     this.entries.push(entry)
-    if (this.entries.length > MAX_ENTRIES) {
-      this.entries = this.entries.slice(-MAX_ENTRIES)
-      this.rebuild()
-      return
-    }
+    this.trimIfNeeded()
     this.scheduleFlush(entry)
+  }
+
+  /**
+   * Trim entries array and remove oldest DOM children — O(1) per call.
+   * Previous approach called rebuild() which recreated ALL 500 DOM elements
+   * on every entry after the buffer filled — 43,000 DOM ops/sec at 86 entries/sec.
+   * This was the #75 main thread bottleneck. See issue #75.
+   */
+  private trimIfNeeded(): void {
+    while (this.entries.length > MAX_ENTRIES) {
+      this.entries.shift()
+      // Remove oldest DOM child to keep DOM in sync
+      if (this.body.firstChild) {
+        this.body.removeChild(this.body.firstChild)
+      }
+    }
   }
 
   /**
