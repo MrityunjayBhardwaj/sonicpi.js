@@ -471,8 +471,8 @@ export class SuperSonicBridge {
   ): number {
     const nodeId = this.sonic!.nextNodeId()
     const paramList: (string | number)[] = []
-    for (const [key, value] of Object.entries(params)) {
-      paramList.push(key, value)
+    for (const key in params) {
+      paramList.push(key, params[key])
     }
     this.queueMessage(audioTime, '/s_new', [fullName, nodeId, 0, 100, ...paramList])
 
@@ -555,8 +555,8 @@ export class SuperSonicBridge {
     const params = normalizeSampleParams(translated, bpm ?? 60)
 
     const paramList: (string | number)[] = ['buf', bufNum]
-    for (const [key, value] of Object.entries(params)) {
-      paramList.push(key, value)
+    for (const key in params) {
+      paramList.push(key, params[key])
     }
 
     this.queueMessage(audioTime, '/s_new', [playerName, nodeId, 0, 100, ...paramList])
@@ -648,8 +648,8 @@ export class SuperSonicBridge {
   ): number {
     const nodeId = this.sonic!.nextNodeId()
     const paramList: (string | number)[] = ['in_bus', inBus, 'out_bus', outBus]
-    for (const [key, value] of Object.entries(params)) {
-      paramList.push(key, value)
+    for (const key in params) {
+      paramList.push(key, params[key])
     }
     this.queueMessage(audioTime, '/s_new', [fullName, nodeId, 0, 101, ...paramList])
     return nodeId

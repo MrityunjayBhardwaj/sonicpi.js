@@ -39,6 +39,8 @@ export interface SleepEntry {
   taskId: string
   /** Promise resolver — only tick() calls this (SV2) */
   resolve: () => void
+  /** Insertion order for deterministic tiebreaking (#75 — avoids string allocation) */
+  order: number
 }
 
 export interface TaskState {
@@ -101,7 +103,7 @@ export class VirtualTimeScheduler {
   /** Monotonic counter for deterministic ordering of same-time entries */
   private insertionOrder = 0
   /** Map from `${time}:${taskId}` to insertion order for stable sorting */
-  private entryOrder = new Map<string, number>()
+  // entryOrder Map removed — insertion order stored directly on SleepEntry (#75)
   private _running = false
   /** Cue state: last cue per name with virtual time and args */
   private cueMap = new Map<string, { time: number; args: unknown[] }>()
@@ -117,9 +119,9 @@ export class VirtualTimeScheduler {
     this.tickInterval = options.tickInterval ?? DEFAULT_TICK_INTERVAL_MS
 
     // Priority: by time, then by insertion order for determinism (SP1)
+    // Uses entry.order directly — no Map lookup or string allocation (#75)
     this.queue = new MinHeap<SleepEntry>((entry) => {
-      const orderKey = this.entryOrder.get(`${entry.time}:${entry.taskId}`) ?? 0
-      return entry.time + orderKey * HEAP_TIEBREAK_EPSILON
+      return entry.time + entry.order * HEAP_TIEBREAK_EPSILON
     })
   }
 
@@ -244,8 +246,7 @@ export class VirtualTimeScheduler {
 
     return new Promise<void>((resolve) => {
       const order = this.insertionOrder++
-      this.entryOrder.set(`${wakeTime}:${taskId}`, order)
-      this.queue.push({ time: wakeTime, taskId, resolve })
+      this.queue.push({ time: wakeTime, taskId, resolve, order })
     })
   }
 
@@ -331,7 +332,6 @@ export class VirtualTimeScheduler {
 
     while (this.queue.peek() && this.queue.peek()!.time <= target) {
       const entry = this.queue.pop()!
-      this.entryOrder.delete(`${entry.time}:${entry.taskId}`)
       entry.resolve()
     }
   }
@@ -380,7 +380,6 @@ export class VirtualTimeScheduler {
     this.stop()
     this.tasks.clear()
     this.queue.clear()
-    this.entryOrder.clear()
     this.eventHandlers.length = 0
     this.cueMap.clear()
     this.syncWaiters.clear()
