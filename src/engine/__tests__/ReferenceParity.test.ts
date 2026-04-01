@@ -112,12 +112,8 @@ const DESKTOP_SYNTH_NOT_SCALED: Record<string, boolean> = {
 
 describe('Reference parity: FX params match desktop Sonic Pi', () => {
   it('BPM-scales all params tagged :bpm_scale => true in synthinfo.rb (FXEcho)', () => {
-    // Source: synthinfo.rb FXEcho class
-    // phase: { :bpm_scale => true }
-    // decay: { :bpm_scale => true }
-    // max_phase: { :bpm_scale => true }
     const input = { phase: 0.25, decay: 2, max_phase: 1 }
-    const result = normalizeFxParams(input, BPM)
+    const result = normalizeFxParams('echo', input, BPM)
 
     expect(result.phase).toBeCloseTo(0.25 * FACTOR, 10)
     expect(result.decay).toBeCloseTo(2 * FACTOR, 10)
@@ -125,65 +121,126 @@ describe('Reference parity: FX params match desktop Sonic Pi', () => {
   })
 
   it('BPM-scales FX slide params (all *_slide are :bpm_scale => true)', () => {
-    // Source: synthinfo.rb — every *_slide param across all FX has :bpm_scale => true
-    // These are glide times, always in beats.
-    const input = {
+    const input: Record<string, number> = {
       phase_slide: 1, decay_slide: 0.5, mix_slide: 0.2,
       pre_amp_slide: 0.1, room_slide: 0.3,
     }
-    const result = normalizeFxParams(input, BPM)
+    const result = normalizeFxParams('echo', input, BPM)
 
     for (const key of Object.keys(input)) {
-      expect(result[key]).toBeCloseTo(input[key] * FACTOR, 10,
-        `${key} should be BPM-scaled (tagged :bpm_scale => true in synthinfo.rb)`)
+      expect(result[key], `${key} should be BPM-scaled`).toBeCloseTo(input[key] * FACTOR, 10)
     }
   })
 
   it('does NOT scale non-time FX params', () => {
-    // Source: synthinfo.rb — room, damp, mix, feedback have no :bpm_scale tag
-    const input = { room: 0.8, damp: 0.5, mix: 0.3, feedback: 0.6, pre_amp: 1.0 }
-    const result = normalizeFxParams(input, BPM)
+    const input: Record<string, number> = { room: 0.8, damp: 0.5, mix: 0.3, feedback: 0.6, pre_amp: 1.0 }
+    const result = normalizeFxParams('reverb', input, BPM)
 
     for (const [key, val] of Object.entries(input)) {
-      expect(result[key]).toBe(val,
-        `${key} should NOT be BPM-scaled (no :bpm_scale tag in synthinfo.rb)`)
+      expect(result[key], `${key} should NOT be BPM-scaled`).toBe(val)
     }
   })
 
   it('handles mixed time + non-time FX params correctly', () => {
-    // Real-world: with_fx :echo, phase: 0.25, decay: 4, mix: 0.2
     const input = { phase: 0.25, decay: 4, mix: 0.2, room: 0.5 }
-    const result = normalizeFxParams(input, BPM)
+    const result = normalizeFxParams('echo', input, BPM)
 
-    expect(result.phase).toBeCloseTo(0.25 * FACTOR, 10) // scaled
-    expect(result.decay).toBeCloseTo(4 * FACTOR, 10)     // scaled
-    expect(result.mix).toBe(0.2)                          // NOT scaled
-    expect(result.room).toBe(0.5)                         // NOT scaled
+    expect(result.phase).toBeCloseTo(0.25 * FACTOR, 10)
+    expect(result.decay).toBeCloseTo(4 * FACTOR, 10)
+    expect(result.mix).toBe(0.2)
+    expect(result.room).toBe(0.5)
   })
 
   it('FXFlanger: delay and phase are both BPM-scaled', () => {
-    // Source: synthinfo.rb FXFlanger
-    // phase: { :bpm_scale => true }, delay: { :bpm_scale => true }
     const input = { phase: 0.5, delay: 0.01 }
-    const result = normalizeFxParams(input, BPM)
+    const result = normalizeFxParams('flanger', input, BPM)
 
     expect(result.phase).toBeCloseTo(0.5 * FACTOR, 10)
     expect(result.delay).toBeCloseTo(0.01 * FACTOR, 10)
   })
 
   it('FXSlicer/FXTremolo/FXWobble: phase is BPM-scaled', () => {
-    // Source: synthinfo.rb FXSlicer, FXTremolo, FXWobble — all have phase: { :bpm_scale => true }
     const input = { phase: 0.125 }
-    const result = normalizeFxParams(input, BPM)
+    const result = normalizeFxParams('slicer', input, BPM)
     expect(result.phase).toBeCloseTo(0.125 * FACTOR, 10)
   })
 
-  it('at 60 BPM: all params pass through unchanged (identity)', () => {
+  it('at 60 BPM: explicit params pass through unchanged (identity)', () => {
     const input = { phase: 0.25, decay: 2, room: 0.8, mix_slide: 0.5 }
-    const result = normalizeFxParams(input, 60)
-    for (const [key, val] of Object.entries(input)) {
-      expect(result[key]).toBe(val)
-    }
+    const result = normalizeFxParams('echo', input, 60)
+    expect(result.phase).toBe(0.25)
+    expect(result.decay).toBe(2)
+    expect(result.room).toBe(0.8)
+    expect(result.mix_slide).toBe(0.5)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Parity tests: FX default injection (#67)
+// ---------------------------------------------------------------------------
+
+describe('Reference parity: FX defaults injected from synthinfo.rb', () => {
+  it('echo: injects phase=0.25, decay=2, max_phase=2 when not set', () => {
+    // User writes: with_fx :echo, mix: 0.2 (no phase/decay/max_phase)
+    // Desktop injects synthinfo.rb defaults, then BPM-scales them.
+    const result = normalizeFxParams('echo', { mix: 0.2 }, BPM)
+
+    expect(result.phase).toBeCloseTo(0.25 * FACTOR, 10)
+    expect(result.decay).toBeCloseTo(2 * FACTOR, 10)
+    expect(result.max_phase).toBeCloseTo(2 * FACTOR, 10)
+    expect(result.mix).toBe(0.2) // not a time param
+  })
+
+  it('echo: does NOT override user-provided phase', () => {
+    const result = normalizeFxParams('echo', { phase: 0.5 }, BPM)
+    expect(result.phase).toBeCloseTo(0.5 * FACTOR, 10) // user value, not default 0.25
+  })
+
+  it('slicer: injects phase=0.25 when not set', () => {
+    const result = normalizeFxParams('slicer', { mix: 0.5 }, BPM)
+    expect(result.phase).toBeCloseTo(0.25 * FACTOR, 10)
+  })
+
+  it('wobble: injects phase=0.5 when not set', () => {
+    const result = normalizeFxParams('wobble', { mix: 0.5 }, BPM)
+    expect(result.phase).toBeCloseTo(0.5 * FACTOR, 10)
+  })
+
+  it('flanger: injects phase=4 when not set', () => {
+    const result = normalizeFxParams('flanger', { mix: 0.5 }, BPM)
+    expect(result.phase).toBeCloseTo(4 * FACTOR, 10)
+  })
+
+  it('tremolo: injects phase=4 when not set', () => {
+    const result = normalizeFxParams('tremolo', { mix: 0.5 }, BPM)
+    expect(result.phase).toBeCloseTo(4 * FACTOR, 10)
+  })
+
+  it('ping_pong: injects phase=0.25, max_phase=1 when not set', () => {
+    const result = normalizeFxParams('ping_pong', { mix: 0.5 }, BPM)
+    expect(result.phase).toBeCloseTo(0.25 * FACTOR, 10)
+    expect(result.max_phase).toBeCloseTo(1 * FACTOR, 10)
+  })
+
+  it('reverb: no time defaults injected (room/damp are not time params)', () => {
+    const result = normalizeFxParams('reverb', { mix: 0.2, room: 0.5 }, BPM)
+    expect(result.phase).toBeUndefined()
+    expect(result.decay).toBeUndefined()
+  })
+
+  it('unknown FX: no defaults injected, params still BPM-scaled', () => {
+    const result = normalizeFxParams('unknown_fx', { phase: 0.5 }, BPM)
+    expect(result.phase).toBeCloseTo(0.5 * FACTOR, 10)
+  })
+
+  it('handles fx_ prefix stripping', () => {
+    const result = normalizeFxParams('fx_echo', { mix: 0.2 }, BPM)
+    expect(result.phase).toBeCloseTo(0.25 * FACTOR, 10)
+  })
+
+  it('handles sonic-pi-fx_ prefix stripping', () => {
+    const result = normalizeFxParams('sonic-pi-fx_echo', { mix: 0.2 }, BPM)
+    expect(result.phase).toBeCloseTo(0.25 * FACTOR, 10)
   })
 })
 
@@ -193,25 +250,20 @@ describe('Reference parity: FX params match desktop Sonic Pi', () => {
 
 describe('Reference parity: Synth params match desktop Sonic Pi', () => {
   it('BPM-scales all ADSR params tagged :bpm_scale => true', () => {
-    // Source: synthinfo.rb SynthInfo base class (inherited by all synths)
-    // attack: { :bpm_scale => true }, decay: { :bpm_scale => true }, etc.
-    const input = { attack: 0.1, decay: 0.2, sustain: 1, release: 0.5 }
+    const input: Record<string, number> = { attack: 0.1, decay: 0.2, sustain: 1, release: 0.5 }
     const result = normalizePlayParams('beep', input, BPM)
 
     for (const key of ['attack', 'decay', 'sustain', 'release']) {
-      expect(result[key]).toBeCloseTo(input[key] * FACTOR, 10,
-        `${key} should be BPM-scaled (tagged :bpm_scale => true)`)
+      expect(result[key], `${key} should be BPM-scaled`).toBeCloseTo(input[key] * FACTOR, 10)
     }
   })
 
   it('BPM-scales all slide params', () => {
-    // Source: synthinfo.rb — every *_slide param has :bpm_scale => true
-    const input = { amp_slide: 0.5, pan_slide: 0.3, note_slide: 1 }
+    const input: Record<string, number> = { amp_slide: 0.5, pan_slide: 0.3, note_slide: 1 }
     const result = normalizePlayParams('beep', input, BPM)
 
     for (const key of Object.keys(input)) {
-      expect(result[key]).toBeCloseTo(input[key] * FACTOR, 10,
-        `${key} should be BPM-scaled`)
+      expect(result[key], `${key} should be BPM-scaled`).toBeCloseTo(input[key] * FACTOR, 10)
     }
   })
 
@@ -293,38 +345,35 @@ describe('Reference parity: Control params match desktop Sonic Pi', () => {
 describe('Reference parity: exhaustive BPM-scale tag verification', () => {
   it('every desktop-tagged FX time param IS scaled by our code', () => {
     for (const param of Object.keys(DESKTOP_FX_BPM_SCALED)) {
-      const input = { [param]: 1.0 }
-      const result = normalizeFxParams(input, BPM)
-      expect(result[param]).toBeCloseTo(FACTOR, 8,
-        `FX param "${param}" is tagged :bpm_scale => true in synthinfo.rb but our code did NOT scale it`)
+      const input: Record<string, number> = { [param]: 1.0 }
+      const result = normalizeFxParams('echo', input, BPM)
+      expect(result[param], `FX "${param}" tagged :bpm_scale=>true but NOT scaled`).toBeCloseTo(FACTOR, 8)
     }
   })
 
   it('every desktop-untagged FX param is NOT scaled by our code', () => {
     for (const param of Object.keys(DESKTOP_FX_NOT_SCALED)) {
-      const input = { [param]: 1.0 }
-      const result = normalizeFxParams(input, BPM)
-      expect(result[param]).toBe(1.0,
-        `FX param "${param}" has NO :bpm_scale tag in synthinfo.rb but our code SCALED it`)
+      const input: Record<string, number> = { [param]: 1.0 }
+      // Use 'reverb' — it has no time defaults that would conflict
+      const result = normalizeFxParams('reverb', input, BPM)
+      expect(result[param], `FX "${param}" has NO :bpm_scale tag but WAS scaled`).toBe(1.0)
     }
   })
 
   it('every desktop-tagged synth time param IS scaled by our code', () => {
     for (const param of Object.keys(DESKTOP_SYNTH_BPM_SCALED)) {
-      const input = { [param]: 1.0 }
+      const input: Record<string, number> = { [param]: 1.0 }
       const result = normalizePlayParams('beep', input, BPM)
-      expect(result[param]).toBeCloseTo(FACTOR, 8,
-        `Synth param "${param}" is tagged :bpm_scale => true in synthinfo.rb but our code did NOT scale it`)
+      expect(result[param], `Synth "${param}" tagged :bpm_scale=>true but NOT scaled`).toBeCloseTo(FACTOR, 8)
     }
   })
 
   it('every desktop-untagged synth param is NOT scaled by our code', () => {
     for (const param of Object.keys(DESKTOP_SYNTH_NOT_SCALED)) {
       // env_curve gets injected as default; we test with explicit value
-      const input = { [param]: 1.0 }
+      const input: Record<string, number> = { [param]: 1.0 }
       const result = normalizePlayParams('beep', input, BPM)
-      expect(result[param]).toBe(1.0,
-        `Synth param "${param}" has NO :bpm_scale tag in synthinfo.rb but our code SCALED it`)
+      expect(result[param], `Synth "${param}" has NO :bpm_scale tag but WAS scaled`).toBe(1.0)
     }
   })
 })

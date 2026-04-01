@@ -41,6 +41,34 @@ const TIME_PARAMS = new Set([
 ])
 
 // ---------------------------------------------------------------------------
+// FX time-param defaults — from synthinfo.rb
+// ---------------------------------------------------------------------------
+
+/**
+ * Desktop Sonic Pi injects synthinfo.rb defaults for FX params before BPM
+ * scaling. Without this, scsynth uses compiled defaults (in seconds, not beats).
+ *
+ * Only BPM-scaled time params need injection — non-time params (room, mix, etc.)
+ * use the same value whether interpreted as beats or seconds at 60 BPM.
+ *
+ * Source: synthinfo.rb FXEcho, FXSlicer, FXWobble, FXPanSlicer, FXIXITechno,
+ *         FXFlanger, FXTremolo, FXPingPong, FXChorus classes.
+ *
+ * Note: FXChorus `phase` is :bpm_scale => false — intentionally excluded.
+ */
+const FX_TIME_DEFAULTS: Record<string, Record<string, number>> = {
+  echo:       { phase: 0.25, decay: 2,       max_phase: 2 },
+  slicer:     { phase: 0.25 },
+  wobble:     { phase: 0.5 },
+  panslicer:  { phase: 0.25 },
+  ixi_techno: { phase: 4 },
+  flanger:    { phase: 4 },
+  tremolo:    { phase: 4 },
+  ping_pong:  { phase: 0.25, max_phase: 1 },
+  chorus:     { decay: 0.00001, max_phase: 1 },
+}
+
+// ---------------------------------------------------------------------------
 // Symbol defaults — resolve cross-parameter references
 // ---------------------------------------------------------------------------
 
@@ -148,23 +176,27 @@ export function normalizeControlParams(
 
 /**
  * Normalize FX params.
- * Strip + resolve symbols + BPM scale time params.
+ * Strip + inject time defaults + resolve symbols + BPM scale.
  *
- * Desktop Sonic Pi's trigger_fx calls normalise_and_resolve_synth_args which
- * DOES BPM-scale params tagged :bpm_scale => true in synthinfo.rb (phase,
- * decay, max_phase, delay, pre_delay and their slides). The default
- * arg_bpm_scaling thread-local is true (runtime.rb:906).
+ * Desktop Sonic Pi's trigger_fx merges synthinfo.rb defaults, then calls
+ * normalise_and_resolve_synth_args which BPM-scales params tagged
+ * :bpm_scale => true. Without default injection, scsynth uses compiled
+ * defaults (in seconds) for missing params — these won't be BPM-scaled.
  *
- * Verified from WAV analysis: desktop echo phase=0.25 at 130 BPM produces
- * echoes at 115ms intervals (0.25 * 60/130). Without scaling, echoes are
- * at 250ms — 2.17x too slow. See issue #66.
+ * Example: `with_fx :echo, mix: 0.2` at 130 BPM.
+ *   Desktop: injects phase=0.25 (beats) → scales to 0.115s → sends explicitly
+ *   Without injection: scsynth uses compiled phase=0.25 (seconds) → 2.17x too slow
+ *
+ * See issues #66, #67.
  */
 export function normalizeFxParams(
+  fxName: string,
   params: Record<string, number>,
   bpm: number,
 ): Record<string, number> {
   let p = { ...params }
   p = stripNonScynthParams(p)
+  p = injectFxTimeDefaults(fxName, p)
   p = resolveSymbolDefaults(p)
   p = scaleTimeParamsToBpm(p, bpm)
   return p
@@ -244,6 +276,30 @@ function resolveSymbolDefaults(params: Record<string, number>): Record<string, n
 function injectMandatoryDefaults(params: Record<string, number>): Record<string, number> {
   if ('env_curve' in params) return params
   return { ...params, env_curve: 2 }
+}
+
+/**
+ * Step 3 (FX): Inject synthinfo.rb default values for BPM-scaled time params.
+ * Only injects if the user didn't set the param explicitly.
+ * Without this, scsynth uses compiled defaults (in seconds, not beats) and
+ * the BPM scaling step never sees the param. See issue #67.
+ */
+function injectFxTimeDefaults(
+  fxName: string,
+  params: Record<string, number>,
+): Record<string, number> {
+  const name = fxName.replace(/^(sonic-pi-)?fx_/, '')
+  const defaults = FX_TIME_DEFAULTS[name]
+  if (!defaults) return params
+
+  let p = params
+  for (const [key, val] of Object.entries(defaults)) {
+    if (!(key in p)) {
+      if (p === params) p = { ...params }
+      p[key] = val
+    }
+  }
+  return p
 }
 
 /** Step 3 (samples): Inject env_curve for stereo_player (envelope player). */
