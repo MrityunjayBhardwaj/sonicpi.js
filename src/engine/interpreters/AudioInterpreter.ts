@@ -17,6 +17,16 @@ import type { VirtualTimeScheduler } from '../VirtualTimeScheduler'
 import type { SuperSonicBridge } from '../SuperSonicBridge'
 import type { SoundEventStream, SoundEvent } from '../SoundEventStream'
 
+/** State for a reusable inner FX node (persists across loop iterations). */
+interface ReusableFxState {
+  bus: number
+  groupId: number
+  nodeId: number
+  outBus: number
+  /** Pending kill_delay timer — cancelled if FX is reused before it fires. */
+  killTimer?: ReturnType<typeof setTimeout>
+}
+
 export interface AudioContext {
   bridge: SuperSonicBridge | null
   scheduler: VirtualTimeScheduler
@@ -25,16 +35,30 @@ export interface AudioContext {
   schedAheadTime: number
   printHandler?: (msg: string) => void
   nodeRefMap: Map<number, number>
+  /**
+   * Reusable inner FX nodes — keyed by "taskId:fxIndex".
+   * with_fx inside a live_loop reuses the same FX node across iterations
+   * instead of creating a new one each time. This prevents additive signal
+   * stacking from overlapping echo/delay/reverb nodes. See issue #70.
+   */
+  reusableFx: Map<string, ReusableFxState>
 }
 
 /**
  * Run a Program's steps for one loop iteration.
  * Called by the scheduler's loop runner.
+ *
+ * fxCounter tracks the Nth FX step encountered in this iteration, used as a
+ * stable key to reuse inner FX nodes across iterations. The program structure
+ * is identical each iteration (same builder), so the Nth FX always corresponds
+ * to the same with_fx block.
  */
 export async function runProgram(
   program: Program,
-  ctx: AudioContext
+  ctx: AudioContext,
+  fxCounter?: { value: number },
 ): Promise<void> {
+  if (!fxCounter) fxCounter = { value: 0 }
   let currentSynth = 'beep'
   let currentBpm = ctx.scheduler.getTask(ctx.taskId)?.bpm ?? 60
   let nextNodeRef = 1
@@ -150,38 +174,79 @@ export async function runProgram(
       case 'fx': {
         if (!ctx.bridge) {
           // No audio — just run inner program
-          await runProgram(step.body, ctx)
+          await runProgram(step.body, ctx, fxCounter)
           break
         }
+        const fxIndex = fxCounter.value++
+        const fxKey = `${ctx.taskId}:fx${fxIndex}`
         const prevOutBus = task.outBus
-        const newBus = ctx.bridge.allocateBus()
-        // Create container group for this FX chain — matches Sonic Pi's fx_container_group.
-        // All FX nodes + inner synths live inside this group.
-        // On cleanup, killing the group atomically frees everything.
-        const fxGroupId = ctx.bridge.createFxGroup()
-        let fxNodeId: number | undefined
-        try {
-          const audioTime = task.virtualTime + ctx.schedAheadTime
-          const fxOpts = normalizeFxParams(step.name, step.opts, currentBpm)
-          fxNodeId = await ctx.bridge.applyFx(step.name, audioTime, fxOpts, newBus, prevOutBus)
-          if (step.nodeRef && fxNodeId !== undefined) {
-            ctx.nodeRefMap.set(step.nodeRef, fxNodeId)
+
+        // Reuse FX node across loop iterations (issue #70).
+        // First iteration: create FX node + bus, store in reusableFx map.
+        // Subsequent iterations: reuse the same node — inner synths write
+        // to the same bus, FX processes a continuous stream.
+        // This prevents additive signal stacking from overlapping echo nodes.
+        const existing = ctx.reusableFx.get(fxKey)
+        if (existing) {
+          // Reuse — cancel pending kill timer, route through existing FX bus
+          if (existing.killTimer) {
+            clearTimeout(existing.killTimer)
+            existing.killTimer = undefined
           }
-          task.outBus = newBus
-          // Flush FX creation message before running inner program
-          ctx.bridge.flushMessages()
-          await runProgram(step.body, ctx)
-        } finally {
-          task.outBus = prevOutBus
-          // Flush any remaining inner messages
-          ctx.bridge.flushMessages()
-          // Kill FX container group after kill_delay — lets tails decay.
-          // Matches Sonic Pi: Kernel.sleep(kill_delay) then fx_container_group.kill(true)
-          const killDelay = (step.opts.kill_delay as number) ?? 1.0
-          setTimeout(() => {
-            ctx.bridge!.freeGroup(fxGroupId)
-            ctx.bridge!.freeBus(newBus)
-          }, killDelay * 1000)
+          if (step.nodeRef && existing.nodeId !== undefined) {
+            ctx.nodeRefMap.set(step.nodeRef, existing.nodeId)
+          }
+          task.outBus = existing.bus
+          try {
+            await runProgram(step.body, ctx, fxCounter)
+          } finally {
+            task.outBus = prevOutBus
+            ctx.bridge.flushMessages()
+            // Schedule kill — cancelled if next iteration reuses before it fires
+            const killDelay = (step.opts.kill_delay as number) ?? 1.0
+            existing.killTimer = setTimeout(() => {
+              ctx.bridge!.freeGroup(existing.groupId)
+              ctx.bridge!.freeBus(existing.bus)
+              ctx.reusableFx.delete(fxKey)
+            }, killDelay * 1000)
+          }
+        } else {
+          // First iteration — create FX node
+          const newBus = ctx.bridge.allocateBus()
+          const fxGroupId = ctx.bridge.createFxGroup()
+          let fxNodeId: number | undefined
+          try {
+            const audioTime = task.virtualTime + ctx.schedAheadTime
+            const fxOpts = normalizeFxParams(step.name, step.opts, currentBpm)
+            fxNodeId = await ctx.bridge.applyFx(step.name, audioTime, fxOpts, newBus, prevOutBus)
+            if (step.nodeRef && fxNodeId !== undefined) {
+              ctx.nodeRefMap.set(step.nodeRef, fxNodeId)
+            }
+            task.outBus = newBus
+            ctx.bridge.flushMessages()
+            // Store for reuse — with pending kill timer as safety net
+            const state: ReusableFxState = {
+              bus: newBus,
+              groupId: fxGroupId,
+              nodeId: fxNodeId!,
+              outBus: prevOutBus,
+            }
+            ctx.reusableFx.set(fxKey, state)
+            await runProgram(step.body, ctx, fxCounter)
+          } finally {
+            task.outBus = prevOutBus
+            ctx.bridge.flushMessages()
+            // Schedule kill — if next iteration reuses, timer is cancelled
+            const killDelay = (step.opts.kill_delay as number) ?? 1.0
+            const state = ctx.reusableFx.get(fxKey)
+            if (state) {
+              state.killTimer = setTimeout(() => {
+                ctx.bridge!.freeGroup(state.groupId)
+                ctx.bridge!.freeBus(state.bus)
+                ctx.reusableFx.delete(fxKey)
+              }, killDelay * 1000)
+            }
+          }
         }
         break
       }

@@ -64,6 +64,7 @@ async function runCode(rubyCode: string): Promise<{ error?: Error; events: strin
         eventStream,
         schedAheadTime: 100,
         nodeRefMap,
+        reusableFx: new Map(),
       })
     }
 
@@ -146,6 +147,7 @@ async function runCode(rubyCode: string): Promise<{ error?: Error; events: strin
           eventStream,
           schedAheadTime: 100,
           nodeRefMap,
+          reusableFx: new Map(),
         })
       })
       const task = scheduler.getTask('__main__')

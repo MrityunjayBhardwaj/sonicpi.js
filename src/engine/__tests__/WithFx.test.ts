@@ -58,6 +58,7 @@ function makeAudioCtx(
     eventStream,
     schedAheadTime: 100,
     nodeRefMap,
+    reusableFx: new Map(),
   }
 }
 

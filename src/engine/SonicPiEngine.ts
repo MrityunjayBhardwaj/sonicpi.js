@@ -57,6 +57,8 @@ export class SonicPiEngine {
   private schedAheadTime: number
   /** Maps DSL nodeRef → SuperSonic nodeId for control messages */
   private nodeRefMap = new Map<number, number>()
+  /** Reusable inner FX nodes — persists across loop iterations. See issue #70. */
+  private reusableFx = new Map<string, { bus: number; groupId: number; nodeId: number; outBus: number }>()
   /** Pending volume to apply when bridge initializes */
   private pendingVolume: number | null = null
   /** Stored builder functions for capture/query path */
@@ -357,6 +359,7 @@ export class SonicPiEngine {
             schedAheadTime: this.schedAheadTime,
             printHandler: this.printHandler ?? undefined,
             nodeRefMap: this.nodeRefMap,
+            reusableFx: this.reusableFx,
           })
 
           // Auto-cue the loop name after each iteration.
@@ -628,6 +631,7 @@ export class SonicPiEngine {
           // They will be recreated on the next iteration of each loop.
           // loopFxScope/fxScopeChains are repopulated by the DSL re-execution above.
           this.persistentFx.clear()
+          this.reusableFx.clear()
           this.loopFxScope.clear()
           this.fxScopeChains.clear()
         }
@@ -687,6 +691,7 @@ export class SonicPiEngine {
     this.loopSynced.clear()
     this.globalStore.clear()
     this.persistentFx.clear()
+    this.reusableFx.clear()
     this.loopFxScope.clear()
     this.fxScopeChains.clear()
   }
