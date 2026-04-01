@@ -1,7 +1,7 @@
 # Dharana — Focused Attention: Sonic Pi Web
 
 Project-specific instantiation of global principles. Every entry carries ORIGIN/WHY/HOW.
-Derived from hetvabhasa (14 patterns), vyapti (13 invariants), krama (9 lifecycles).
+Derived from hetvabhasa (16 patterns), vyapti (14 invariants), krama (9 lifecycles).
 
 ---
 
@@ -15,7 +15,7 @@ HOW: Transpiler outputs JS consumed by Sandbox. Observation targets: run transpi
 **Known silent-failure modes:** `var eval` / `let eval` silently fails in Firefox. Bare assignment semantics differ between strict and sloppy mode.
 **Observe THEIR side:** Execute the transpiled code in the target engine. Syntax errors inside `new Function()` are swallowed unless you catch them.
 
-### B2: AudioInterpreter ↔ SuperSonicBridge (FATALITY — 5 patterns cluster here)
+### B2: AudioInterpreter ↔ SuperSonicBridge (was FATALITY — RESOLVED by SoundLayer)
 ORIGIN: SP8, SP9, SP10, SP11, SP12 all cluster at this boundary. 5 patterns exceeds the 3+ fatality threshold.
 WHY: This is the single highest-concentration error boundary. Parameter names change meaning across it (SP9). Time units change across it (SP10). Observation granularity drops across it — event log (our side) diverges from audio output (their side) (SP8). Compiled defaults diverge from documented defaults (SP12). FX lifecycle semantics differ (SP11). Without this boundary tracked as fatality-level, each bug is diagnosed from scratch instead of recognized as a structural class.
 HOW: Consolidated into SoundLayer module (src/engine/SoundLayer.ts). All parameter transformation in one module. SuperSonicBridge is now pure OSC transport. Observation targets: for EVERY param change, verify the receiver's actual vocabulary and defaults.
@@ -94,8 +94,8 @@ HOW: Observation targets: verify task.virtualTime is monotonic after hot-swap. V
 - At B1: SP7 trap (assume JS runs identically across engines).
 
 **Design phase 2 (invariants) → for this project:**
-- SV12 MISALIGNED: any new design touching params MUST either respect the current misalignment or resolve it via SoundLayer.
-- SV13 MISALIGNED: any new design touching FX MUST either respect per-iteration creation or resolve it via persistent FX.
+- SV12 ALIGNED: BPM scaling consolidated in SoundLayer. New designs touching params inherit correct scaling.
+- SV13 ALIGNED: Persistent FX via scope-based sharing. New designs touching FX inherit persistence.
 
 ### Observation Tools and Gaps
 
@@ -120,8 +120,8 @@ HOW: Observation targets: verify task.virtualTime is monotonic after hot-swap. V
 
 | Test | Result | Detail |
 |------|--------|--------|
-| Hetvabhasa clustering (3+ at boundary) | **FATALITY at B2** | 5 patterns: SP8, SP9, SP10, SP11, SP12 |
-| Vyapti spanning (invariant across 3+ modules) | **FATALITY at SV12** | Spans 3 modules: AudioInterpreter, SuperSonicBridge, SonicPiEngine |
+| Hetvabhasa clustering (3+ at boundary) | **RESOLVED (was FATALITY at B2)** | SoundLayer consolidates SP9/SP10/SP12. SP11 fixed by persistentFx. SP8 mitigated by Level 3 testing protocol. New patterns SP15/SP16 at B2/B3 boundary (WASM output level, track bus bypass — both fixed). |
+| Vyapti spanning (invariant across 3+ modules) | **RESOLVED (was FATALITY at SV12)** | SV12 now ALIGNED — single module (SoundLayer) owns BPM scaling. |
 | Krama crossing (lifecycle crosses 3+ boundaries) | **WARNING at SK4** | Audio message pipeline crosses 4 boundaries: DSL → ProgramBuilder → AudioInterpreter → SuperSonicBridge → scsynth |
 
 ### Approaching Threshold (watch list)

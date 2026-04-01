@@ -73,3 +73,18 @@
 **Root cause:** sonic-pi-mixer synthdef sums `in(out_bus) + in(in_bus)`. If both are the same bus (e.g., both bus 0), the signal is read twice and doubled.
 **Detection signal:** Output is 2x louder than expected. Clipping increases.
 **The trap:** Set `in_bus: 0` (same as out_bus default). Root fix: allocate a SEPARATE private bus for `in_bus`. Desktop Sonic Pi uses `@mixer_bus = new_bus(:audio)`.
+
+## SP15: WASM scsynth Output Level Difference (HYPOTHESIS — UNVERIFIED)
+**Hypothesis:** SuperSonic's scsynth WASM may produce 1.8-2.2x louder output than desktop scsynth. The factor is signal-dependent (drums 2.2x, clap+FX 1.8x). External stages (AudioWorklet, Web Audio, mixer) verified at unity gain, pointing to scsynth WASM internals — but our engine code has NOT been bypassed in testing. **Root cause unconfirmed until raw OSC isolation test is run.**
+**Detection signal:** Output RMS ~2x desktop, clipping 3%+ vs 0%, crest factor lower (squashed dynamics).
+**The trap:** Assume it's a simple constant gain factor and apply scalar compensation. The factor varies by signal (drums 2.2x, clap+FX 1.8x) — scalar compensation over-corrects FX-heavy signals.
+**How it manifested:** A/B recordings (Rec button both platforms) of DJ Dave code at 130 BPM. Desktop RMS 0.19, web RMS 0.42. Every external stage traced and verified: AudioWorklet (zero gain from source), Web Audio (unity), mixer (alive via amp=1 test). autoConnect vs manual routing: no difference. numOutputBusChannels 2 vs 14: no difference.
+**Current workaround:** WASM_COMPENSATED_PRE_AMP = 0.2/2.3 in mixer. Matches desktop within ±25% for mixed signals.
+**NEXT STEP:** Raw OSC isolation test — bypass entire engine, send OSC directly to SuperSonic, compare output. Only this proves whether the cause is in SuperSonic or our engine.
+**Full investigation:** artifacts/ref/RESEARCH_WASM_OUTPUT_LEVEL.md, tools/audio_comparison/wasm_output_level_analysis.ipynb
+
+## SP16: Track Bus Mixer Bypass
+**Root cause:** allocateTrackBus assigned synth out_bus to buses 2,4,6... (track buses for per-loop visualization). The mixer only reads bus 0. All audio bypassed the mixer (Limiter.ar, gain staging) and reached speakers raw through the Web Audio ChannelMerger summing all 14 channels.
+**Detection signal:** RMS unchanged regardless of mixer settings. Clipping from hard clip at Web Audio output (not Limiter.ar).
+**The trap:** Assume the mixer processes all audio. Root fix: set task.outBus = 0 for all loops. Track buses used only for AnalyserNode taps, not audio routing. ChannelMerger connects only channels 0-1.
+**How it manifested:** Discovered during WASM output level investigation. Mixer amp=1 test would have shown no change if track buses were still active.

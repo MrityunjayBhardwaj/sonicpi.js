@@ -40,7 +40,7 @@
 2. ProgramBuilder creates Step data — SYNC
 3. AudioInterpreter processes step:
    a. Compute audioTime = T + schedAheadTime — SYNC
-   b. **SoundLayer (TODO):** normalize params, scale time by BPM, resolve Symbols, select synthdef
+   b. **SoundLayer:** normalizePlayParams/normalizeSampleParams/normalizeControlParams/normalizeFxParams — resolve symbols, inject defaults, alias, munge, BPM scale
    c. Queue OSC message via bridge.queueMessage(audioTime, '/s_new', args) — SYNC
 4. On sleep/sync/end: bridge.flushMessages() — SYNC
    a. Encode ALL queued messages as ONE OSC bundle with single NTP timetag
@@ -55,19 +55,28 @@
 **Common violation:** Sending messages immediately instead of batching (breaks SV9).
 **Common violation:** Reading event log as proof of audio output (breaks SV8/Lokayata).
 
-## SK5: FX Lifecycle (Current — per-iteration, needs fix)
+## SK5: FX Lifecycle (FIXED — two paths)
+
+**Path A: Top-level FX (wrapping live_loop) — PERSISTENT**
+1. SonicPiEngine.topLevelWithFx captures FX chain + assigns scope ID — SYNC
+2. fxAwareWrappedLiveLoop stores scope ID in loopFxScope, chain in fxScopeChains — SYNC
+3. First iteration: asyncFn checks !persistentFx.has(scopeId) — creates FX nodes ONCE
+4. allocateBus + createFxGroup + applyFx for each FX in chain — ASYNC
+5. Stores {buses, groups, outBus} in persistentFx keyed by scope ID
+6. All subsequent iterations: task.outBus = persistentFx.get(scopeId).outBus — SYNC
+7. Multiple loops under same with_fx share one scope (one set of FX nodes)
+8. Cleared on stop() and re-evaluate (freeAllNodes kills group 101)
+
+**Path B: Inner FX (b.with_fx inside loop body) — PER-ITERATION**
 1. AudioInterpreter encounters 'fx' step — SYNC
 2. Allocate private audio bus — SYNC
-3. Create FX container group inside group 101 — SYNC (immediate OSC)
+3. Create FX container group inside group 101 — SYNC
 4. Create FX synth (in_bus=private, out_bus=parent) — queued message
-5. Flush FX creation — SYNC
-6. Set task.outBus = private bus
-7. Run inner program (synths write to private bus) — ASYNC
-8. Restore outBus — SYNC
-9. setTimeout(kill_delay) → freeGroup + freeBus — ASYNC
+5. Set task.outBus = private bus, run inner program — ASYNC
+6. Restore outBus — SYNC
+7. setTimeout(kill_delay) → freeGroup + freeBus — ASYNC
 
-**Problem:** For top-level FX wrapping live_loop, this creates a new FX per iteration.
-Desktop Sonic Pi creates FX ONCE and blocks GC on subthread.join (see SV13).
+**This matches desktop:** top-level FX persists (GC blocked by subthread.join), inner FX is per-block.
 
 ## SK6: FX Lifecycle (Desktop Sonic Pi — target)
 1. with_fx allocates bus, creates container group + synth group inside — SYNC
