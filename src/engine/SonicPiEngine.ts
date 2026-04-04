@@ -236,6 +236,17 @@ export class SonicPiEngine {
       const pendingLoops = new Map<string, () => Promise<void>>()
       const pendingDefaults = new Map<string, { bpm: number; synth: string }>()
 
+      // Top-level set_volume! — Desktop SP range is 0-5, maps to mixer pre_amp
+      let currentVolume = 1
+      const set_volume = (vol: number) => {
+        currentVolume = Math.max(0, Math.min(5, vol))
+        this.bridge?.setMasterVolume(currentVolume / 5) // normalize 0-5 → 0-1
+      }
+
+      // Top-level current_* introspection functions
+      const current_synth_fn = () => defaultSynth
+      const current_volume_fn = () => currentVolume
+
       // Top-level print handler
       const topLevelPuts = (...args: unknown[]) => {
         const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ')
@@ -596,6 +607,8 @@ export class SonicPiEngine {
         'quantise', 'quantize', 'octs',
         'current_bpm',
         'puts', 'print', 'stop', 'stop_loop',
+        // Volume & introspection
+        'set_volume', 'current_synth', 'current_volume',
         // Global store
         'get', 'set',
         // Sample catalog
@@ -620,6 +633,8 @@ export class SonicPiEngine {
         quantise, quantize, octs,
         current_bpm,
         topLevelPuts, topLevelPrint, topLevelStop, stop_loop,
+        // Volume & introspection
+        set_volume, current_synth_fn, current_volume_fn,
         // Global store
         get, set,
         // Sample catalog

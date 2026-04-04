@@ -167,6 +167,14 @@ export async function runProgram(
         break
       }
 
+      case 'kill': {
+        const killNodeId = ctx.nodeRefMap.get(step.nodeRef)
+        if (killNodeId && ctx.bridge) {
+          ctx.bridge.freeNode(killNodeId)
+        }
+        break
+      }
+
       case 'cue':
         ctx.scheduler.fireCue(step.name, ctx.taskId, step.args ?? [])
         break

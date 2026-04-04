@@ -209,6 +209,35 @@ export class ProgramBuilder {
     return this
   }
 
+  /** Free a running synth node immediately. */
+  kill(nodeRef: number): this {
+    this.steps.push({ tag: 'kill', nodeRef })
+    return this
+  }
+
+  /** Play multiple notes simultaneously as a chord. */
+  play_chord(notes: number | string | Ring<number> | number[], opts?: Record<string, unknown>): this {
+    return this.play(notes, opts)
+  }
+
+  /** Play notes sequentially with sleep(1) between each. */
+  play_pattern(notes: (number | string)[], opts?: Record<string, unknown>): this {
+    for (const n of notes) {
+      this.play(n, opts)
+      this.sleep(1)
+    }
+    return this
+  }
+
+  /** Return the current synth name. */
+  get current_synth_name(): string { return this.currentSynth }
+
+  /** Return the current synth defaults hash. */
+  get current_synth_defaults_hash(): Record<string, number> { return { ...this._synthDefaults } }
+
+  /** Return the current sample defaults hash. */
+  get current_sample_defaults_hash(): Record<string, number> { return { ...this._sampleDefaults } }
+
   /** Deferred set — fires at runtime (interleaved with sleeps). */
   set(key: string | symbol, value: unknown): this {
     this.steps.push({ tag: 'set', key, value })

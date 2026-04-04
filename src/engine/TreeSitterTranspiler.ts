@@ -317,6 +317,8 @@ const TOP_LEVEL_SCOPE = new Set([
   'sample_duration', 'sample_names', 'sample_groups', 'sample_loaded',
   // Output
   'puts', 'print', 'stop',
+  // Volume & introspection
+  'set_volume', 'current_synth', 'current_volume',
   // Math / music theory
   'hz_to_midi', 'midi_to_hz', 'quantise', 'quantize', 'octs',
   'chord_degree', 'degree', 'chord_names', 'scale_names',

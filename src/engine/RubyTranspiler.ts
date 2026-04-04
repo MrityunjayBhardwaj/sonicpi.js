@@ -22,7 +22,8 @@ import { parseAndTranspile as _parseAndTranspile } from './Parser'
 
 // DSL functions that need `b.` prefix (builder chain — all synchronous)
 const BUILDER_FUNCTIONS = new Set([
-  'play', 'sleep', 'wait', 'sample', 'sync',
+  'play', 'play_chord', 'play_pattern', 'play_pattern_timed',
+  'sleep', 'wait', 'sample', 'sync', 'kill',
   'use_synth', 'use_bpm', 'use_random_seed',
   'cue', 'rrand', 'rrand_i', 'choose', 'dice',
   'ring', 'spread', 'note',
@@ -554,6 +555,17 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
   // --- stop ---
   if (line === 'stop') return `b.stop()`
 
+  // --- kill node ---
+  const killMatch = line.match(/^kill\s+(.+)$/)
+  if (killMatch) {
+    const prefix = insideLoop ? 'b.' : ''
+    return `${prefix}kill(${transpileExpression(killMatch[1])})`
+  }
+
+  // --- set_volume! vol --- (Ruby bang method)
+  const setVolMatch = line.match(/^set_volume!\s*(.+)$/)
+  if (setVolMatch) return `set_volume(${transpileExpression(setVolMatch[1])})`
+
   // --- stop_loop :name --- (top-level only, no b. prefix)
   const stopLoopMatch = line.match(/^stop_loop\s+(.+)$/)
   if (stopLoopMatch) return `stop_loop(${transpileExpression(stopLoopMatch[1])})`
@@ -574,11 +586,12 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
     return `if (!(${condition})) { ${statement} }`
   }
 
-  // --- play note, opts ---
-  const playMatch = line.match(/^play\s+(.+)$/)
-  if (playMatch) {
-    const args = transpileArgs(playMatch[1], srcLine)
-    return `b.play(${args})`
+  // --- play / play_chord / play_pattern / play_pattern_timed ---
+  const playVariantMatch = line.match(/^(play_chord|play_pattern_timed|play_pattern|play)\s+(.+)$/)
+  if (playVariantMatch) {
+    const fn = playVariantMatch[1]
+    const args = transpileArgs(playVariantMatch[2], fn === 'play' ? srcLine : undefined)
+    return `b.${fn}(${args})`
   }
 
   // --- sleep / wait duration ---
