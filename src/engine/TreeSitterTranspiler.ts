@@ -560,7 +560,17 @@ function transpileNode(node: any, ctx: TranspileContext): string {
         return `Math.pow(${transpileNode(left, ctx)}, ${transpileNode(right, ctx)})`
       }
 
-      return `${transpileNode(left, ctx)} ${jsOp} ${transpileNode(right, ctx)}`
+      const lhs = transpileNode(left, ctx)
+      const rhs = transpileNode(right, ctx)
+
+      // Sonic Pi operator helpers — handle note strings (:c3→48),
+      // Ring arithmetic (ring*3→repeat, ring+ring→concat),
+      // and note+array mapping (:c3+[0,7,11]→[48,55,59]).
+      if (op === '+') return `__spAdd(${lhs}, ${rhs})`
+      if (op === '-') return `__spSub(${lhs}, ${rhs})`
+      if (op === '*') return `__spMul(${lhs}, ${rhs})`
+
+      return `${lhs} ${jsOp} ${rhs}`
     }
 
     case 'unary': {

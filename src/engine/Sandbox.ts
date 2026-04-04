@@ -126,7 +126,41 @@ export function createIsolatedExecutor(
   // Polyfill: Array.at() wrapping — Sonic Pi treats all arrays as rings (wrapping on tick).
   // JS Array.at() returns undefined for index >= length. This wraps with modulo.
   const arrayAtPolyfill = `{ const _origAt = Array.prototype.at; Object.defineProperty(Array.prototype, 'at', { value: function(i) { return this[((i % this.length) + this.length) % this.length]; }, writable: true, configurable: true }); }\n`
-  const wrappedCode = `with(__scope__) { return (async () => {\n${mergePolyfill}${stringRingPolyfill}${arrayAtPolyfill}${transpiledCode}\n})(); }`
+  // Polyfill: Sonic Pi operator helpers — handle note strings, Ring/Array arithmetic.
+  // Ruby auto-coerces :c3 to MIDI 48 and overloads +/-/* on Ring/Array.
+  // JS can't do operator overloading, so the transpiler emits __spAdd/__spSub/__spMul
+  // instead of raw +/-/* operators. These helpers detect types at runtime and dispatch.
+  const spOperatorPolyfill = [
+    'var __spNoteRe = /^[a-g][sb#]?\\d*$/;',
+    'function __spIsNote(v) { return typeof v === "string" && __spNoteRe.test(v); }',
+    'function __spToNum(v) { return __spIsNote(v) && typeof note === "function" ? note(v) : v; }',
+    'function __spIsRing(v) { return v != null && typeof v === "object" && typeof v.toArray === "function" && typeof v.tick === "function"; }',
+    'function __spAdd(a, b) {',
+    '  a = __spToNum(a); b = __spToNum(b);',
+    '  if (__spIsRing(a) && __spIsRing(b)) return a.concat(b);',
+    '  if (__spIsRing(a) && Array.isArray(b)) return a.concat(b);',
+    '  if (Array.isArray(a) && __spIsRing(b)) return ring.apply(null, [].concat(a, b.toArray()));',
+    '  if (typeof a === "number" && Array.isArray(b)) return b.map(function(x) { return a + x; });',
+    '  if (Array.isArray(a) && typeof b === "number") return a.map(function(x) { return x + b; });',
+    '  if (typeof a === "number" && __spIsRing(b)) return ring.apply(null, b.toArray().map(function(x) { return a + x; }));',
+    '  if (__spIsRing(a) && typeof b === "number") return ring.apply(null, a.toArray().map(function(x) { return x + b; }));',
+    '  return a + b;',
+    '}',
+    'function __spSub(a, b) {',
+    '  a = __spToNum(a); b = __spToNum(b);',
+    '  if (typeof a === "number" && Array.isArray(b)) return b.map(function(x) { return a - x; });',
+    '  if (Array.isArray(a) && typeof b === "number") return a.map(function(x) { return x - b; });',
+    '  if (typeof a === "number" && __spIsRing(b)) return ring.apply(null, b.toArray().map(function(x) { return a - x; }));',
+    '  if (__spIsRing(a) && typeof b === "number") return ring.apply(null, a.toArray().map(function(x) { return x - b; }));',
+    '  return a - b;',
+    '}',
+    'function __spMul(a, b) {',
+    '  if (__spIsRing(a) && typeof b === "number") return a.repeat(b);',
+    '  if (typeof a === "number" && __spIsRing(b)) return b.repeat(a);',
+    '  return a * b;',
+    '}',
+  ].join('\n') + '\n'
+  const wrappedCode = `with(__scope__) { return (async () => {\n${mergePolyfill}${stringRingPolyfill}${arrayAtPolyfill}${spOperatorPolyfill}${transpiledCode}\n})(); }`
 
   try {
     const fn = new Function('__scope__', wrappedCode)
