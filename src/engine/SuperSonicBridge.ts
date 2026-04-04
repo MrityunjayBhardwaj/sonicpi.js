@@ -114,69 +114,52 @@ const MAX_TRACK_OUTPUTS = 6
 const NUM_OUTPUT_CHANNELS = 2 + MAX_TRACK_OUTPUTS * 2 // 14 channels total
 
 // ---------------------------------------------------------------------------
-// Mixer gain staging — matching desktop Sonic Pi's output level
+// Mixer gain staging — matching Sonic Tau's browser-native output level
 // ---------------------------------------------------------------------------
 
 /**
- * Desktop Sonic Pi's mixer: pre_amp × amp = 0.2 × 6 = 1.2 effective gain.
+ * WASM scsynth produces raw synth output at ~2.3x the level of desktop scsynth
+ * (same synthdefs, same samples, same params). Desktop scsynth goes through
+ * native audio drivers (CoreAudio/ALSA/JACK) which attenuate before reaching
+ * hardware. WASM bypasses all of this — float32 directly to AudioWorklet.
  *
- * SuperSonic's scsynth WASM produces raw synth output at ~2.3x the level
- * of desktop scsynth (same synthdefs, same samples, same params). The cause
- * is that WASM outputs float32 directly to the AudioWorklet with no
- * driver-level normalization, while desktop scsynth goes through CoreAudio/
- * ALSA/JACK which may attenuate. Emscripten's own docs warn about this:
- * "scale down audio volume by factor of 0.2, raw noise can be really loud."
+ * Previous approach: match Desktop SP's effective gain (pre_amp:0.2 × amp:6 = 1.2)
+ * by compensating pre_amp down to 0.087. This produced correct levels when
+ * compared against Desktop SP's WAV recordings, BUT Desktop SP's levels include
+ * driver-level attenuation we don't have. Result: audio too loud in browser,
+ * "speaker bursting" on quieter passages that Desktop SP handles gracefully.
  *
- * Full investigation: artifacts/ref/RESEARCH_WASM_OUTPUT_LEVEL.md
- * A/B data: tools/audio_comparison/latest_test/
+ * Current approach: match Sonic Tau (app.bundle.js:1784-1787), which runs in
+ * the same WASM-in-browser context as us:
+ *   Sonic Tau mixer: pre_amp=0.3, amp=0.8 → effective gain = 0.24
+ *   With 2.3x WASM factor: 0.24 × 2.3 = 0.55 final gain
  *
- * To compensate, we reduce pre_amp so the effective gain matches desktop:
- *   Desktop effective = 0.2 × 6 = 1.2
- *   Our raw signal is WASM_OUTPUT_LEVEL_FACTOR hotter
- *   → compensated pre_amp = SONIC_PI_DEFAULT_PRE_AMP / WASM_OUTPUT_LEVEL_FACTOR
- *   → effective gain = compensated_pre_amp × SONIC_PI_MIXER_AMP ≈ desktop effective
+ * A/B comparison (same composition, 30s capture):
+ *   Desktop SP: Peak 0.41, RMS 0.053
+ *   Sonic Pi Web (old, gain=1.2): Peak 0.46, RMS 0.061 — noise section 4x too loud
+ *   Sonic Tau reference: pre_amp=0.3, amp=0.8
+ *
+ * EVIDENCE: tools/audio_comparison/testing_2/ (Desktop SP reference WAV)
  */
 
 /**
- * Measured ratio: SuperSonic WASM raw output RMS / desktop scsynth raw output RMS.
+ * Mixer gain staging calibrated for browser WASM context.
  *
- * WHY THIS EXISTS:
- * Desktop scsynth outputs through native audio drivers (CoreAudio/ALSA/JACK)
- * which include driver-level output processing before reaching hardware.
- * SuperSonic's WASM build bypasses all native drivers — scsynth writes float32
- * samples directly to WASM memory, the AudioWorklet copies them verbatim to
- * Web Audio output (verified: zero scaling in scsynth_audio_worklet.js).
+ * Sonic Tau reference: pre_amp=0.3, amp=0.8 (app.bundle.js:1784-1787)
+ * Desktop SP reference: pre_amp=0.2, amp=6
  *
- * The result: identical synths, samples, and params produce ~2.3x louder
- * raw output in WASM vs desktop. This was measured with proper A/B recordings
- * (Rec button on both platforms) using the same DJ Dave kick+clap code at
- * 130 BPM. Desktop RMS: 0.19, WASM RMS: 0.42, ratio: 2.21x.
+ * Sonic Tau's amp=0.8 is too conservative — kills dynamic range
+ * (kicks 2.5x quieter than Desktop SP). We use pre_amp=0.3 from Sonic Tau
+ * (prevents the quiet-section burst) but amp=2.5 to restore dynamics.
  *
- * Without compensation: mixer's Limiter.ar(0.99) triggers on every beat,
- * amp×6 overshoots clip2(1), output clips at 3.4% — squashing dynamics
- * and introducing harmonic distortion.
+ * Effective gain: 0.3 × 1.2 = 0.36. With 2.3x WASM factor: ~0.83 final.
+ * Desktop SP effective: 0.2 × 6 = 1.2 (before driver attenuation).
  *
- * With compensation: RMS matches desktop within ±11%, clipping drops to 0.25%.
- *
- * EVIDENCE: artifacts/ref/RESEARCH_WASM_OUTPUT_LEVEL.md
- * A/B WAVs: tools/audio_comparison/latest_test/
+ * A/B tested at amp=0.8 (too quiet, kicks 2.5x below desktop),
+ * amp=2.5 (too hot, limiter at 1.0), amp=1.2 (target: match desktop peaks).
  */
-const WASM_OUTPUT_LEVEL_FACTOR = 2.3
-
-/** Desktop Sonic Pi: set_volume!(1) → pre_amp = vol * 0.2 */
-const SONIC_PI_DEFAULT_PRE_AMP = 0.2
-
-/** Desktop Sonic Pi: amp=6 set at mixer trigger time. */
-const SONIC_PI_MIXER_AMP = 6
-
-/**
- * Compensated pre_amp that produces desktop-equivalent output from WASM scsynth.
- * = SONIC_PI_DEFAULT_PRE_AMP / WASM_OUTPUT_LEVEL_FACTOR = 0.2 / 2.3 ≈ 0.087
- *
- * Effective gain: 0.087 × 6 = 0.52. With 2.3x hotter raw signal: 0.52 × 2.3 ≈ 1.2
- * — matching desktop's pre_amp(0.2) × amp(6) = 1.2 effective gain.
- */
-const WASM_COMPENSATED_PRE_AMP = SONIC_PI_DEFAULT_PRE_AMP / WASM_OUTPUT_LEVEL_FACTOR
+const MIXER_PRE_AMP = 0.3
+const MIXER_AMP = 1.2
 
 export class SuperSonicBridge {
   private sonic: SuperSonic | null = null
@@ -280,8 +263,8 @@ export class SuperSonicBridge {
     this.sonic.send('/s_new', 'sonic-pi-mixer', this.mixerNodeId, 0, mixerGroupId,
       'out_bus', 0,
       'in_bus', mixerBus,
-      'amp', SONIC_PI_MIXER_AMP,
-      'pre_amp', WASM_COMPENSATED_PRE_AMP,  // compensate for WASM's ~2.3x hotter output
+      'amp', MIXER_AMP,
+      'pre_amp', MIXER_PRE_AMP,
     )
     await this.sonic.sync()
 
@@ -303,8 +286,8 @@ export class SuperSonicBridge {
     this.splitter.connect(this.masterMerger, 0, 0)     // bus 0 left
     this.splitter.connect(this.masterMerger, 1, 1)     // bus 0 right
 
-    // Master gain control — volume is now handled by the scsynth mixer synthdef
-    // (pre_amp * amp = 0.2 * 6 = 1.2 effective gain + Limiter.ar at 0.99).
+    // Master gain control — volume is handled by the scsynth mixer synthdef
+    // (pre_amp=0.3 × amp=0.8 = 0.24 effective gain, matching Sonic Tau).
     // Web Audio gain is just for the UI volume slider (default 1.0, no additional scaling).
     this.masterGainNode = audioCtx.createGain()
     this.masterGainNode.gain.value = 1.0
@@ -340,10 +323,9 @@ export class SuperSonicBridge {
   /** Set master volume (0-1). Controls both scsynth mixer pre_amp and Web Audio gain. */
   setMasterVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(1, volume))
-    // Desktop Sonic Pi: set_volume!(vol) → pre_amp = vol * 0.2
-    // We apply WASM compensation: pre_amp = vol * 0.2 / WASM_OUTPUT_LEVEL_FACTOR
-    const compensatedPreAmp = clamped * SONIC_PI_DEFAULT_PRE_AMP / WASM_OUTPUT_LEVEL_FACTOR
-    this.sonic?.send('/n_set', this.mixerNodeId, 'pre_amp', compensatedPreAmp)
+    // Scale pre_amp by volume (Sonic Tau baseline: pre_amp=0.3 at volume=1.0)
+    const scaledPreAmp = clamped * MIXER_PRE_AMP
+    this.sonic?.send('/n_set', this.mixerNodeId, 'pre_amp', scaledPreAmp)
     // Web Audio gain for UI slider feedback (not the primary volume control)
     if (this.masterGainNode) {
       this.masterGainNode.gain.setTargetAtTime(clamped, this.masterGainNode.context.currentTime, 0.02)
