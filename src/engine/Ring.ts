@@ -128,6 +128,21 @@ export class Ring<T> {
     return new Ring([...this.items, ...otherItems])
   }
 
+  /** Reflect: like mirror but no middle duplication for even-length. */
+  reflect(): Ring<T> { return new Ring([...this.items, ...[...this.items].reverse()]) }
+
+  /** Last n elements. */
+  take_last(n: number): Ring<T> { return new Ring(this.items.slice(-n)) }
+
+  /** Remove last n elements. */
+  drop_last(n: number): Ring<T> { return new Ring(this.items.slice(0, -n)) }
+
+  /** Sort elements (ascending). */
+  sort(): Ring<T> { return new Ring([...this.items].sort((a, b) => (a as number) - (b as number))) }
+
+  /** Multiply all elements by n (numeric rings only). */
+  scale(n: number): Ring<number> { return new Ring((this.items as number[]).map(v => v * n)) }
+
   /** Repeat the ring n times. */
   repeat(n: number): Ring<T> {
     const result: T[] = []
