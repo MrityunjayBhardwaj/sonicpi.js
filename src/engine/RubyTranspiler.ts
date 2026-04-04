@@ -736,7 +736,13 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
     const rhs = transpileLine(assignMatch[2], insideLoop, srcLine)
     // play/sample return `this` for chaining — use lastRef for node control
     if (insideLoop && /^b\.(play|sample)\(/.test(rhs)) {
-      return `${rhs}; const ${varName} = b.lastRef`
+      return `${rhs}; ${varName} = b.lastRef`
+    }
+    // Inside loops: bare assignment — Sandbox proxy captures via set trap (per-loop scope isolation).
+    // Allows reassignment (Ruby semantics) and avoids shadowing DSL functions like `note`.
+    // Outside loops: use const (no proxy scope).
+    if (insideLoop) {
+      return `${varName} = ${rhs}`
     }
     return `const ${varName} = ${rhs}`
   }
@@ -785,8 +791,9 @@ function transpileExpression(expr: string): string {
 
   // ring, knit, range, line, spread, chord, scale, note, note_range, chord_invert, chord_degree, degree, chord_names, scale_names → b.*
   result = result.replace(/\b(ring|knit|range|line|spread|chord_degree|chord_invert|chord_names|chord|scale_names|scale|note_range|note|degree)\s*\(/g, 'b.$1(')
-  // Without parens: ring 1, 2, 3 — also handles (ring ...) wrapping
-  result = result.replace(/(?<=\(|^)(ring|spread)\s+([^(].+?)(?=\)|$)/g, 'b.$1($2)')
+  // Without parens: ring 1, 2, 3 — also handles (ring/scale/chord/knit ...) wrapping
+  // Matches: `(scale :c4, :major)`, `(chord :e4, :min)`, `(knit :a, 3, :b, 1)`
+  result = result.replace(/(?<=\(|^)(ring|spread|scale|chord|knit|range|line)\s+([^(].+?)(?=\)|$)/g, 'b.$1($2)')
   // Bare note/chord_degree/degree without parens: `note n` → `b.note(n)`, `chord_degree d, n, s, 3` → `b.chord_degree(d, n, s, 3)`
   // Only match when followed by a variable/symbol/number (word char or "), not inside strings
   result = result.replace(/(?<![`"'.])(?<!\w)\b(note|chord_degree|degree|chord_invert|note_range)\s+(["\w:].*)$/g, 'b.$1($2)')
