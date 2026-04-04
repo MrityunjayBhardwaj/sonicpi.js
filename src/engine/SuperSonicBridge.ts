@@ -110,56 +110,11 @@ const COMMON_SYNTHDEFS = [
 
 
 /** Max stereo track outputs (beyond master). Channels 0-1 = master, 2-3 = track 0, etc. */
-const MAX_TRACK_OUTPUTS = 6
-const NUM_OUTPUT_CHANNELS = 2 + MAX_TRACK_OUTPUTS * 2 // 14 channels total
+const NUM_OUTPUT_CHANNELS = 2 + AUDIO_IO.MAX_TRACK_OUTPUTS * 2 // 14 channels total
 
-// ---------------------------------------------------------------------------
-// Mixer gain staging — matching Sonic Tau's browser-native output level
-// ---------------------------------------------------------------------------
-
-/**
- * WASM scsynth produces raw synth output at ~2.3x the level of desktop scsynth
- * (same synthdefs, same samples, same params). Desktop scsynth goes through
- * native audio drivers (CoreAudio/ALSA/JACK) which attenuate before reaching
- * hardware. WASM bypasses all of this — float32 directly to AudioWorklet.
- *
- * Previous approach: match Desktop SP's effective gain (pre_amp:0.2 × amp:6 = 1.2)
- * by compensating pre_amp down to 0.087. This produced correct levels when
- * compared against Desktop SP's WAV recordings, BUT Desktop SP's levels include
- * driver-level attenuation we don't have. Result: audio too loud in browser,
- * "speaker bursting" on quieter passages that Desktop SP handles gracefully.
- *
- * Current approach: match Sonic Tau (app.bundle.js:1784-1787), which runs in
- * the same WASM-in-browser context as us:
- *   Sonic Tau mixer: pre_amp=0.3, amp=0.8 → effective gain = 0.24
- *   With 2.3x WASM factor: 0.24 × 2.3 = 0.55 final gain
- *
- * A/B comparison (same composition, 30s capture):
- *   Desktop SP: Peak 0.41, RMS 0.053
- *   Sonic Pi Web (old, gain=1.2): Peak 0.46, RMS 0.061 — noise section 4x too loud
- *   Sonic Tau reference: pre_amp=0.3, amp=0.8
- *
- * EVIDENCE: tools/audio_comparison/testing_2/ (Desktop SP reference WAV)
- */
-
-/**
- * Mixer gain staging calibrated for browser WASM context.
- *
- * Sonic Tau reference: pre_amp=0.3, amp=0.8 (app.bundle.js:1784-1787)
- * Desktop SP reference: pre_amp=0.2, amp=6
- *
- * Sonic Tau's amp=0.8 is too conservative — kills dynamic range
- * (kicks 2.5x quieter than Desktop SP). We use pre_amp=0.3 from Sonic Tau
- * (prevents the quiet-section burst) but amp=2.5 to restore dynamics.
- *
- * Effective gain: 0.3 × 1.2 = 0.36. With 2.3x WASM factor: ~0.83 final.
- * Desktop SP effective: 0.2 × 6 = 1.2 (before driver attenuation).
- *
- * A/B tested at amp=0.8 (too quiet, kicks 2.5x below desktop),
- * amp=2.5 (too hot, limiter at 1.0), amp=1.2 (target: match desktop peaks).
- */
-const MIXER_PRE_AMP = 0.3
-const MIXER_AMP = 1.2
+// Gain staging, I/O, and safety parameters are centralized in config.ts.
+// See config.ts SECTION 1 (MIXER) for the full A/B calibration history.
+import { MIXER, AUDIO_IO } from './config'
 
 export class SuperSonicBridge {
   private sonic: SuperSonic | null = null
@@ -263,8 +218,11 @@ export class SuperSonicBridge {
     this.sonic.send('/s_new', 'sonic-pi-mixer', this.mixerNodeId, 0, mixerGroupId,
       'out_bus', 0,
       'in_bus', mixerBus,
-      'amp', MIXER_AMP,
-      'pre_amp', MIXER_PRE_AMP,
+      'amp', MIXER.AMP,
+      'pre_amp', MIXER.PRE_AMP,
+      'hpf', MIXER.HPF,
+      'lpf', MIXER.LPF,
+      'limiter_bypass', MIXER.LIMITER_BYPASS,
     )
     await this.sonic.sync()
 
@@ -295,8 +253,8 @@ export class SuperSonicBridge {
     // Master analyser taps the mixed stereo → gain → speakers
     // No DynamicsCompressor needed — Limiter.ar inside scsynth handles clipping prevention.
     this.analyserNode = audioCtx.createAnalyser()
-    this.analyserNode.fftSize = 2048
-    this.analyserNode.smoothingTimeConstant = 0.8
+    this.analyserNode.fftSize = AUDIO_IO.ANALYSER_FFT_SIZE
+    this.analyserNode.smoothingTimeConstant = AUDIO_IO.ANALYSER_SMOOTHING
     this.masterMerger.connect(this.analyserNode)
     this.analyserNode.connect(this.masterGainNode)
     this.masterGainNode.connect(audioCtx.destination)
@@ -324,7 +282,7 @@ export class SuperSonicBridge {
   setMasterVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(1, volume))
     // Scale pre_amp by volume (Sonic Tau baseline: pre_amp=0.3 at volume=1.0)
-    const scaledPreAmp = clamped * MIXER_PRE_AMP
+    const scaledPreAmp = clamped * MIXER.PRE_AMP
     this.sonic?.send('/n_set', this.mixerNodeId, 'pre_amp', scaledPreAmp)
     // Web Audio gain for UI slider feedback (not the primary volume control)
     if (this.masterGainNode) {
@@ -702,8 +660,8 @@ export class SuperSonicBridge {
     if (this.sonic && this.splitter) {
       const audioCtx = this.sonic.audioContext
       const analyser = audioCtx.createAnalyser()
-      analyser.fftSize = 2048
-      analyser.smoothingTimeConstant = 0.8
+      analyser.fftSize = AUDIO_IO.ANALYSER_FFT_SIZE
+      analyser.smoothingTimeConstant = AUDIO_IO.ANALYSER_SMOOTHING
 
       const merger = audioCtx.createChannelMerger(2)
       this.splitter.connect(merger, busNum, 0)
