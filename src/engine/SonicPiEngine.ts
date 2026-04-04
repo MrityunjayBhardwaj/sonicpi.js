@@ -799,6 +799,10 @@ export class SonicPiEngine {
             const bpm = task?.bpm ?? 60
             const factory = (ticks?: Map<string, number>, iteration?: number) => {
               const builder = new ProgramBuilder(iteration ?? 0, ticks)
+              // Apply the loop's synth default so QueryInterpreter shows the correct synth
+              if (task?.currentSynth && task.currentSynth !== 'beep') {
+                builder.use_synth(task.currentSynth)
+              }
               builderFn(builder)
               return { program: builder.build(), ticks: builder.getTicks() }
             }
