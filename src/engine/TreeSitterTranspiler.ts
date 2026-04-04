@@ -280,7 +280,8 @@ const BUILDER_METHODS = new Set([
   'with_fx', 'in_thread', 'at',
   'puts', 'print',
   // Random (resolved eagerly)
-  'rrand', 'rrand_i', 'rand', 'rand_i', 'choose', 'dice', 'one_in',
+  'rrand', 'rrand_i', 'rand', 'rand_i', 'choose', 'dice', 'one_in', 'rdist', 'rand_look',
+  'shuffle', 'pick',
   // Tick
   'tick', 'look', 'tick_reset', 'tick_reset_all',
   // Transpose
@@ -292,6 +293,9 @@ const BUILDER_METHODS = new Set([
   // Utility
   'factor_q', 'bools', 'play_pattern_timed', 'sample_duration',
   'hz_to_midi', 'midi_to_hz', 'quantise', 'quantize', 'octs',
+  'kill', 'play_chord', 'play_pattern',
+  'with_octave', 'with_random_seed', 'with_density',
+  'noteToMidi', 'midiToFreq', 'noteToFreq',
   // Data constructors
   'ring', 'knit', 'range', 'line', 'spread',
   'chord', 'scale', 'chord_invert', 'note', 'note_range',
