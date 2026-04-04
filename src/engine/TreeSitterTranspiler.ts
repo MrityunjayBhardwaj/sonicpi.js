@@ -179,7 +179,8 @@ function wrapBareCode(code: string): string {
   const lines = code.split('\n')
   const hasLiveLoop = lines.some(l => /^\s*live_loop\s/.test(l))
   const bareDSLPattern = /^\s*(play|sleep|sample)\s/
-  const hasBareCode = lines.some(l => bareDSLPattern.test(l))
+  const bareBlockPattern = /^\s*(\d+\.times\s+do|.*\.each\s+do|with_fx\s)/
+  const hasBareCode = lines.some(l => bareDSLPattern.test(l) || bareBlockPattern.test(l))
 
   if (!hasBareCode) return code
 
@@ -273,7 +274,7 @@ interface TranspileContext {
  */
 const BUILDER_METHODS = new Set([
   // Core
-  'play', 'sleep', 'sample', 'sync', 'cue',
+  'play', 'sleep', 'wait', 'sample', 'sync', 'cue', 'set',
   'use_synth', 'use_bpm', 'use_random_seed',
   'control', 'stop', 'live_audio',
   'with_fx', 'in_thread', 'at',
@@ -290,9 +291,11 @@ const BUILDER_METHODS = new Set([
   'use_debug',
   // Utility
   'factor_q', 'bools', 'play_pattern_timed', 'sample_duration',
+  'hz_to_midi', 'midi_to_hz', 'quantise', 'quantize', 'octs',
   // Data constructors
   'ring', 'knit', 'range', 'line', 'spread',
   'chord', 'scale', 'chord_invert', 'note', 'note_range',
+  'chord_degree', 'degree', 'chord_names', 'scale_names',
   // Budget
   '__checkBudget__',
 ])
@@ -313,7 +316,11 @@ const TOP_LEVEL_SCOPE = new Set([
   // Sample catalog
   'sample_duration', 'sample_names', 'sample_groups', 'sample_loaded',
   // Output
-  'puts', 'stop',
+  'puts', 'print', 'stop',
+  // Math / music theory
+  'hz_to_midi', 'midi_to_hz', 'quantise', 'quantize', 'octs',
+  'chord_degree', 'degree', 'chord_names', 'scale_names',
+  'current_bpm',
   // Data constructors (also on builder, but available at top level)
   'ring', 'knit', 'range', 'line', 'spread',
   'chord', 'scale', 'chord_invert', 'note', 'note_range',
@@ -335,6 +342,15 @@ const UNIMPLEMENTED_DSL = new Set([
 const BARE_CALLABLE = new Set([
   'tick', 'look', 'stop', 'tick_reset_all',
   'rand', 'rand_i',
+  'chord_names', 'scale_names',
+])
+
+/**
+ * Top-level no-arg functions that Ruby calls without parens.
+ * These do NOT get the `b.` prefix — they're captured from enclosing scope.
+ */
+const BARE_CALLABLE_TOP_LEVEL = new Set([
+  'current_bpm',
 ])
 
 // Synth names that can be used as bare commands: `beep 60`
@@ -453,6 +469,11 @@ function transpileNode(node: any, ctx: TranspileContext): string {
       if (BARE_CALLABLE.has(name)) {
         const prefix = ctx.insideLoop ? 'b.' : ''
         return `${prefix}${name}()`
+      }
+
+      // Top-level bare callables — no b. prefix, just append ()
+      if (BARE_CALLABLE_TOP_LEVEL.has(name)) {
+        return `${name}()`
       }
 
       return name
@@ -764,15 +785,27 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
   const children = node.namedChildren
 
   // Check if there are bare DSL calls at the top level
+  // Also detect .times do, .each do blocks, and bare with_fx (no live_loop inside)
   const hasBareCode = children.some((c: any) => {
     if (c.type === 'call' || c.type === 'method_call') {
       const method = c.childForFieldName('method')?.text ?? c.namedChildren[0]?.text
-      return BARE_DSL_CALLS.has(method)
+      if (BARE_DSL_CALLS.has(method)) return true
+      // .times do / .each do — method_call on a receiver
+      if (method === 'times' || method === 'each') return true
     }
     return false
   })
+  // Also check for bare with_fx that doesn't contain live_loops
+  const hasBareFx = children.some((c: any) => {
+    if (c.type !== 'call' && c.type !== 'method_call') return false
+    const method = c.childForFieldName('method')?.text ?? c.namedChildren[0]?.text
+    if (method !== 'with_fx') return false
+    // Check if with_fx contains a live_loop — if so, it's a block, not bare
+    const text = c.text ?? ''
+    return !/live_loop/.test(text)
+  })
 
-  if (!hasBareCode) {
+  if (!hasBareCode && !hasBareFx) {
     // No wrapping needed — transpile all children normally
     return transpileChildren(node, ctx)
   }
@@ -791,9 +824,12 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
       ? (child.childForFieldName('method')?.text ?? child.namedChildren[0]?.text)
       : null
 
+    // Bare with_fx (no live_loop inside) should be treated as bare code, not a block
+    const isBareFxNode = method === 'with_fx' && !/live_loop/.test(child.text ?? '')
+
     if (method && TOP_LEVEL_SETTINGS.has(method)) {
       topLevel.push(child)
-    } else if (method && (method === 'live_loop' || method === 'define' || method === 'with_fx' ||
+    } else if (method && !isBareFxNode && (method === 'live_loop' || method === 'define' || method === 'with_fx' ||
                           method === 'in_thread' || method === 'uncomment' || method === 'comment')) {
       blocks.push(child)
     } else {

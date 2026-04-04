@@ -14,8 +14,8 @@ import { SoundEventStream } from './SoundEventStream'
 import { ring, knit, range, line } from './Ring'
 import { MidiBridge } from './MidiBridge'
 import { spread } from './EuclideanRhythm'
-import { noteToMidi, midiToFreq, noteToFreq } from './NoteToFreq'
-import { chord, scale, chord_invert, note, note_range } from './ChordScale'
+import { noteToMidi, midiToFreq, noteToFreq, hzToMidi } from './NoteToFreq'
+import { chord, scale, chord_invert, note, note_range, chord_degree, degree, chord_names, scale_names } from './ChordScale'
 import { getSampleNames, getCategories } from './SampleCatalog'
 import type { Program } from './Program'
 
@@ -359,6 +359,7 @@ export class SonicPiEngine {
             printHandler: this.printHandler ?? undefined,
             nodeRefMap: this.nodeRefMap,
             reusableFx: this.reusableFx,
+            globalStore: this.globalStore,
           })
 
           // Auto-cue the loop name after each iteration.
@@ -562,14 +563,30 @@ export class SonicPiEngine {
       const get_note_on = (channel: number = 1) => this.midiBridge.getLastNoteOn(channel)
       const get_note_off = (channel: number = 1) => this.midiBridge.getLastNoteOff(channel)
 
+      // Top-level print alias (same as puts)
+      const topLevelPrint = topLevelPuts
+
+      // Top-level current_bpm — returns the current default BPM
+      const current_bpm = (): number => defaultBpm
+
+      // Pure math helpers (no engine state needed)
+      const quantise = (val: number, step: number): number => Math.round(val / step) * step
+      const quantize = quantise
+      const octs = (n: number, numOctaves: number = 1): number[] =>
+        Array.from({ length: numOctaves }, (_, i) => n + i * 12)
+
       // Build DSL parameter names and values for the executor
       const dslNames = [
         'live_loop', 'with_fx', 'use_bpm', 'use_synth', 'use_random_seed',
         'in_thread', 'at', 'density',
         'ring', 'knit', 'range', 'line', 'spread',
         'chord', 'scale', 'chord_invert', 'note', 'note_range',
+        'chord_degree', 'degree', 'chord_names', 'scale_names',
         'noteToMidi', 'midiToFreq', 'noteToFreq',
-        'puts', 'stop', 'stop_loop',
+        'hz_to_midi', 'midi_to_hz',
+        'quantise', 'quantize', 'octs',
+        'current_bpm',
+        'puts', 'print', 'stop', 'stop_loop',
         // Global store
         'get', 'set',
         // Sample catalog
@@ -588,8 +605,12 @@ export class SonicPiEngine {
         topLevelInThread, topLevelAt, topLevelDensity,
         ring, knit, range, line, spread,
         chord, scale, chord_invert, note, note_range,
+        chord_degree, degree, chord_names, scale_names,
         noteToMidi, midiToFreq, noteToFreq,
-        topLevelPuts, topLevelStop, stop_loop,
+        hzToMidi, midiToFreq,
+        quantise, quantize, octs,
+        current_bpm,
+        topLevelPuts, topLevelPrint, topLevelStop, stop_loop,
         // Global store
         get, set,
         // Sample catalog

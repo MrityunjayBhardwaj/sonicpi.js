@@ -118,7 +118,9 @@ export function createIsolatedExecutor(
 
   // Wrap code in with(scope) block — this routes all lookups through the proxy
   // Note: `with` is forbidden in strict mode, so we do NOT use "use strict"
-  const wrappedCode = `with(__scope__) { return (async () => {\n${transpiledCode}\n})(); }`
+  // Polyfill: Ruby's Hash#merge → JS Object spread. Injected so `opts.merge({amp: 1})` works.
+  const mergePolyfill = `if (!Object.prototype.merge) { Object.defineProperty(Object.prototype, 'merge', { value: function(other) { return {...this, ...other}; }, writable: true, configurable: true, enumerable: false }); }\n`
+  const wrappedCode = `with(__scope__) { return (async () => {\n${mergePolyfill}${transpiledCode}\n})(); }`
 
   try {
     const fn = new Function('__scope__', wrappedCode)

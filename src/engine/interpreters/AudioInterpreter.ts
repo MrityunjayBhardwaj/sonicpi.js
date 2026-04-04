@@ -42,6 +42,8 @@ export interface AudioContext {
    * stacking from overlapping echo/delay/reverb nodes. See issue #70.
    */
   reusableFx: Map<string, ReusableFxState>
+  /** Global store for set/get — deferred set steps write here at runtime. */
+  globalStore?: Map<string | symbol, unknown>
 }
 
 /**
@@ -167,6 +169,13 @@ export async function runProgram(
 
       case 'cue':
         ctx.scheduler.fireCue(step.name, ctx.taskId, step.args ?? [])
+        break
+
+      case 'set':
+        // Deferred set — fires at runtime, interleaved with sleeps
+        if (ctx.globalStore) {
+          ctx.globalStore.set(step.key, step.value)
+        }
         break
 
       case 'sync':

@@ -1,0 +1,402 @@
+[
+  {
+    "name": "basic_play_note",
+    "code": "play 60\nsleep 1\nplay 64\nsleep 1\nplay 67\nsleep 1"
+  },
+  {
+    "name": "basic_melody",
+    "code": "play 72\nsleep 0.5\nplay 70\nsleep 0.5\nplay 67\nsleep 0.5\nplay 63\nsleep 0.5\nplay 60\nsleep 1"
+  },
+  {
+    "name": "basic_rest_pattern",
+    "code": "play 60\nsleep 0.5\nsleep 0.5\nplay 64\nsleep 0.5\nsleep 0.5\nplay 67\nsleep 1"
+  },
+  {
+    "name": "basic_amp_variation",
+    "code": "play 60, amp: 0.3\nsleep 0.5\nplay 60, amp: 0.6\nsleep 0.5\nplay 60, amp: 1.0\nsleep 0.5"
+  },
+  {
+    "name": "basic_pan_stereo",
+    "code": "play 60, pan: -1\nsleep 0.5\nplay 60, pan: 0\nsleep 0.5\nplay 60, pan: 1\nsleep 0.5"
+  },
+  {
+    "name": "basic_release_control",
+    "code": "play 60, release: 2\nsleep 2\nplay 64, release: 0.5\nsleep 1\nplay 67, release: 4\nsleep 4"
+  },
+  {
+    "name": "basic_attack_release",
+    "code": "play 60, attack: 0.5, release: 1\nsleep 2\nplay 64, attack: 1, release: 2\nsleep 3"
+  },
+  {
+    "name": "basic_sustain",
+    "code": "play 60, attack: 0.1, sustain: 1, release: 0.5\nsleep 2\nplay 67, attack: 0.1, sustain: 0.5, release: 1\nsleep 2"
+  },
+  {
+    "name": "basic_descending_scale",
+    "code": "play 72\nsleep 0.25\nplay 71\nsleep 0.25\nplay 69\nsleep 0.25\nplay 67\nsleep 0.25\nplay 65\nsleep 0.25\nplay 64\nsleep 0.25\nplay 62\nsleep 0.25\nplay 60\nsleep 1"
+  },
+  {
+    "name": "basic_octaves",
+    "code": "play :c3\nsleep 0.5\nplay :c4\nsleep 0.5\nplay :c5\nsleep 0.5\nplay :c6\nsleep 0.5"
+  },
+  {
+    "name": "sample_kick",
+    "code": "sample :bd_haus\nsleep 0.5\nsample :bd_haus\nsleep 0.5\nsample :bd_haus\nsleep 0.5\nsample :bd_haus\nsleep 0.5"
+  },
+  {
+    "name": "sample_snare_kick",
+    "code": "sample :bd_haus\nsleep 0.5\nsample :sn_dub\nsleep 0.5\nsample :bd_haus\nsleep 0.5\nsample :sn_dub\nsleep 0.5"
+  },
+  {
+    "name": "sample_hihat",
+    "code": "4.times do\n  sample :hat_bdu\n  sleep 0.25\nend"
+  },
+  {
+    "name": "sample_amen_break",
+    "code": "sample :loop_amen\nsleep sample_duration(:loop_amen)"
+  },
+  {
+    "name": "sample_rate_change",
+    "code": "sample :bd_808, rate: 1\nsleep 0.5\nsample :bd_808, rate: 0.5\nsleep 0.5\nsample :bd_808, rate: 2\nsleep 0.5"
+  },
+  {
+    "name": "sample_choir",
+    "code": "sample :ambi_choir, amp: 0.8\nsleep 3"
+  },
+  {
+    "name": "sample_bass_hit",
+    "code": "sample :bass_hit_c\nsleep 1\nsample :bass_hit_c, rate: 0.8\nsleep 1"
+  },
+  {
+    "name": "sample_cymbal",
+    "code": "sample :drum_cymbal_open\nsleep 1\nsample :drum_cymbal_open, amp: 0.5\nsleep 1"
+  },
+  {
+    "name": "sample_bell",
+    "code": "sample :perc_bell\nsleep 0.5\nsample :perc_bell, rate: 1.5\nsleep 0.5\nsample :perc_bell, rate: 0.75\nsleep 0.5"
+  },
+  {
+    "name": "sample_reverse",
+    "code": "sample :loop_amen, rate: -1\nsleep sample_duration(:loop_amen)"
+  },
+  {
+    "name": "loop_basic_kick",
+    "code": "live_loop :kick do\n  sample :bd_haus\n  sleep 0.5\nend"
+  },
+  {
+    "name": "loop_beat",
+    "code": "live_loop :beat do\n  sample :bd_haus\n  sleep 0.5\n  sample :sn_dub\n  sleep 0.5\nend"
+  },
+  {
+    "name": "loop_melody",
+    "code": "live_loop :melody do\n  play 60\n  sleep 0.25\n  play 64\n  sleep 0.25\n  play 67\n  sleep 0.25\n  play 72\n  sleep 0.25\nend"
+  },
+  {
+    "name": "loop_hihat",
+    "code": "live_loop :hats do\n  sample :hat_bdu, amp: 0.5\n  sleep 0.25\nend"
+  },
+  {
+    "name": "loop_two_layers",
+    "code": "live_loop :bass do\n  sample :bd_haus\n  sleep 0.5\nend\n\nlive_loop :hats do\n  sample :hat_bdu, amp: 0.4\n  sleep 0.25\nend"
+  },
+  {
+    "name": "loop_counter",
+    "code": "live_loop :counter do\n  play 60\n  sleep 0.5\n  play 64\n  sleep 0.5\n  play 67\n  sleep 0.5\n  play 60\n  sleep 0.5\nend"
+  },
+  {
+    "name": "loop_conditional",
+    "code": "live_loop :pattern do\n  sample :bd_haus\n  sleep 0.25\n  sample :hat_bdu, amp: 0.3\n  sleep 0.25\nend"
+  },
+  {
+    "name": "loop_with_times",
+    "code": "live_loop :riff do\n  3.times do\n    play 60\n    sleep 0.25\n  end\n  play 67\n  sleep 0.25\nend"
+  },
+  {
+    "name": "loop_amen_slice",
+    "code": "live_loop :amen do\n  sample :loop_amen, beat_stretch: 2\n  sleep 2\nend"
+  },
+  {
+    "name": "loop_simple_bass",
+    "code": "live_loop :bass do\n  use_synth :tb303\n  play 36, release: 0.3, cutoff: 80\n  sleep 0.5\nend"
+  },
+  {
+    "name": "synth_saw",
+    "code": "use_synth :saw\nplay 60, release: 1\nsleep 1\nplay 64, release: 1\nsleep 1"
+  },
+  {
+    "name": "synth_prophet",
+    "code": "use_synth :prophet\nplay 60, release: 1.5\nsleep 2\nplay 48, release: 2\nsleep 2"
+  },
+  {
+    "name": "synth_tb303",
+    "code": "use_synth :tb303\nplay 36, cutoff: 90, release: 0.5\nsleep 0.5\nplay 36, cutoff: 70, release: 0.5\nsleep 0.5\nplay 36, cutoff: 110, release: 0.5\nsleep 0.5"
+  },
+  {
+    "name": "synth_supersaw",
+    "code": "use_synth :supersaw\nplay 60, release: 2, amp: 0.5\nsleep 2"
+  },
+  {
+    "name": "synth_pluck",
+    "code": "use_synth :pluck\nplay 60\nsleep 0.5\nplay 64\nsleep 0.5\nplay 67\nsleep 0.5"
+  },
+  {
+    "name": "synth_pretty_bell",
+    "code": "use_synth :pretty_bell\nplay 72, release: 2\nsleep 1\nplay 76, release: 2\nsleep 1"
+  },
+  {
+    "name": "synth_piano",
+    "code": "use_synth :piano\nplay 60, amp: 0.8\nsleep 0.5\nplay 64, amp: 0.8\nsleep 0.5\nplay 67, amp: 0.8\nsleep 0.5"
+  },
+  {
+    "name": "synth_hollow",
+    "code": "use_synth :hollow\nplay 60, release: 3\nsleep 3"
+  },
+  {
+    "name": "synth_blade",
+    "code": "use_synth :blade\nplay 60, release: 1.5, amp: 0.6\nsleep 2\nplay 67, release: 1.5, amp: 0.6\nsleep 2"
+  },
+  {
+    "name": "synth_dark_ambience",
+    "code": "use_synth :dark_ambience\nplay 48, release: 4, amp: 0.5\nsleep 4"
+  },
+  {
+    "name": "chord_major",
+    "code": "play chord(:c4, :major)\nsleep 1"
+  },
+  {
+    "name": "chord_minor",
+    "code": "play chord(:a3, :minor)\nsleep 1"
+  },
+  {
+    "name": "chord_dom7",
+    "code": "play chord(:g3, :dom7)\nsleep 1"
+  },
+  {
+    "name": "chord_progression",
+    "code": "play chord(:c4, :major)\nsleep 1\nplay chord(:f4, :major)\nsleep 1\nplay chord(:g4, :major)\nsleep 1\nplay chord(:c4, :major)\nsleep 1"
+  },
+  {
+    "name": "scale_major_play",
+    "code": "scale(:c4, :major).each do |n|\n  play n\n  sleep 0.25\nend"
+  },
+  {
+    "name": "scale_minor_pentatonic",
+    "code": "scale(:a3, :minor_pentatonic).each do |n|\n  play n\n  sleep 0.25\nend"
+  },
+  {
+    "name": "scale_blues",
+    "code": "use_synth :tb303\nscale(:e3, :blues).each do |n|\n  play n, release: 0.3, cutoff: 90\n  sleep 0.25\nend"
+  },
+  {
+    "name": "chord_arpeggiate",
+    "code": "chord(:c4, :minor7).each do |n|\n  play n\n  sleep 0.25\nend"
+  },
+  {
+    "name": "scale_dorian",
+    "code": "use_synth :saw\nscale(:d4, :dorian).each do |n|\n  play n, release: 0.3, amp: 0.6\n  sleep 0.25\nend"
+  },
+  {
+    "name": "chord_dim_aug",
+    "code": "play chord(:b3, :dim)\nsleep 1\nplay chord(:c4, :aug)\nsleep 1"
+  },
+  {
+    "name": "fx_reverb",
+    "code": "with_fx :reverb, room: 0.8 do\n  play 60\n  sleep 0.5\n  play 64\n  sleep 0.5\n  play 67\n  sleep 0.5\nend"
+  },
+  {
+    "name": "fx_echo",
+    "code": "with_fx :echo, phase: 0.25, decay: 4 do\n  play 60\n  sleep 1\n  play 72\n  sleep 1\nend"
+  },
+  {
+    "name": "fx_distortion",
+    "code": "with_fx :distortion, distort: 0.5 do\n  use_synth :saw\n  play 48, release: 1\n  sleep 1\nend"
+  },
+  {
+    "name": "fx_slicer",
+    "code": "with_fx :slicer, phase: 0.25 do\n  use_synth :supersaw\n  play 60, sustain: 2, release: 0\n  sleep 2\nend"
+  },
+  {
+    "name": "fx_flanger",
+    "code": "with_fx :flanger, feedback: 0.5 do\n  use_synth :saw\n  play 60, release: 2\n  sleep 2\nend"
+  },
+  {
+    "name": "fx_wobble",
+    "code": "with_fx :wobble, phase: 0.5 do\n  use_synth :tb303\n  play 36, release: 2, cutoff: 100\n  sleep 2\nend"
+  },
+  {
+    "name": "fx_lpf",
+    "code": "with_fx :lpf, cutoff: 80 do\n  sample :loop_amen, beat_stretch: 2\n  sleep 2\nend"
+  },
+  {
+    "name": "fx_hpf",
+    "code": "with_fx :hpf, cutoff: 90 do\n  sample :loop_amen, beat_stretch: 2\n  sleep 2\nend"
+  },
+  {
+    "name": "fx_bitcrusher",
+    "code": "with_fx :bitcrusher, bits: 8 do\n  play 60\n  sleep 0.5\n  play 64\n  sleep 0.5\n  play 67\n  sleep 0.5\nend"
+  },
+  {
+    "name": "fx_nested_reverb_echo",
+    "code": "with_fx :reverb, room: 0.7 do\n  with_fx :echo, phase: 0.25, decay: 2 do\n    play 72\n    sleep 1\n  end\nend"
+  },
+  {
+    "name": "random_rrand",
+    "code": "5.times do\n  play rrand(48, 72)\n  sleep 0.5\nend"
+  },
+  {
+    "name": "random_rrand_i",
+    "code": "8.times do\n  play rrand_i(60, 84)\n  sleep 0.25\nend"
+  },
+  {
+    "name": "random_choose",
+    "code": "8.times do\n  play choose([60, 64, 67, 72])\n  sleep 0.25\nend"
+  },
+  {
+    "name": "random_dice",
+    "code": "8.times do\n  play 60 + dice(12)\n  sleep 0.25\nend"
+  },
+  {
+    "name": "random_one_in",
+    "code": "live_loop :maybe do\n  sample :bd_haus if one_in(2)\n  sample :hat_bdu if one_in(3)\n  sleep 0.25\nend"
+  },
+  {
+    "name": "random_amp",
+    "code": "live_loop :ghost do\n  play 60, amp: rrand(0.1, 0.8)\n  sleep 0.5\nend"
+  },
+  {
+    "name": "random_seed",
+    "code": "use_random_seed 42\n8.times do\n  play rrand_i(60, 84)\n  sleep 0.25\nend"
+  },
+  {
+    "name": "random_cutoff",
+    "code": "use_synth :tb303\nlive_loop :acid do\n  play 36, cutoff: rrand(60, 120), release: 0.25\n  sleep 0.25\nend"
+  },
+  {
+    "name": "random_choose_scale",
+    "code": "live_loop :rand_scale do\n  play choose(scale(:c4, :minor_pentatonic))\n  sleep 0.25\nend"
+  },
+  {
+    "name": "random_sleep_variation",
+    "code": "live_loop :varied do\n  play 60\n  sleep [0.25, 0.5, 0.75].choose\nend"
+  },
+  {
+    "name": "tick_ring_basic",
+    "code": "live_loop :tick_test do\n  play (ring 60, 64, 67, 72).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "tick_ring_melody",
+    "code": "live_loop :riff do\n  use_synth :pluck\n  play (ring 60, 63, 67, 60, 65, 67, 70, 67).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "tick_ring_samples",
+    "code": "live_loop :drums do\n  sample (ring :bd_haus, :hat_bdu, :sn_dub, :hat_bdu).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "tick_ring_amp",
+    "code": "live_loop :pulse do\n  play 60, amp: (ring 0.8, 0.3, 0.5, 0.3).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "tick_ring_sleep",
+    "code": "live_loop :rhythm do\n  play 60\n  sleep (ring 0.25, 0.25, 0.5, 0.25, 0.25, 0.5).tick\nend"
+  },
+  {
+    "name": "tick_scale_walk",
+    "code": "live_loop :walk do\n  play (scale :c4, :major).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "tick_chord_arp",
+    "code": "live_loop :arp do\n  use_synth :pretty_bell\n  play (chord :e4, :minor7).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "tick_ring_synths",
+    "code": "live_loop :synth_cycle do\n  use_synth (ring :beep, :saw, :pluck, :tb303).tick\n  play 60, release: 0.3\n  sleep 0.5\nend"
+  },
+  {
+    "name": "tick_knit_pattern",
+    "code": "live_loop :knit_beat do\n  sample (knit :bd_haus, 3, :sn_dub, 1).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "tick_spread_euclidean",
+    "code": "live_loop :euclidean do\n  sample :bd_haus if (spread 3, 8).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "bpm_120",
+    "code": "use_bpm 120\nlive_loop :fast do\n  play 60\n  sleep 0.25\n  play 67\n  sleep 0.25\nend"
+  },
+  {
+    "name": "bpm_80_slow",
+    "code": "use_bpm 80\nplay 60\nsleep 1\nplay 64\nsleep 1\nplay 67\nsleep 1\nplay 72\nsleep 1"
+  },
+  {
+    "name": "bpm_140_dnb",
+    "code": "use_bpm 140\nlive_loop :dnb do\n  sample :bd_haus\n  sleep 0.5\n  sample :sn_dub\n  sleep 0.5\nend"
+  },
+  {
+    "name": "timing_16th_notes",
+    "code": "use_bpm 100\nlive_loop :hats16 do\n  sample :hat_bdu, amp: 0.4\n  sleep 0.25\nend"
+  },
+  {
+    "name": "timing_triplets",
+    "code": "use_bpm 90\n3.times do\n  play 60\n  sleep 1.0/3\nend\nsleep 0.5"
+  },
+  {
+    "name": "timing_dotted",
+    "code": "use_bpm 100\nplay 60\nsleep 0.75\nplay 64\nsleep 0.25\nplay 67\nsleep 0.75\nplay 72\nsleep 0.25"
+  },
+  {
+    "name": "bpm_fast_arps",
+    "code": "use_bpm 160\nuse_synth :pluck\nlive_loop :fast_arp do\n  play (scale :c4, :minor_pentatonic).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "timing_swing",
+    "code": "use_bpm 100\nlive_loop :swing do\n  sample :hat_bdu, amp: 0.6\n  sleep 0.375\n  sample :hat_bdu, amp: 0.3\n  sleep 0.125\nend"
+  },
+  {
+    "name": "timing_half_notes",
+    "code": "use_bpm 120\nuse_synth :hollow\nlive_loop :pads do\n  play chord(:c4, :sus4), release: 2\n  sleep 2\nend"
+  },
+  {
+    "name": "bpm_change_mid",
+    "code": "use_bpm 100\nplay 60\nsleep 1\nplay 64\nsleep 1\nuse_bpm 140\nplay 67\nsleep 1\nplay 72\nsleep 1"
+  },
+  {
+    "name": "combo_minimal_techno",
+    "code": "use_bpm 130\n\nlive_loop :kick do\n  sample :bd_haus\n  sleep 1\nend\n\nlive_loop :hats do\n  sleep 0.5\n  sample :hat_bdu, amp: 0.4\n  sleep 0.5\nend\n\nlive_loop :bass do\n  use_synth :tb303\n  play 36, cutoff: rrand(60, 110), release: 0.25\n  sleep 0.5\nend"
+  },
+  {
+    "name": "combo_ambient_pad",
+    "code": "use_bpm 60\n\nlive_loop :pad do\n  use_synth :hollow\n  with_fx :reverb, room: 0.9 do\n    play choose(chord(:a3, :minor7)), release: 4, amp: 0.5\n    sleep 2\n  end\nend"
+  },
+  {
+    "name": "combo_drum_and_bass",
+    "code": "use_bpm 170\n\nlive_loop :drums do\n  sample :bd_haus\n  sleep 0.5\n  sample :sn_dub\n  sleep 0.25\n  sample :bd_haus\n  sleep 0.25\nend\n\nlive_loop :bass do\n  use_synth :tb303\n  play (ring 36, 36, 39, 34).tick, cutoff: 80, release: 0.2\n  sleep 0.25\nend"
+  },
+  {
+    "name": "combo_house_groove",
+    "code": "use_bpm 124\n\nlive_loop :kick do\n  sample :bd_haus\n  sleep 1\nend\n\nlive_loop :clap do\n  sleep 1\n  sample :sn_dub\n  sleep 1\nend\n\nlive_loop :hats do\n  sample :hat_bdu, amp: (ring 0.5, 0.3, 0.5, 0.3).tick\n  sleep 0.25\nend"
+  },
+  {
+    "name": "combo_pluck_melody",
+    "code": "use_bpm 110\n\nlive_loop :melody do\n  use_synth :pluck\n  with_fx :echo, phase: 0.375, decay: 3 do\n    play (scale :e4, :minor_pentatonic).tick, amp: 0.7\n    sleep 0.5\n  end\nend\n\nlive_loop :beat do\n  sample :bd_808\n  sleep 0.5\nend"
+  },
+  {
+    "name": "combo_sync_cue",
+    "code": "live_loop :metro do\n  cue :tick\n  sleep 1\nend\n\nlive_loop :player do\n  sync :tick\n  play 60\n  sleep 0.5\n  play 67\n  sleep 0.5\nend"
+  },
+  {
+    "name": "combo_fx_chain",
+    "code": "use_bpm 100\n\nlive_loop :fx_demo do\n  with_fx :reverb, room: 0.6 do\n    with_fx :distortion, distort: 0.3 do\n      use_synth :saw\n      play (ring 48, 51, 55, 48).tick, release: 0.3\n      sleep 0.25\n    end\n  end\nend"
+  },
+  {
+    "name": "combo_piano_chords",
+    "code": "use_synth :piano\n\nlive_loop :chords do\n  play chord((ring :c4, :f4, :g4, :c4).tick, :major), amp: 0.6\n  sleep 2\nend\n\nlive_loop :kick do\n  sample :bd_808\n  sleep 1\nend"
+  },
+  {
+    "name": "combo_prophet_pad",
+    "code": "use_bpm 72\n\nlive_loop :prophet_pad do\n  use_synth :prophet\n  with_fx :reverb, room: 0.8 do\n    play chord(:d3, :minor7), release: 4, amp: 0.4\n    sleep 4\n  end\nend\n\nlive_loop :bell do\n  use_synth :pretty_bell\n  play choose(scale(:d5, :minor_pentatonic)), amp: 0.3\n  sleep (ring 0.5, 1, 0.5, 1.5).tick\nend"
+  },
+  {
+    "name": "combo_euclidean_beat",
+    "code": "use_bpm 120\n\nlive_loop :euclidean_kick do\n  sample :bd_haus if (spread 5, 8).tick\n  sleep 0.25\nend\n\nlive_loop :euclidean_hat do\n  sample :hat_bdu, amp: 0.4 if (spread 7, 16).tick\n  sleep 0.125\nend"
+  }
+]

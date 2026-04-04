@@ -22,10 +22,12 @@ import { parseAndTranspile as _parseAndTranspile } from './Parser'
 
 // DSL functions that need `b.` prefix (builder chain — all synchronous)
 const BUILDER_FUNCTIONS = new Set([
-  'play', 'sleep', 'sample', 'sync',
+  'play', 'sleep', 'wait', 'sample', 'sync',
   'use_synth', 'use_bpm', 'use_random_seed',
   'cue', 'rrand', 'rrand_i', 'choose', 'dice',
   'ring', 'spread', 'note',
+  'hz_to_midi', 'midi_to_hz', 'quantise', 'quantize', 'octs',
+  'chord_degree', 'degree', 'chord_names', 'scale_names',
 ])
 
 /**
@@ -41,9 +43,10 @@ function wrapBareCode(code: string): string {
   // Check if there are any live_loop blocks
   const hasLiveLoop = lines.some(l => /^\s*live_loop\s/.test(l))
 
-  // Check for bare DSL calls (play, sleep, sample outside any block)
+  // Check for bare DSL calls (play, sleep, sample, .times do, .each do, with_fx outside any block)
   const bareDSLPattern = /^\s*(play|sleep|sample)\s/
-  const hasBareCode = lines.some(l => bareDSLPattern.test(l))
+  const bareBlockPattern = /^\s*(\d+\.times\s+do|.*\.each\s+do|with_fx\s)/
+  const hasBareCode = lines.some(l => bareDSLPattern.test(l) || bareBlockPattern.test(l))
 
   if (!hasBareCode) return code
   if (hasLiveLoop) {
@@ -573,8 +576,8 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
     return `b.play(${args})`
   }
 
-  // --- sleep duration ---
-  const sleepMatch = line.match(/^sleep\s+(.+)$/)
+  // --- sleep / wait duration ---
+  const sleepMatch = line.match(/^(?:sleep|wait)\s+(.+)$/)
   if (sleepMatch) {
     return `b.sleep(${transpileExpression(sleepMatch[1])})`
   }
@@ -703,17 +706,22 @@ function transpileExpression(expr: string): string {
   })
   result = result.replace(/#\{/g, '${')
 
-  // ring, knit, range, line, spread, chord, scale, note, note_range, chord_invert → b.*
-  result = result.replace(/\b(ring|knit|range|line|spread|chord|scale|chord_invert|note_range|note)\s*\(/g, 'b.$1(')
+  // ring, knit, range, line, spread, chord, scale, note, note_range, chord_invert, chord_degree, degree, chord_names, scale_names → b.*
+  result = result.replace(/\b(ring|knit|range|line|spread|chord_degree|chord_invert|chord_names|chord|scale_names|scale|note_range|note|degree)\s*\(/g, 'b.$1(')
   // Without parens: ring 1, 2, 3 — also handles (ring ...) wrapping
   result = result.replace(/(?<=\(|^)(ring|spread)\s+([^(].+?)(?=\)|$)/g, 'b.$1($2)')
 
-  // rrand, choose, dice, rrand_i, tick, look → b.*
-  result = result.replace(/\b(rrand_i|rrand|rand_i|rand|choose|dice|one_in)\s*\(/g, 'b.$1(')
+  // rrand, choose, dice, rrand_i, tick, look, math helpers → b.*
+  result = result.replace(/\b(rrand_i|rrand|rand_i|rand|choose|dice|one_in|hz_to_midi|midi_to_hz|quantise|quantize|octs)\s*\(/g, 'b.$1(')
   // Without parens: rrand 0, 1
   result = result.replace(/\b(rrand_i|rrand|rand_i|rand)\s+([^(].+)$/, 'b.$1($2)')
   // Bare rand / rand_i (no args, no parens) — Ruby treats as function call
   result = result.replace(/(?<!\.)(?<!\w)\b(rand_i|rand)\b(?!\s*[.()\w])/g, 'b.$1()')
+
+  // Bare no-arg DSL functions — Ruby calls these without parens
+  // Allow .method chaining after: chord_names.length → b.chord_names().length
+  result = result.replace(/(?<!\.)(?<!\w)\b(chord_names|scale_names)\b(?!\s*\()/g, 'b.$1()')
+  result = result.replace(/\bcurrent_bpm\b(?!\s*\()/g, 'current_bpm()')
 
   // Standalone tick/look (as function call, not method .tick())
   result = result.replace(/(?<!\.)(?<!\w)\btick\s*\(/g, 'b.tick(')

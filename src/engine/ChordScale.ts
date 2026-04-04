@@ -210,6 +210,67 @@ export function note_range(low: string | number, high: string | number): Ring<nu
 }
 
 /**
+ * Return the chord built on the Nth degree of a scale.
+ *
+ * chord_degree(:i, :c4, :major)  → chord(:c4, :major)
+ * chord_degree(:iii, :c4, :major) → chord(:e4, :minor)
+ *
+ * Sonic Pi uses Roman numeral symbols (:i through :vii).
+ * We also accept 1-based integer degrees for convenience.
+ */
+export function chord_degree(
+  degreeVal: string | number,
+  root: string | number,
+  scaleType: string = 'major',
+  chordNumNotes: number = 3
+): Ring<number> {
+  const idx = parseDegree(degreeVal)
+  const scaleNotes = scale(root, scaleType)
+  const scaleIntervals = SCALE_TYPES[scaleType] ?? SCALE_TYPES['major']
+  const len = scaleIntervals.length
+  if (idx < 0 || idx >= len) {
+    console.warn(`[SonicPi] chord_degree index ${idx} out of range for scale ${scaleType}`)
+    return chord(root, 'major')
+  }
+  // Build chord by stacking scale degrees (thirds by default)
+  const rootMidi = noteToMidi(root) + scaleIntervals[idx]
+  const notes: number[] = [rootMidi]
+  for (let i = 1; i < chordNumNotes; i++) {
+    const degIdx = (idx + i * 2) % len
+    const octOffset = Math.floor((idx + i * 2) / len) * 12
+    notes.push(noteToMidi(root) + scaleIntervals[degIdx] + octOffset)
+  }
+  return new Ring(notes)
+}
+
+/**
+ * Return the MIDI note at a given degree of a scale.
+ *
+ * degree(:ii, :c4, :major) → 62 (D4)
+ */
+export function degree(
+  degreeVal: string | number,
+  root: string | number,
+  scaleType: string = 'major'
+): number {
+  const idx = parseDegree(degreeVal)
+  const scaleIntervals = SCALE_TYPES[scaleType] ?? SCALE_TYPES['major']
+  const len = scaleIntervals.length
+  const octOffset = Math.floor(idx / len) * 12
+  const degIdx = ((idx % len) + len) % len
+  return noteToMidi(root) + scaleIntervals[degIdx] + octOffset
+}
+
+/** Parse a Roman numeral or integer degree to a 0-based index. */
+function parseDegree(d: string | number): number {
+  if (typeof d === 'number') return d - 1
+  const roman: Record<string, number> = {
+    i: 0, ii: 1, iii: 2, iv: 3, v: 4, vi: 5, vii: 6,
+  }
+  return roman[d.toLowerCase()] ?? 0
+}
+
+/**
  * List available chord type names.
  */
 export function chord_names(): string[] {

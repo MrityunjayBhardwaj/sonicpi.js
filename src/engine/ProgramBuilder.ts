@@ -10,10 +10,10 @@
 
 import type { Step, Program } from './Program'
 import { SeededRandom } from './SeededRandom'
-import { noteToMidi, midiToFreq } from './NoteToFreq'
+import { noteToMidi, midiToFreq, hzToMidi } from './NoteToFreq'
 import { ring, knit, range, line, Ring } from './Ring'
 import { spread } from './EuclideanRhythm'
-import { chord, scale, chord_invert, note, note_range } from './ChordScale'
+import { chord, scale, chord_invert, note, note_range, chord_degree, degree, chord_names, scale_names } from './ChordScale'
 
 /** Default maximum iterations before a loop is considered infinite. */
 export const DEFAULT_LOOP_BUDGET = 100_000
@@ -90,6 +90,11 @@ export class ProgramBuilder {
     // Reset budget on every sleep — loops with sleep are not infinite
     this._budgetRemaining = DEFAULT_LOOP_BUDGET
     return this
+  }
+
+  /** Alias for sleep — Sonic Pi accepts both. */
+  wait(beats: number): this {
+    return this.sleep(beats)
   }
 
   /**
@@ -199,6 +204,12 @@ export class ProgramBuilder {
 
   stop(): this {
     this.steps.push({ tag: 'stop' })
+    return this
+  }
+
+  /** Deferred set — fires at runtime (interleaved with sleeps). */
+  set(key: string | symbol, value: unknown): this {
+    this.steps.push({ tag: 'set', key, value })
     return this
   }
 
@@ -408,6 +419,30 @@ export class ProgramBuilder {
 
   noteToFreq(n: string | number): number {
     return midiToFreq(noteToMidi(n))
+  }
+
+  // --- Wave 1 DSL additions ---
+
+  hz_to_midi = hzToMidi
+  midi_to_hz = midiToFreq
+  chord_degree = chord_degree
+  degree = degree
+  chord_names = chord_names
+  scale_names = scale_names
+
+  /** Round val to nearest multiple of step. */
+  quantise(val: number, step: number): number {
+    return Math.round(val / step) * step
+  }
+
+  /** Alias for quantise (US spelling). */
+  quantize(val: number, step: number): number {
+    return this.quantise(val, step)
+  }
+
+  /** Generate a ring of notes spanning n octaves from root. */
+  octs(note: number, numOctaves: number = 1): Ring<number> {
+    return new Ring(Array.from({ length: numOctaves }, (_, i) => note + i * 12))
   }
 
   /** Build the final Program. */
