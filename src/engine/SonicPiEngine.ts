@@ -623,8 +623,13 @@ export class SonicPiEngine {
       const octs = (n: number, numOctaves: number = 1): number[] =>
         Array.from({ length: numOctaves }, (_, i) => n + i * 12)
 
+      // Top-level ProgramBuilder — provides tick/look/knit/etc. for code outside live_loops.
+      // Inside live_loops, the callback parameter `b` shadows this.
+      const topLevelBuilder = new ProgramBuilder()
+
       // Build DSL parameter names and values for the executor
       const dslNames = [
+        'b',
         'live_loop', 'with_fx', 'use_bpm', 'use_synth', 'use_random_seed',
         'in_thread', 'at', 'density',
         'ring', 'knit', 'range', 'line', 'spread',
@@ -655,6 +660,7 @@ export class SonicPiEngine {
         'midi_all_notes_off', 'midi_notes_off', 'midi_devices',
       ]
       const dslValues = [
+        topLevelBuilder,
         fxAwareWrappedLiveLoop, topLevelWithFx, topLevelUseBpm, topLevelUseSynth, topLevelUseRandomSeed,
         topLevelInThread, topLevelAt, topLevelDensity,
         ring, knit, range, line, spread,

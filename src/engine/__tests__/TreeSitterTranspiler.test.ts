@@ -19,6 +19,7 @@ function __spIsNote(v: unknown): v is string { return typeof v === 'string' && _
 function __spToNum(v: unknown): unknown { return __spIsNote(v) ? note(v) : v }
 function __spIsRing(v: unknown): boolean { return v != null && typeof v === 'object' && typeof (v as any).toArray === 'function' && typeof (v as any).tick === 'function' }
 function __spAdd(a: unknown, b: unknown): unknown {
+  if (a == null || b == null) return null
   a = __spToNum(a); b = __spToNum(b)
   if (__spIsRing(a) && __spIsRing(b)) return (a as Ring<any>).concat(b as Ring<any>)
   if (__spIsRing(a) && Array.isArray(b)) return (a as Ring<any>).concat(b)
@@ -29,6 +30,7 @@ function __spAdd(a: unknown, b: unknown): unknown {
   return (a as number) + (b as number)
 }
 function __spSub(a: unknown, b: unknown): unknown {
+  if (a == null || b == null) return null
   a = __spToNum(a); b = __spToNum(b)
   if (typeof a === 'number' && Array.isArray(b)) return b.map(x => (a as number) - x)
   if (Array.isArray(a) && typeof b === 'number') return a.map(x => x - (b as number))
@@ -1064,7 +1066,7 @@ end`)
   sleep 1
 end`)
       expect(result.ok).toBe(true)
-      expect(result.code).toContain('.at(b.look())')
+      expect(result.code).toContain('?.at(b.look())')
     })
   })
 })

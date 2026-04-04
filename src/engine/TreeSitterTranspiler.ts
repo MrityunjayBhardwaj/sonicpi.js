@@ -1134,15 +1134,16 @@ function transpileReceiverMethodCall(
   }
 
   // .tick / .tick() → .at(b.tick())
+  // Use optional chaining (?.) so undefined receivers (e.g. npat when no case matched) return undefined instead of crashing
   if (method === 'tick') {
     const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-    if (args) return `${recStr}.at(b.tick(${args}))`
-    return `${recStr}.at(b.tick())`
+    if (args) return `${recStr}?.at(b.tick(${args}))`
+    return `${recStr}?.at(b.tick())`
   }
 
   // .look / .look() → .at(b.look())
   if (method === 'look') {
-    return `${recStr}.at(b.look())`
+    return `${recStr}?.at(b.look())`
   }
 
   // .choose → b.choose(receiver) — works on both arrays and Rings
