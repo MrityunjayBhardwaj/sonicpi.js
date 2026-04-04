@@ -225,19 +225,23 @@ export function transpileRubyToJS(ruby: string): string {
       continue
     }
 
-    // --- with_fx :name, opts do ---
+    // --- with_fx :name, opts do [|param|] ---
     const withFxMatch = code.match(
-      /^with_fx\s+:(\w+)\s*(?:,\s*(.+?))?\s*do\s*$/
+      /^with_fx\s+:(\w+)\s*(?:,\s*(.+?))?\s*do\s*(?:\|(\w+)\|)?\s*$/
     )
     if (withFxMatch) {
       const fxName = withFxMatch[1]
       const fxOpts = withFxMatch[2] ? transpileArgs(withFxMatch[2]) : ''
+      const fxParam = withFxMatch[3] // block parameter e.g., |rev|
       const insideLoop = blockStack.includes('loop')
       const prefix = insideLoop ? 'b.' : ''
+      const callbackParams = insideLoop
+        ? (fxParam ? `(b, ${fxParam})` : '(b)')
+        : (fxParam ? `(${fxParam})` : '()')
       if (fxOpts) {
-        result.push(`${indent}${prefix}with_fx("${fxName}", ${fxOpts}, (b) => {${inlineComment}`)
+        result.push(`${indent}${prefix}with_fx("${fxName}", ${fxOpts}, ${callbackParams} => {${inlineComment}`)
       } else {
-        result.push(`${indent}${prefix}with_fx("${fxName}", (b) => {${inlineComment}`)
+        result.push(`${indent}${prefix}with_fx("${fxName}", ${callbackParams} => {${inlineComment}`)
       }
       // Top-level with_fx: body is a registration context (b=null), NOT a ProgramBuilder scope.
       // Push 'toplevel-fx' so DSL functions (use_synth, use_bpm, etc.) don't get b. prefix.
@@ -568,6 +572,9 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
   // --- stop ---
   if (line === 'stop') return `b.stop()`
 
+  // --- bare tick / tick() ---
+  if (line === 'tick' || line === 'tick()') return `b.tick()`
+
   // --- kill node ---
   const killMatch = line.match(/^kill\s+(.+)$/)
   if (killMatch) {
@@ -696,6 +703,15 @@ function transpileLine(line: string, insideLoop: boolean = true, srcLine?: numbe
   if (putsMatch) {
     const prefix = insideLoop ? 'b.' : ''
     return `${prefix}puts(${transpileExpression(putsMatch[1])})`
+  }
+
+  // --- use_synth_defaults / use_sample_defaults opts ---
+  const synthDefaultsMatch = line.match(/^(use_synth_defaults|use_sample_defaults)\s+(.+)$/)
+  if (synthDefaultsMatch) {
+    const fn = synthDefaultsMatch[1]
+    const args = transpileArgs(synthDefaultsMatch[2])
+    const prefix = insideLoop ? 'b.' : ''
+    return `${prefix}${fn}(${args})`
   }
 
   // --- set :key, value --- (deferred inside loops via b.set)
