@@ -239,6 +239,7 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
   const definedFunctions = new Set<string>()
 
   function peek(): Token { return tokens[pos] ?? { type: 'eof', value: '', line: 0, col: 0 } }
+  function peekAt(offset: number): Token | undefined { return tokens[pos + offset] }
   function advance(): Token { return tokens[pos++] }
   function at(type: Token['type'], value?: string): boolean {
     const t = peek()
@@ -327,8 +328,8 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
       return
     }
 
-    // at [times] do ... end
-    if (t.type === 'word' && t.value === 'at') {
+    // at [times] do ... end — but NOT `at = 0.2` (variable assignment)
+    if (t.type === 'word' && t.value === 'at' && !(peekAt(1)?.type === 'op' && peekAt(1)?.value === '=')) {
       parseAtBlock()
       return
     }
@@ -458,11 +459,18 @@ export function parseAndTranspile(source: string): { code: string; errors: Parse
       output.push(`${indent}${prefix}with_fx("${fxName}", (b) => {`)
     }
 
+    // Top-level with_fx: body is a registration context (b=null), NOT a ProgramBuilder scope.
+    // Only set insideLoop=true if we're already inside a loop — otherwise DSL functions
+    // (use_synth, use_bpm, etc.) must call the scope-level version without b. prefix.
+    const wasInsideLoop = insideLoop
     blockStack.push('loop')
-    const prevInsideLoop = insideLoop
-    insideLoop = true
+    if (!wasInsideLoop) {
+      // Keep insideLoop=false so use_synth/use_bpm/etc don't get b. prefix
+    } else {
+      insideLoop = true
+    }
     parseBlock()
-    insideLoop = prevInsideLoop
+    insideLoop = wasInsideLoop
     blockStack.pop()
 
     if (at('word', 'end')) advance()
@@ -1095,12 +1103,17 @@ function addBuilderPrefixes(line: string, insideLoop: boolean): string {
   // are handled by the match arms in transpileSonicPiLine and add their own b. prefix)
   // Use negative lookbehind to avoid prefixing method calls like notes.tick(
   result = result.replace(
-    /(?<!\.)(?<!b\.)\b(rrand_i|rrand|rand_i|rand|choose|dice|one_in|ring|knit|range|line|spread|chord|scale|chord_invert|note_range|note|tick|look)\s*\(/g,
+    /(?<!\.)(?<!b\.)\b(rrand_i|rrand|rand_i|rand|choose|dice|one_in|ring|knit|range|line|spread|chord_degree|chord_invert|chord_names|chord|scale_names|scale|note_range|note|degree|hz_to_midi|midi_to_hz|quantise|quantize|octs|tick|look)\s*\(/g,
     'b.$1('
   )
 
   // Bare rand / rand_i (no args, no parens) — Ruby treats as function call
   result = result.replace(/(?<!\.)(?<!b\.)\b(rand_i|rand)\b(?!\s*[.()\w])/g, 'b.$1()')
+
+  // Bare no-arg DSL functions — Ruby calls these without parens
+  // Allow .method chaining: chord_names.length → b.chord_names().length
+  result = result.replace(/(?<!\.)(?<!b\.)\b(chord_names|scale_names)\b(?!\s*\()/g, 'b.$1()')
+  result = result.replace(/\bcurrent_bpm\b(?!\s*\()/g, 'current_bpm()')
 
   // Standalone tick/look without parens (not as method: notes.tick)
   result = result.replace(/(?<!\.)(?<!b\.)\btick\b(?!\s*[.(])/g, 'b.tick()')
@@ -1176,8 +1189,8 @@ function transpileSonicPiLine(line: string, insideLoop: boolean): string {
   const playMatch = line.match(/^play\s+(.+)$/)
   if (playMatch) return `${prefix}play(${transpileArgs(playMatch[1])})`
 
-  // sleep
-  const sleepMatch = line.match(/^sleep\s+(.+)$/)
+  // sleep / wait
+  const sleepMatch = line.match(/^(?:sleep|wait)\s+(.+)$/)
   if (sleepMatch) return `${prefix}sleep(${sleepMatch[1]})`
 
   // sample
@@ -1191,6 +1204,10 @@ function transpileSonicPiLine(line: string, insideLoop: boolean): string {
   // cue
   const cueMatch = line.match(/^cue\s+"(\w+)"(.*)$/)
   if (cueMatch) return `${prefix}cue("${cueMatch[1]}"${cueMatch[2] ? `, ${cueMatch[2].trim()}` : ''})`
+
+  // set — deferred inside loops (b.set), immediate at top level
+  const setMatch = line.match(/^set\s*\(\s*"(\w+)"\s*,\s*(.+)\)$/)
+  if (setMatch) return `${prefix}set("${setMatch[1]}", ${setMatch[2]})`
 
   // control
   const controlMatch = line.match(/^control\s+(\w+)\s*,\s*(.+)$/)

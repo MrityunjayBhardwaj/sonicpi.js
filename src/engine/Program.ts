@@ -19,7 +19,9 @@ export type Step =
   | { tag: 'thread'; body: Program }
   | { tag: 'print'; message: string }
   | { tag: 'liveAudio'; name: string; opts: Record<string, number> }
+  | { tag: 'set'; key: string | symbol; value: unknown }
   | { tag: 'stop' }
+  | { tag: 'kill'; nodeRef: number }
 
 export type Program = Step[]
 

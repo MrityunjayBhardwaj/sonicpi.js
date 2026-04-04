@@ -7,7 +7,7 @@
  */
 
 import type { Program } from '../Program'
-import { normalizePlayParams, normalizeControlParams, normalizeFxParams } from '../SoundLayer'
+import { normalizePlayParams, normalizeControlParams, normalizeFxParams, resolveSynthName } from '../SoundLayer'
 
 /** Visual duration used for note events in the sound event stream (seconds). */
 const NOTE_EVENT_VISUAL_DURATION = 0.25
@@ -42,6 +42,8 @@ export interface AudioContext {
    * stacking from overlapping echo/delay/reverb nodes. See issue #70.
    */
   reusableFx: Map<string, ReusableFxState>
+  /** Global store for set/get — deferred set steps write here at runtime. */
+  globalStore?: Map<string | symbol, unknown>
 }
 
 /**
@@ -73,7 +75,7 @@ export async function runProgram(
         if ('on' in step.opts && !step.opts.on) break
 
         const audioTime = task.virtualTime + ctx.schedAheadTime
-        const synth = step.synth ?? currentSynth
+        const synth = resolveSynthName(step.synth ?? currentSynth)
         const nodeRef = nextNodeRef++
 
         if (ctx.bridge) {
@@ -142,8 +144,8 @@ export async function runProgram(
         break
 
       case 'useSynth':
-        currentSynth = step.name
-        if (task) task.currentSynth = step.name
+        currentSynth = resolveSynthName(step.name)
+        if (task) task.currentSynth = currentSynth
         break
 
       case 'useBpm':
@@ -165,8 +167,23 @@ export async function runProgram(
         break
       }
 
+      case 'kill': {
+        const killNodeId = ctx.nodeRefMap.get(step.nodeRef)
+        if (killNodeId && ctx.bridge) {
+          ctx.bridge.freeNode(killNodeId)
+        }
+        break
+      }
+
       case 'cue':
         ctx.scheduler.fireCue(step.name, ctx.taskId, step.args ?? [])
+        break
+
+      case 'set':
+        // Deferred set — fires at runtime, interleaved with sleeps
+        if (ctx.globalStore) {
+          ctx.globalStore.set(step.key, step.value)
+        }
         break
 
       case 'sync':

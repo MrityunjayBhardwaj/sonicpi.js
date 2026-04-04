@@ -179,7 +179,8 @@ function wrapBareCode(code: string): string {
   const lines = code.split('\n')
   const hasLiveLoop = lines.some(l => /^\s*live_loop\s/.test(l))
   const bareDSLPattern = /^\s*(play|sleep|sample)\s/
-  const hasBareCode = lines.some(l => bareDSLPattern.test(l))
+  const bareBlockPattern = /^\s*(\d+\.times\s+do|.*\.each\s+do|with_fx\s)/
+  const hasBareCode = lines.some(l => bareDSLPattern.test(l) || bareBlockPattern.test(l))
 
   if (!hasBareCode) return code
 
@@ -273,13 +274,14 @@ interface TranspileContext {
  */
 const BUILDER_METHODS = new Set([
   // Core
-  'play', 'sleep', 'sample', 'sync', 'cue',
+  'play', 'sleep', 'wait', 'sample', 'sync', 'cue', 'set',
   'use_synth', 'use_bpm', 'use_random_seed',
   'control', 'stop', 'live_audio',
   'with_fx', 'in_thread', 'at',
   'puts', 'print',
   // Random (resolved eagerly)
-  'rrand', 'rrand_i', 'rand', 'rand_i', 'choose', 'dice', 'one_in',
+  'rrand', 'rrand_i', 'rand', 'rand_i', 'choose', 'dice', 'one_in', 'rdist', 'rand_look',
+  'shuffle', 'pick',
   // Tick
   'tick', 'look', 'tick_reset', 'tick_reset_all',
   // Transpose
@@ -290,9 +292,14 @@ const BUILDER_METHODS = new Set([
   'use_debug',
   // Utility
   'factor_q', 'bools', 'play_pattern_timed', 'sample_duration',
+  'hz_to_midi', 'midi_to_hz', 'quantise', 'quantize', 'octs',
+  'kill', 'play_chord', 'play_pattern',
+  'with_octave', 'with_random_seed', 'with_density',
+  'noteToMidi', 'midiToFreq', 'noteToFreq',
   // Data constructors
   'ring', 'knit', 'range', 'line', 'spread',
   'chord', 'scale', 'chord_invert', 'note', 'note_range',
+  'chord_degree', 'degree', 'chord_names', 'scale_names',
   // Budget
   '__checkBudget__',
 ])
@@ -313,7 +320,17 @@ const TOP_LEVEL_SCOPE = new Set([
   // Sample catalog
   'sample_duration', 'sample_names', 'sample_groups', 'sample_loaded',
   // Output
-  'puts', 'stop',
+  'puts', 'print', 'stop',
+  // Volume & introspection
+  'set_volume', 'current_synth', 'current_volume',
+  // Catalog queries
+  'synth_names', 'fx_names', 'all_sample_names',
+  // Sample management
+  'load_sample', 'sample_info',
+  // Math / music theory
+  'hz_to_midi', 'midi_to_hz', 'quantise', 'quantize', 'octs',
+  'chord_degree', 'degree', 'chord_names', 'scale_names',
+  'current_bpm',
   // Data constructors (also on builder, but available at top level)
   'ring', 'knit', 'range', 'line', 'spread',
   'chord', 'scale', 'chord_invert', 'note', 'note_range',
@@ -335,16 +352,36 @@ const UNIMPLEMENTED_DSL = new Set([
 const BARE_CALLABLE = new Set([
   'tick', 'look', 'stop', 'tick_reset_all',
   'rand', 'rand_i',
+  'chord_names', 'scale_names',
+])
+
+/**
+ * Top-level no-arg functions that Ruby calls without parens.
+ * These do NOT get the `b.` prefix — they're captured from enclosing scope.
+ */
+const BARE_CALLABLE_TOP_LEVEL = new Set([
+  'current_bpm',
 ])
 
 // Synth names that can be used as bare commands: `beep 60`
+// Complete synth list — all 66 user-facing synths from Desktop SP synthinfo.rb
 const SYNTH_NAMES = new Set([
-  'beep', 'saw', 'prophet', 'tb303', 'supersaw', 'pluck', 'pretty_bell',
-  'piano', 'dsaw', 'dpulse', 'dtri', 'fm', 'mod_fm', 'mod_saw',
-  'mod_pulse', 'mod_tri', 'sine', 'square', 'tri', 'pulse', 'noise',
-  'pnoise', 'bnoise', 'gnoise', 'cnoise', 'chipbass', 'chiplead',
-  'chipnoise', 'dark_ambience', 'hollow', 'growl', 'zawa', 'blade',
-  'tech_saws',
+  'beep', 'sine', 'saw', 'pulse', 'subpulse', 'square', 'tri',
+  'dsaw', 'dpulse', 'dtri', 'fm', 'mod_fm', 'mod_saw', 'mod_dsaw',
+  'mod_sine', 'mod_beep', 'mod_tri', 'mod_pulse',
+  'supersaw', 'hoover', 'prophet', 'zawa', 'dark_ambience', 'growl',
+  'hollow', 'blade', 'piano', 'pluck', 'pretty_bell', 'dull_bell',
+  'tech_saws', 'winwood_lead', 'chipbass', 'chiplead', 'chipnoise',
+  'tb303', 'bass_foundation', 'bass_highend',
+  'organ_tonewheel', 'rhodey', 'rodeo', 'kalimba', 'singer',
+  'dark_sea_horn', 'gabberkick',
+  'noise', 'pnoise', 'bnoise', 'gnoise', 'cnoise',
+  'sound_in', 'sound_in_stereo',
+  'sc808_bassdrum', 'sc808_snare', 'sc808_clap',
+  'sc808_tomlo', 'sc808_tommid', 'sc808_tomhi',
+  'sc808_congalo', 'sc808_congamid', 'sc808_congahi',
+  'sc808_rimshot', 'sc808_claves', 'sc808_maracas', 'sc808_cowbell',
+  'sc808_closed_hihat', 'sc808_open_hihat', 'sc808_cymbal',
 ])
 
 // ---------------------------------------------------------------------------
@@ -455,6 +492,11 @@ function transpileNode(node: any, ctx: TranspileContext): string {
         return `${prefix}${name}()`
       }
 
+      // Top-level bare callables — no b. prefix, just append ()
+      if (BARE_CALLABLE_TOP_LEVEL.has(name)) {
+        return `${name}()`
+      }
+
       return name
     }
 
@@ -522,7 +564,17 @@ function transpileNode(node: any, ctx: TranspileContext): string {
         return `Math.pow(${transpileNode(left, ctx)}, ${transpileNode(right, ctx)})`
       }
 
-      return `${transpileNode(left, ctx)} ${jsOp} ${transpileNode(right, ctx)}`
+      const lhs = transpileNode(left, ctx)
+      const rhs = transpileNode(right, ctx)
+
+      // Sonic Pi operator helpers — handle note strings (:c3→48),
+      // Ring arithmetic (ring*3→repeat, ring+ring→concat),
+      // and note+array mapping (:c3+[0,7,11]→[48,55,59]).
+      if (op === '+') return `__spAdd(${lhs}, ${rhs})`
+      if (op === '-') return `__spSub(${lhs}, ${rhs})`
+      if (op === '*') return `__spMul(${lhs}, ${rhs})`
+
+      return `${lhs} ${jsOp} ${rhs}`
     }
 
     case 'unary': {
@@ -764,15 +816,27 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
   const children = node.namedChildren
 
   // Check if there are bare DSL calls at the top level
+  // Also detect .times do, .each do blocks, and bare with_fx (no live_loop inside)
   const hasBareCode = children.some((c: any) => {
     if (c.type === 'call' || c.type === 'method_call') {
       const method = c.childForFieldName('method')?.text ?? c.namedChildren[0]?.text
-      return BARE_DSL_CALLS.has(method)
+      if (BARE_DSL_CALLS.has(method)) return true
+      // .times do / .each do — method_call on a receiver
+      if (method === 'times' || method === 'each') return true
     }
     return false
   })
+  // Also check for bare with_fx that doesn't contain live_loops
+  const hasBareFx = children.some((c: any) => {
+    if (c.type !== 'call' && c.type !== 'method_call') return false
+    const method = c.childForFieldName('method')?.text ?? c.namedChildren[0]?.text
+    if (method !== 'with_fx') return false
+    // Check if with_fx contains a live_loop — if so, it's a block, not bare
+    const text = c.text ?? ''
+    return !/live_loop/.test(text)
+  })
 
-  if (!hasBareCode) {
+  if (!hasBareCode && !hasBareFx) {
     // No wrapping needed — transpile all children normally
     return transpileChildren(node, ctx)
   }
@@ -791,9 +855,12 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
       ? (child.childForFieldName('method')?.text ?? child.namedChildren[0]?.text)
       : null
 
+    // Bare with_fx (no live_loop inside) should be treated as bare code, not a block
+    const isBareFxNode = method === 'with_fx' && !/live_loop/.test(child.text ?? '')
+
     if (method && TOP_LEVEL_SETTINGS.has(method)) {
       topLevel.push(child)
-    } else if (method && (method === 'live_loop' || method === 'define' || method === 'with_fx' ||
+    } else if (method && !isBareFxNode && (method === 'live_loop' || method === 'define' || method === 'with_fx' ||
                           method === 'in_thread' || method === 'uncomment' || method === 'comment')) {
       blocks.push(child)
     } else {
@@ -847,7 +914,9 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
     }
 
     // --- Bare method call (no receiver) ---
-    const methodName = methodNode?.text ?? node.namedChildren[0]?.text ?? node.text
+    // Strip Ruby bang (!) from method names: set_volume! → set_volume
+    const rawMethodName = methodNode?.text ?? node.namedChildren[0]?.text ?? node.text
+    const methodName = rawMethodName.endsWith('!') ? rawMethodName.slice(0, -1) : rawMethodName
 
     // live_loop :name do ... end
     if (methodName === 'live_loop') {
@@ -1069,15 +1138,16 @@ function transpileReceiverMethodCall(
   }
 
   // .tick / .tick() → .at(b.tick())
+  // Use optional chaining (?.) so undefined receivers (e.g. npat when no case matched) return undefined instead of crashing
   if (method === 'tick') {
     const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-    if (args) return `${recStr}.at(b.tick(${args}))`
-    return `${recStr}.at(b.tick())`
+    if (args) return `${recStr}?.at(b.tick(${args}))`
+    return `${recStr}?.at(b.tick())`
   }
 
   // .look / .look() → .at(b.look())
   if (method === 'look') {
-    return `${recStr}.at(b.look())`
+    return `${recStr}?.at(b.look())`
   }
 
   // .choose → b.choose(receiver) — works on both arrays and Rings

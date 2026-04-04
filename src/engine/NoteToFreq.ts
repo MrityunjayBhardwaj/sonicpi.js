@@ -49,6 +49,14 @@ export function midiToFreq(midi: number): number {
 }
 
 /**
+ * Convert frequency in Hz to MIDI note number.
+ * 440 Hz → 69 (A4).
+ */
+export function hzToMidi(freq: number): number {
+  return SEMITONES_PER_OCTAVE * Math.log2(freq / A4_FREQ_HZ) + A4_MIDI
+}
+
+/**
  * Convert note name or number directly to frequency.
  */
 export function noteToFreq(note: string | number): number {

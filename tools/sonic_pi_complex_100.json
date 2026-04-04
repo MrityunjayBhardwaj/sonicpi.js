@@ -1,0 +1,402 @@
+[
+  {
+    "name": "multi_drums_bass_melody",
+    "code": "use_bpm 120\n\nlive_loop :drums do\n  sample :bd_haus\n  sleep 0.5\n  sample :sn_dub\n  sleep 0.5\nend\n\nlive_loop :bass, sync: :drums do\n  use_synth :tb303\n  play :c2, release: 0.3, cutoff: 80\n  sleep 0.5\n  play :c2, release: 0.3, cutoff: 60\n  sleep 0.25\n  play :eb2, release: 0.3, cutoff: 70\n  sleep 0.25\nend\n\nlive_loop :melody, sync: :drums do\n  use_synth :prophet\n  play scale(:c4, :minor_pentatonic).choose, release: 0.2, amp: 0.6\n  sleep 0.25\nend"
+  },
+  {
+    "name": "multi_four_part",
+    "code": "use_bpm 130\n\nlive_loop :metro do\n  sleep 1\nend\n\nlive_loop :kick, sync: :metro do\n  sample :bd_808, amp: 1.5\n  sleep 1\nend\n\nlive_loop :hats, sync: :metro do\n  sample :hat_bdu, amp: 0.4\n  sleep 0.25\nend\n\nlive_loop :bass, sync: :metro do\n  use_synth :dsaw\n  notes = ring(:c2, :c2, :eb2, :f2)\n  play notes.tick, release: 0.3, cutoff: 70\n  sleep 0.5\nend\n\nlive_loop :lead, sync: :metro do\n  use_synth :saw\n  play scale(:c4, :minor).choose, release: 0.15, amp: 0.4, cutoff: 90\n  sleep 0.25\nend"
+  },
+  {
+    "name": "multi_sync_cue_chain",
+    "code": "use_bpm 110\n\nlive_loop :pulse do\n  sample :bd_haus\n  cue :beat\n  sleep 0.5\nend\n\nlive_loop :snare do\n  sync :beat\n  sleep 0.5\n  sample :sn_dub\n  sleep 0.5\nend\n\nlive_loop :pad, sync: :pulse do\n  use_synth :hollow\n  play chord(:c4, :minor7), release: 4, amp: 0.3\n  sleep 4\nend"
+  },
+  {
+    "name": "multi_layered_groove",
+    "code": "use_bpm 125\n\nlive_loop :met do\n  sleep 1\nend\n\nlive_loop :kick, sync: :met do\n  sample :bd_zum, amp: 1.5\n  sleep 0.5\n  sleep 0.25\n  sample :bd_zum, amp: 0.8\n  sleep 0.25\nend\n\nlive_loop :perc, sync: :met do\n  sample :perc_snap, amp: 0.5 if one_in(3)\n  sleep 0.25\nend\n\nlive_loop :chords, sync: :met do\n  use_synth :supersaw\n  play chord(:eb3, :minor7), release: 1.5, amp: 0.3, cutoff: 80\n  sleep 2\n  play chord(:ab3, :major7), release: 1.5, amp: 0.3, cutoff: 80\n  sleep 2\nend"
+  },
+  {
+    "name": "multi_progressive_build",
+    "code": "use_bpm 128\n\nlive_loop :base do\n  sample :bd_haus\n  sleep 0.5\nend\n\nlive_loop :layer2, sync: :base do\n  sleep 8\n  sample :hat_bdu, amp: 0.3\n  sleep 0.25\nend\n\nlive_loop :layer3, sync: :base do\n  sleep 16\n  use_synth :tb303\n  play :e2, release: 0.2, cutoff: rrand(60, 100)\n  sleep 0.25\nend"
+  },
+  {
+    "name": "multi_call_response",
+    "code": "use_bpm 100\n\nlive_loop :call do\n  use_synth :pluck\n  play_pattern_timed [:c4, :e4, :g4], [0.25, 0.25]\n  sleep 1.5\nend\n\nlive_loop :response, sync: :call do\n  sleep 1\n  use_synth :piano\n  play_pattern_timed [:g4, :e4, :c4], [0.25, 0.25]\n  sleep 1.5\nend"
+  },
+  {
+    "name": "multi_world_music",
+    "code": "use_bpm 90\n\nlive_loop :tabla do\n  sample :bd_boom, amp: 0.8\n  sleep 0.5\n  sample :perc_bell, amp: 0.3, rate: 1.5\n  sleep 0.25\n  sample :perc_bell, amp: 0.2, rate: 2\n  sleep 0.25\nend\n\nlive_loop :sitar, sync: :tabla do\n  use_synth :pluck\n  play scale(:d4, :hungarian_minor).choose, release: 0.3, amp: 0.5\n  sleep 0.5\nend"
+  },
+  {
+    "name": "multi_jazz_trio",
+    "code": "use_bpm 105\n\nlive_loop :ride do\n  sample :drum_cymbal_closed, amp: 0.3\n  sleep 0.25\n  sample :drum_cymbal_closed, amp: 0.2\n  sleep 0.5\n  sample :drum_cymbal_closed, amp: 0.25\n  sleep 0.25\nend\n\nlive_loop :walking_bass, sync: :ride do\n  use_synth :fm\n  notes = ring(:c2, :e2, :f2, :g2, :a2, :g2, :f2, :e2)\n  play notes.tick, release: 0.4, amp: 0.6\n  sleep 0.5\nend\n\nlive_loop :comping, sync: :ride do\n  use_synth :piano\n  if one_in(3)\n    play chord(:c4, :dom7), release: 0.3, amp: 0.3\n  end\n  sleep 1\nend"
+  },
+  {
+    "name": "multi_ambient_layers",
+    "code": "use_bpm 70\n\nlive_loop :drone do\n  use_synth :hollow\n  play :c3, release: 8, amp: 0.3\n  sleep 8\nend\n\nlive_loop :shimmer, sync: :drone do\n  use_synth :pretty_bell\n  play scale(:c5, :major).choose, release: 2, amp: 0.15\n  sleep rrand(0.5, 2)\nend\n\nlive_loop :texture, sync: :drone do\n  sample :ambi_choir, rate: 0.5, amp: 0.2\n  sleep 4\nend"
+  },
+  {
+    "name": "multi_breakbeat",
+    "code": "use_bpm 140\n\nlive_loop :breaks do\n  sample :loop_amen, beat_stretch: 2, amp: 0.8\n  sleep 2\nend\n\nlive_loop :bass, sync: :breaks do\n  use_synth :dsaw\n  play :e1, release: 0.2, cutoff: 80, amp: 0.7\n  sleep 0.5\n  play :e1, release: 0.1, cutoff: 60, amp: 0.5\n  sleep 0.25\n  play :g1, release: 0.2, cutoff: 70, amp: 0.6\n  sleep 0.25\nend"
+  },
+  {
+    "name": "ambient_deep_space",
+    "code": "use_bpm 60\n\nwith_fx :reverb, room: 1, mix: 0.8 do\n  live_loop :space do\n    use_synth :hollow\n    play :c3, attack: 2, sustain: 4, release: 4, amp: 0.3\n    sleep 8\n    play :g2, attack: 2, sustain: 4, release: 4, amp: 0.25\n    sleep 8\n  end\nend"
+  },
+  {
+    "name": "ambient_forest",
+    "code": "use_bpm 50\n\nwith_fx :reverb, room: 0.9, mix: 0.7 do\n  with_fx :echo, phase: 0.75, decay: 4, mix: 0.5 do\n    live_loop :birds do\n      use_synth :pretty_bell\n      play rrand_i(72, 96), release: 0.5, amp: 0.2\n      sleep rrand(0.5, 3)\n    end\n  end\nend\n\nlive_loop :wind do\n  sample :ambi_dark_woosh, rate: 0.3, amp: 0.15\n  sleep 8\nend"
+  },
+  {
+    "name": "ambient_underwater",
+    "code": "use_bpm 55\n\nwith_fx :lpf, cutoff: 80 do\n  with_fx :reverb, room: 1, mix: 0.9 do\n    live_loop :deep do\n      use_synth :dark_ambience\n      play :e2, release: 8, amp: 0.4\n      sleep 8\n    end\n\n    live_loop :bubbles do\n      use_synth :sine\n      play rrand_i(60, 84), release: 0.3, amp: 0.1\n      sleep rrand(0.25, 1.5)\n    end\n  end\nend"
+  },
+  {
+    "name": "ambient_crystal",
+    "code": "with_fx :reverb, room: 0.95, mix: 0.8 do\n  with_fx :echo, phase: 0.5, decay: 6, mix: 0.4 do\n    live_loop :crystals do\n      use_synth :pretty_bell\n      notes = scale(:e4, :major)\n      play notes.choose, release: 3, amp: 0.2\n      sleep rrand(1, 4)\n    end\n  end\nend"
+  },
+  {
+    "name": "ambient_choir_pad",
+    "code": "use_bpm 60\n\nlive_loop :pad do\n  use_synth :hollow\n  with_fx :reverb, room: 0.9 do\n    play chord(:c4, :sus4), attack: 3, sustain: 4, release: 3, amp: 0.3\n    sleep 8\n    play chord(:f3, :sus2), attack: 3, sustain: 4, release: 3, amp: 0.3\n    sleep 8\n  end\nend"
+  },
+  {
+    "name": "ambient_moonlight",
+    "code": "use_bpm 65\n\nwith_fx :reverb, room: 0.9, mix: 0.7 do\n  live_loop :moon do\n    use_synth :blade\n    notes = ring(:c4, :e4, :g4, :b4, :c5)\n    play notes.tick, attack: 0.5, release: 3, amp: 0.25\n    sleep 2\n  end\nend"
+  },
+  {
+    "name": "ambient_rain",
+    "code": "live_loop :rain do\n  with_fx :reverb, room: 0.8 do\n    use_synth :noise\n    play :c4, release: 0.05, amp: rrand(0.01, 0.05)\n    sleep rrand(0.02, 0.15)\n  end\nend\n\nlive_loop :thunder do\n  sleep rrand(8, 20)\n  sample :ambi_dark_woosh, rate: 0.5, amp: 0.5\n  sleep 1\nend"
+  },
+  {
+    "name": "ambient_meditation",
+    "code": "use_bpm 50\n\nwith_fx :reverb, room: 1, mix: 0.85 do\n  live_loop :bowl do\n    use_synth :sine\n    play :c3, attack: 2, sustain: 6, release: 4, amp: 0.3\n    sleep 12\n    play :g3, attack: 2, sustain: 6, release: 4, amp: 0.25\n    sleep 12\n  end\n\n  live_loop :chime do\n    use_synth :pretty_bell\n    play scale(:c5, :major).choose, release: 4, amp: 0.1\n    sleep rrand(3, 8)\n  end\nend"
+  },
+  {
+    "name": "ambient_northern_lights",
+    "code": "use_bpm 55\n\nwith_fx :reverb, room: 0.95 do\n  live_loop :aurora do\n    use_synth :hollow\n    play chord(:a3, :minor7), attack: 1, sustain: 4, release: 2, amp: 0.3\n    sleep 8\n    play chord(:d3, :sus4), attack: 1, sustain: 4, release: 2, amp: 0.3\n    sleep 8\n  end\nend"
+  },
+  {
+    "name": "ambient_galaxy",
+    "code": "use_bpm 45\n\nwith_fx :reverb, room: 1, mix: 0.9 do\n  live_loop :stars do\n    use_synth :sine\n    play rrand_i(48, 84), attack: 1, release: rrand(2, 6), amp: 0.1\n    sleep rrand(0.5, 2)\n  end\n\n  live_loop :nebula do\n    use_synth :dark_ambience\n    play :d2, release: 12, amp: 0.3\n    sleep 12\n  end\nend"
+  },
+  {
+    "name": "drums_four_on_floor",
+    "code": "use_bpm 128\n\nlive_loop :kick do\n  sample :bd_haus, amp: 1.5\n  sleep 1\nend\n\nlive_loop :hats, sync: :kick do\n  sample :hat_bdu, amp: 0.4\n  sleep 0.5\nend\n\nlive_loop :snare, sync: :kick do\n  sleep 1\n  sample :sn_dub, amp: 0.8\n  sleep 1\nend"
+  },
+  {
+    "name": "drums_breakbeat_pattern",
+    "code": "use_bpm 135\n\nlive_loop :breaks do\n  pattern = knit(:bd_808, 3, :sn_generic, 1, :bd_808, 1, :sn_generic, 1, :bd_808, 1, :sn_generic, 1)\n  sample pattern.tick, amp: 0.8\n  sleep 0.25\nend"
+  },
+  {
+    "name": "drums_euclidean",
+    "code": "use_bpm 120\n\nlive_loop :euclid_kick do\n  sample :bd_haus, amp: 1 if spread(5, 8).tick\n  sleep 0.25\nend\n\nlive_loop :euclid_hat, sync: :euclid_kick do\n  sample :hat_bdu, amp: 0.3 if spread(7, 16).tick\n  sleep 0.125\nend"
+  },
+  {
+    "name": "drums_trap_hats",
+    "code": "use_bpm 140\n\nlive_loop :kick do\n  sample :bd_808, amp: 2\n  sleep 1\n  sleep 0.5\n  sample :bd_808, amp: 1.5\n  sleep 0.5\nend\n\nlive_loop :hats, sync: :kick do\n  sample :hat_gem, amp: rrand(0.1, 0.4), rate: rrand(0.9, 1.1)\n  sleep ring(0.25, 0.25, 0.125, 0.125, 0.25).tick\nend\n\nlive_loop :snare, sync: :kick do\n  sleep 1\n  sample :sn_generic, amp: 0.8\n  sleep 1\nend"
+  },
+  {
+    "name": "drums_latin",
+    "code": "use_bpm 110\n\nlive_loop :clave do\n  rhythm = ring(1,0,0,1,0,0,1,0,0,0,1,0,1,0,0,0)\n  sample :perc_snap, amp: 0.6 if rhythm.tick == 1\n  sleep 0.25\nend\n\nlive_loop :congas, sync: :clave do\n  sample :bd_boom, amp: 0.5, rate: 1.5\n  sleep 0.5\n  sample :bd_boom, amp: 0.3, rate: 2\n  sleep 0.25\n  sample :bd_boom, amp: 0.4, rate: 1.8\n  sleep 0.25\nend"
+  },
+  {
+    "name": "drums_industrial",
+    "code": "use_bpm 125\n\nlive_loop :metal do\n  with_fx :distortion, distort: 0.8 do\n    sample :bd_808, amp: 2\n    sleep 0.5\n    sample :elec_blip, amp: 0.3, rate: 0.5\n    sleep 0.25\n    sample :sn_generic, amp: 1.2\n    sleep 0.25\n  end\nend"
+  },
+  {
+    "name": "drums_polyrhythm",
+    "code": "use_bpm 100\n\nlive_loop :three do\n  sample :bd_haus, amp: 1\n  sleep 1.0/3\nend\n\nlive_loop :four, sync: :three do\n  sample :hat_bdu, amp: 0.4\n  sleep 0.25\nend"
+  },
+  {
+    "name": "drums_shuffle",
+    "code": "use_bpm 110\n\nlive_loop :shuffle do\n  sample :bd_haus, amp: 1.2\n  sleep 0.25\n  sample :hat_bdu, amp: 0.3\n  sleep 0.375\n  sample :hat_bdu, amp: 0.2\n  sleep 0.125\n  sample :sn_dub, amp: 0.7\n  sleep 0.25\nend"
+  },
+  {
+    "name": "drums_dnb",
+    "code": "use_bpm 170\n\nlive_loop :dnb do\n  sample :bd_haus, amp: 1.5\n  sleep 0.75\n  sample :sn_generic, amp: 1\n  sleep 0.5\n  sample :bd_haus, amp: 0.8\n  sleep 0.25\n  sleep 0.5\nend\n\nlive_loop :ride, sync: :dnb do\n  sample :drum_cymbal_closed, amp: 0.2\n  sleep 0.25\nend"
+  },
+  {
+    "name": "drums_minimal",
+    "code": "use_bpm 122\n\nlive_loop :minimal do\n  sample :bd_haus, amp: 1.2 if spread(3, 8).tick(:k)\n  sample :perc_snap, amp: 0.3 if spread(5, 8).tick(:s)\n  sleep 0.25\nend"
+  },
+  {
+    "name": "bass_acid_303",
+    "code": "use_bpm 130\nuse_synth :tb303\n\nlive_loop :acid do\n  notes = ring(:c2, :c2, :eb2, :c2, :f2, :c2, :g2, :c2)\n  play notes.tick, release: 0.2, cutoff: rrand(60, 120), res: 0.8, wave: 0\n  sleep 0.25\nend"
+  },
+  {
+    "name": "bass_sub_wobble",
+    "code": "use_bpm 140\n\nlive_loop :sub do\n  use_synth :dsaw\n  with_fx :wobble, phase: 0.5 do\n    play :e1, release: 0.8, cutoff: 70, amp: 0.8\n    sleep 1\n    play :a1, release: 0.8, cutoff: 70, amp: 0.8\n    sleep 1\n  end\nend"
+  },
+  {
+    "name": "bass_walking",
+    "code": "use_bpm 110\nuse_synth :fm\n\nlive_loop :walk do\n  notes = ring(:c2, :e2, :f2, :g2, :a2, :g2, :e2, :d2)\n  play notes.tick, release: 0.35, amp: 0.6\n  sleep 0.5\nend"
+  },
+  {
+    "name": "bass_octave_jump",
+    "code": "use_bpm 128\n\nlive_loop :bass do\n  use_synth :dsaw\n  play :c1, release: 0.15, cutoff: 80, amp: 0.8\n  sleep 0.25\n  play :c2, release: 0.1, cutoff: 90, amp: 0.6\n  sleep 0.25\n  play :c1, release: 0.15, cutoff: 80, amp: 0.8\n  sleep 0.5\nend"
+  },
+  {
+    "name": "bass_reese",
+    "code": "use_bpm 86\n\nlive_loop :reese do\n  use_synth :dsaw\n  with_fx :lpf, cutoff: rrand(50, 90) do\n    play :d1, release: 2, amp: 0.7, detune: 0.1\n    sleep 2\n    play :a1, release: 2, amp: 0.7, detune: 0.1\n    sleep 2\n  end\nend"
+  },
+  {
+    "name": "bass_slap",
+    "code": "use_bpm 100\nuse_synth :pluck\n\nlive_loop :slap do\n  notes = ring(:e2, :e2, :g2, :a2, :e2, :e2, :b2, :a2)\n  play notes.tick, release: 0.2, amp: 0.7\n  sleep 0.25\nend"
+  },
+  {
+    "name": "bass_synth_defaults",
+    "code": "use_bpm 126\nuse_synth :tb303\n\nlive_loop :defaults_bass do\n  play :c2, cutoff: 80, res: 0.6, release: 0.2\n  sleep 0.25\n  play :c2, cutoff: 80, res: 0.6, release: 0.2\n  sleep 0.25\n  play :eb2, cutoff: 80, res: 0.6, release: 0.2\n  sleep 0.5\nend"
+  },
+  {
+    "name": "bass_glide",
+    "code": "use_bpm 120\n\nlive_loop :glide do\n  use_synth :saw\n  notes = scale(:c2, :minor_pentatonic)\n  play notes.tick, release: 0.4, cutoff: 70, amp: 0.5\n  sleep 0.5\nend"
+  },
+  {
+    "name": "bass_dubstep",
+    "code": "use_bpm 140\n\nlive_loop :dub_bass do\n  use_synth :dsaw\n  with_fx :wobble, phase: 0.25 do\n    with_fx :distortion, distort: 0.3 do\n      play :e1, release: 0.5, cutoff: 80, amp: 0.6\n      sleep 0.5\n      play :e1, release: 0.25, cutoff: 60, amp: 0.4\n      sleep 0.5\n    end\n  end\nend"
+  },
+  {
+    "name": "bass_funk",
+    "code": "use_bpm 105\n\nlive_loop :funk_bass do\n  use_synth :fm\n  play :e2, release: 0.1, amp: 0.7\n  sleep 0.25\n  sleep 0.125\n  play :e2, release: 0.1, amp: 0.5\n  sleep 0.125\n  play :g2, release: 0.2, amp: 0.6\n  sleep 0.25\n  play :a2, release: 0.15, amp: 0.7\n  sleep 0.25\nend"
+  },
+  {
+    "name": "melody_arp_progression",
+    "code": "use_bpm 120\nuse_synth :pluck\n\nlive_loop :arp do\n  chords = ring(chord(:c4, :minor), chord(:eb4, :major), chord(:ab3, :major), chord(:bb3, :major))\n  c = chords.tick(:c)\n  c.each do |n|\n    play n, release: 0.3, amp: 0.5\n    sleep 0.25\n  end\nend"
+  },
+  {
+    "name": "melody_scale_walk",
+    "code": "use_bpm 100\nuse_synth :saw\n\nlive_loop :walk do\n  notes = scale(:c4, :dorian)\n  play notes.tick, release: 0.2, cutoff: 90, amp: 0.4\n  sleep 0.25\nend"
+  },
+  {
+    "name": "melody_chord_strum",
+    "code": "use_bpm 80\nuse_synth :pluck\n\nlive_loop :strum do\n  notes = chord(:a3, :minor7)\n  notes.each do |n|\n    play n, release: 1, amp: 0.4\n    sleep 0.1\n  end\n  sleep 1.6\nend"
+  },
+  {
+    "name": "melody_pentatonic_improv",
+    "code": "use_bpm 95\nuse_synth :piano\n\nlive_loop :improv do\n  notes = scale(:a3, :minor_pentatonic, num_octaves: 2)\n  play notes.choose, release: rrand(0.2, 0.8), amp: rrand(0.3, 0.6)\n  sleep ring(0.25, 0.25, 0.5, 0.25).tick\nend"
+  },
+  {
+    "name": "melody_counterpoint",
+    "code": "use_bpm 90\n\nlive_loop :voice1 do\n  use_synth :saw\n  notes = ring(:c4, :d4, :e4, :f4, :g4, :f4, :e4, :d4)\n  play notes.tick, release: 0.3, cutoff: 80, amp: 0.3\n  sleep 0.5\nend\n\nlive_loop :voice2, sync: :voice1 do\n  use_synth :saw\n  notes = ring(:e3, :f3, :g3, :a3, :b3, :a3, :g3, :f3)\n  play notes.tick, release: 0.3, cutoff: 80, amp: 0.3\n  sleep 0.5\nend"
+  },
+  {
+    "name": "melody_japanese_scale",
+    "code": "use_bpm 70\nuse_synth :pluck\n\nwith_fx :reverb, room: 0.8 do\n  live_loop :koto do\n    notes = scale(:d4, :hirajoshi)\n    play notes.choose, release: 0.5, amp: 0.5\n    sleep ring(0.5, 0.25, 0.75, 0.5).tick\n  end\nend"
+  },
+  {
+    "name": "melody_blues_lick",
+    "code": "use_bpm 85\nuse_synth :piano\n\nlive_loop :blues do\n  play_pattern_timed scale(:c4, :blues), [0.25, 0.25, 0.5, 0.25, 0.25, 0.5, 0.25], amp: 0.5\n  sleep 0.5\nend"
+  },
+  {
+    "name": "melody_bell_canon",
+    "code": "use_bpm 100\nuse_synth :pretty_bell\n\nlive_loop :bell1 do\n  notes = ring(:c5, :e5, :g5, :c6)\n  play notes.tick, release: 1, amp: 0.3\n  sleep 0.5\nend\n\nlive_loop :bell2 do\n  sleep 1\n  notes = ring(:c5, :e5, :g5, :c6)\n  play notes.tick, release: 1, amp: 0.25\n  sleep 0.5\nend"
+  },
+  {
+    "name": "melody_lydian_dream",
+    "code": "use_bpm 75\nuse_synth :prophet\n\nwith_fx :reverb, room: 0.9 do\n  live_loop :lydian do\n    notes = scale(:f4, :lydian)\n    play notes.tick, release: 0.8, amp: 0.35, cutoff: 90\n    sleep 0.5\n  end\nend"
+  },
+  {
+    "name": "melody_chromatic_run",
+    "code": "use_bpm 140\nuse_synth :beep\n\nlive_loop :chromatic do\n  notes = scale(:c4, :chromatic)\n  play notes.tick, release: 0.1, amp: 0.4\n  sleep 0.125\nend"
+  },
+  {
+    "name": "fx_reverb_echo_layer",
+    "code": "use_bpm 100\n\nwith_fx :reverb, room: 0.8, mix: 0.6 do\n  with_fx :echo, phase: 0.375, decay: 4, mix: 0.5 do\n    live_loop :shimmer do\n      use_synth :pretty_bell\n      play scale(:c5, :major).choose, release: 0.5, amp: 0.3\n      sleep 0.5\n    end\n  end\nend"
+  },
+  {
+    "name": "fx_distorted_bass",
+    "code": "use_bpm 130\n\nwith_fx :distortion, distort: 0.6 do\n  with_fx :lpf, cutoff: 80 do\n    live_loop :grit do\n      use_synth :dsaw\n      play :e1, release: 0.3, amp: 0.5\n      sleep 0.5\n    end\n  end\nend"
+  },
+  {
+    "name": "fx_slicer_pad",
+    "code": "use_bpm 120\n\nwith_fx :slicer, phase: 0.25, wave: 0 do\n  with_fx :reverb, room: 0.9 do\n    live_loop :sliced do\n      use_synth :supersaw\n      play chord(:a3, :minor), release: 4, amp: 0.4\n      sleep 4\n    end\n  end\nend"
+  },
+  {
+    "name": "fx_flanger_lead",
+    "code": "use_bpm 110\n\nwith_fx :flanger, phase: 2 do\n  live_loop :flange do\n    use_synth :saw\n    play scale(:e4, :minor_pentatonic).choose, release: 0.3, amp: 0.4, cutoff: 100\n    sleep 0.25\n  end\nend"
+  },
+  {
+    "name": "fx_bitcrushed_drums",
+    "code": "use_bpm 90\n\nwith_fx :bitcrusher, bits: 8, sample_rate: 8000 do\n  live_loop :crushed do\n    sample :bd_808, amp: 1.5\n    sleep 0.5\n    sample :sn_dub, amp: 0.8\n    sleep 0.5\n  end\nend"
+  },
+  {
+    "name": "fx_wobble_bass",
+    "code": "use_bpm 140\n\nwith_fx :wobble, phase: 0.5, mix: 0.8 do\n  with_fx :distortion, distort: 0.3 do\n    live_loop :wob do\n      use_synth :dsaw\n      play :c1, release: 1, cutoff: 90, amp: 0.6\n      sleep 1\n    end\n  end\nend"
+  },
+  {
+    "name": "fx_echo_drums",
+    "code": "use_bpm 128\n\nwith_fx :echo, phase: 0.25, decay: 2, mix: 0.4 do\n  live_loop :echo_beat do\n    sample :bd_haus, amp: 1\n    sleep 0.5\n    sample :perc_snap, amp: 0.5\n    sleep 0.5\n  end\nend"
+  },
+  {
+    "name": "fx_ixi_techno_lead",
+    "code": "use_bpm 135\n\nwith_fx :ixi_techno, phase: 4, cutoff_min: 60, cutoff_max: 120 do\n  live_loop :ixi do\n    use_synth :saw\n    play :e3, release: 0.5, amp: 0.5\n    sleep 0.5\n  end\nend"
+  },
+  {
+    "name": "fx_triple_stack",
+    "code": "use_bpm 100\n\nwith_fx :reverb, room: 0.7 do\n  with_fx :echo, phase: 0.5, decay: 3 do\n    with_fx :flanger, phase: 4 do\n      live_loop :triple do\n        use_synth :prophet\n        play scale(:c4, :minor).choose, release: 0.5, amp: 0.3\n        sleep 0.5\n      end\n    end\n  end\nend"
+  },
+  {
+    "name": "fx_hpf_filter_sweep",
+    "code": "use_bpm 128\n\nlive_loop :sweep do\n  with_fx :hpf, cutoff: rrand(40, 100) do\n    sample :loop_amen, beat_stretch: 2, amp: 0.8\n    sleep 2\n  end\nend"
+  },
+  {
+    "name": "algo_random_walk",
+    "code": "use_bpm 100\nuse_synth :pluck\n\nlive_loop :walk do\n  use_random_seed 42\n  note = 60\n  8.times do\n    note = note + rrand_i(-3, 3)\n    note = [48, [note, 84].min].max\n    play note, release: 0.3, amp: 0.5\n    sleep 0.25\n  end\nend"
+  },
+  {
+    "name": "algo_probability_drums",
+    "code": "use_bpm 120\n\nlive_loop :prob_drums do\n  sample :bd_haus, amp: 1.5 if one_in(2)\n  sample :sn_dub, amp: 0.6 if one_in(4)\n  sample :hat_bdu, amp: 0.3 if one_in(3)\n  sample :perc_snap, amp: 0.4 if one_in(6)\n  sleep 0.25\nend"
+  },
+  {
+    "name": "algo_dice_melody",
+    "code": "use_bpm 110\nuse_synth :piano\n\nlive_loop :dice_tune do\n  play 48 + dice(24), release: 0.3, amp: 0.5\n  sleep ring(0.25, 0.5, 0.25, 0.25).tick\nend"
+  },
+  {
+    "name": "algo_seeded_pattern",
+    "code": "use_bpm 130\n\nlive_loop :seeded do\n  use_random_seed 12345\n  use_synth :pluck\n  8.times do\n    play choose(scale(:c4, :minor_pentatonic)), release: 0.2, amp: 0.4\n    sleep 0.25\n  end\nend"
+  },
+  {
+    "name": "algo_evolving_rhythm",
+    "code": "use_bpm 118\n\nlive_loop :evolve do\n  density rrand_i(1, 4) do\n    sample :bd_haus, amp: 0.8 if one_in(2)\n    sample :hat_bdu, amp: 0.3 if one_in(3)\n    sleep 0.25\n  end\nend"
+  },
+  {
+    "name": "algo_generative_ambient",
+    "code": "use_bpm 60\n\nwith_fx :reverb, room: 0.95 do\n  live_loop :gen_ambient do\n    use_synth choose([:hollow, :dark_ambience, :sine])\n    play rrand_i(40, 72), release: rrand(2, 8), amp: rrand(0.1, 0.3)\n    sleep rrand(1, 4)\n  end\nend"
+  },
+  {
+    "name": "algo_fractal_rhythm",
+    "code": "use_bpm 120\n\nlive_loop :fractal do\n  sample :bd_haus, amp: 1\n  sleep 0.5\n  if one_in(2)\n    sample :hat_bdu, amp: 0.3\n    sleep 0.25\n    sample :hat_bdu, amp: 0.2\n    sleep 0.25\n  else\n    sleep 0.5\n  end\nend"
+  },
+  {
+    "name": "algo_random_chord_progression",
+    "code": "use_bpm 80\nuse_synth :piano\n\nlive_loop :rand_chords do\n  roots = ring(:c4, :f3, :g3, :am3, :dm3, :em3)\n  types = ring(:major, :minor, :dom7, :minor7)\n  play chord(roots.choose, types.choose), release: 1.5, amp: 0.4\n  sleep 2\nend"
+  },
+  {
+    "name": "algo_cellular",
+    "code": "use_bpm 130\nuse_synth :chipbass\n\nlive_loop :cells do\n  notes = scale(:c3, :minor_pentatonic)\n  play notes.choose, release: 0.15, amp: 0.5 if one_in(2)\n  play notes.choose, release: 0.1, amp: 0.3 if one_in(3)\n  sleep 0.125\nend"
+  },
+  {
+    "name": "algo_brownian_motion",
+    "code": "use_bpm 95\nuse_synth :saw\n\nlive_loop :brownian do\n  n = rrand_i(50, 80)\n  with_fx :lpf, cutoff: rrand(60, 100) do\n    play n, release: 0.3, amp: 0.35\n  end\n  sleep choose([0.25, 0.5, 0.25])\nend"
+  },
+  {
+    "name": "techno_minimal",
+    "code": "use_bpm 128\n\nlive_loop :kick do\n  sample :bd_haus, amp: 1.5\n  sleep 1\nend\n\nlive_loop :hat, sync: :kick do\n  sleep 0.5\n  sample :hat_bdu, amp: 0.35\n  sleep 0.5\nend\n\nlive_loop :perc, sync: :kick do\n  sleep 0.75\n  sample :perc_snap, amp: 0.3 if one_in(2)\n  sleep 0.25\nend"
+  },
+  {
+    "name": "techno_acid",
+    "code": "use_bpm 135\n\nlive_loop :kick do\n  sample :bd_808, amp: 2\n  sleep 1\nend\n\nlive_loop :acid, sync: :kick do\n  use_synth :tb303\n  play ring(:c2, :c2, :eb2, :c2, :f2, :c2, :g1, :c2).tick,\n    release: 0.2, cutoff: rrand(60, 110), res: 0.8\n  sleep 0.25\nend"
+  },
+  {
+    "name": "techno_detroit",
+    "code": "use_bpm 130\n\nlive_loop :kick do\n  sample :bd_haus, amp: 1.2\n  sleep 1\nend\n\nlive_loop :strings, sync: :kick do\n  use_synth :supersaw\n  play chord(:a3, :minor), release: 4, amp: 0.2, cutoff: 80\n  sleep 4\nend\n\nlive_loop :stab, sync: :kick do\n  use_synth :dsaw\n  if one_in(4)\n    play chord(:a4, :minor), release: 0.1, amp: 0.3\n  end\n  sleep 0.5\nend"
+  },
+  {
+    "name": "house_classic",
+    "code": "use_bpm 124\n\nlive_loop :kick do\n  sample :bd_haus, amp: 1.5\n  sleep 1\nend\n\nlive_loop :offbeat_hat, sync: :kick do\n  sleep 0.5\n  sample :hat_gem, amp: 0.4\n  sleep 0.5\nend\n\nlive_loop :clap, sync: :kick do\n  sleep 1\n  sample :perc_snap, amp: 0.6\n  sleep 1\nend\n\nlive_loop :bass, sync: :kick do\n  use_synth :fm\n  play :c2, release: 0.3, amp: 0.6\n  sleep 0.75\n  play :c2, release: 0.1, amp: 0.3\n  sleep 0.25\nend"
+  },
+  {
+    "name": "techno_dark",
+    "code": "use_bpm 132\n\nlive_loop :kick do\n  sample :bd_808, amp: 2\n  sleep 1\nend\n\nlive_loop :atmosphere, sync: :kick do\n  use_synth :dark_ambience\n  play :c2, release: 8, amp: 0.2\n  sleep 8\nend\n\nlive_loop :perc, sync: :kick do\n  sample :elec_blip, amp: 0.2, rate: rrand(0.5, 2) if one_in(3)\n  sleep 0.25\nend"
+  },
+  {
+    "name": "house_deep",
+    "code": "use_bpm 122\n\nlive_loop :kick do\n  sample :bd_haus, amp: 1.3\n  sleep 1\nend\n\nlive_loop :chord, sync: :kick do\n  use_synth :hollow\n  play chord(:d3, :minor7), release: 2, amp: 0.25\n  sleep 4\nend\n\nlive_loop :bass, sync: :kick do\n  use_synth :fm\n  play :d2, release: 0.3, amp: 0.5\n  sleep 0.5\n  play :d2, release: 0.15, amp: 0.3\n  sleep 0.5\nend"
+  },
+  {
+    "name": "techno_hypnotic",
+    "code": "use_bpm 130\n\nlive_loop :kick do\n  sample :bd_haus, amp: 1.5\n  sleep 1\nend\n\nwith_fx :echo, phase: 0.375, decay: 4 do\n  live_loop :synth, sync: :kick do\n    use_synth :saw\n    play ring(:c3, :c3, :eb3, :c3).tick, release: 0.1, cutoff: rrand(60, 100), amp: 0.3\n    sleep 0.25\n  end\nend"
+  },
+  {
+    "name": "house_garage",
+    "code": "use_bpm 130\n\nlive_loop :kick do\n  sample :bd_haus, amp: 1.2\n  sleep 1\nend\n\nlive_loop :snare, sync: :kick do\n  sleep 0.5\n  sample :sn_dub, amp: 0.5\n  sleep 0.5\nend\n\nlive_loop :organ, sync: :kick do\n  use_synth :fm\n  play chord(:c4, :minor7), release: 0.3, amp: 0.2\n  sleep 0.75\n  play chord(:c4, :minor7), release: 0.15, amp: 0.15\n  sleep 0.25\nend"
+  },
+  {
+    "name": "techno_industrial",
+    "code": "use_bpm 138\n\nwith_fx :distortion, distort: 0.4 do\n  live_loop :machine do\n    sample :bd_808, amp: 2\n    sleep 0.5\n    sample :elec_ping, amp: 0.3, rate: 0.5\n    sleep 0.25\n    sample :sn_generic, amp: 1\n    sleep 0.25\n  end\nend"
+  },
+  {
+    "name": "house_piano",
+    "code": "use_bpm 124\nuse_synth :piano\n\nlive_loop :kick do\n  sample :bd_haus, amp: 1.3\n  sleep 1\nend\n\nlive_loop :piano_chords, sync: :kick do\n  play chord(:c4, :minor), release: 0.2, amp: 0.35\n  sleep 0.25\n  sleep 0.5\n  play chord(:c4, :minor), release: 0.2, amp: 0.3\n  sleep 0.25\nend"
+  },
+  {
+    "name": "exp_reverse_scale",
+    "code": "use_bpm 100\nuse_synth :saw\n\nlive_loop :reversed do\n  notes = scale(:c4, :whole_tone).reverse\n  play notes.tick, release: 0.2, cutoff: 80, amp: 0.4\n  sleep 0.25\nend"
+  },
+  {
+    "name": "exp_shuffled_beats",
+    "code": "use_bpm 120\n\nlive_loop :shuffled do\n  use_random_seed 99\n  samples = ring(:bd_haus, :sn_dub, :hat_bdu, :perc_snap).shuffle\n  sample samples.tick, amp: 0.6\n  sleep 0.25\nend"
+  },
+  {
+    "name": "exp_density_layers",
+    "code": "use_bpm 110\n\nlive_loop :dense do\n  density 2 do\n    play :c4, release: 0.1, amp: 0.3\n    sleep 0.5\n  end\nend"
+  },
+  {
+    "name": "exp_ring_mirror",
+    "code": "use_bpm 120\nuse_synth :pluck\n\nlive_loop :mirror do\n  notes = ring(:c4, :e4, :g4, :b4)\n  combined = ring(*notes.to_a, *notes.to_a.reverse)\n  play combined.tick, release: 0.3, amp: 0.5\n  sleep 0.25\nend"
+  },
+  {
+    "name": "exp_micro_rhythm",
+    "code": "use_bpm 80\n\nlive_loop :micro do\n  sample :perc_snap, amp: 0.4\n  sleep 0.125\n  sleep 0.0625\n  sample :perc_snap, amp: 0.2\n  sleep 0.0625\n  sleep 0.25\nend"
+  },
+  {
+    "name": "exp_noise_texture",
+    "code": "use_bpm 60\n\nwith_fx :lpf, cutoff: 60 do\n  with_fx :reverb, room: 0.9 do\n    live_loop :texture do\n      use_synth :noise\n      play :c4, release: rrand(0.05, 0.2), amp: rrand(0.05, 0.15)\n      sleep rrand(0.05, 0.3)\n    end\n  end\nend"
+  },
+  {
+    "name": "exp_chip_tune",
+    "code": "use_bpm 140\nuse_synth :chiplead\n\nlive_loop :chip do\n  notes = scale(:c5, :minor_pentatonic)\n  play notes.choose, release: 0.1, amp: 0.4\n  sleep 0.125\nend\n\nlive_loop :chip_bass do\n  use_synth :chipbass\n  play ring(:c3, :c3, :eb3, :f3).tick, release: 0.2, amp: 0.5\n  sleep 0.25\nend"
+  },
+  {
+    "name": "exp_granular_texture",
+    "code": "use_bpm 70\n\nlive_loop :grain do\n  with_fx :echo, phase: 0.125, decay: 2 do\n    use_synth :beep\n    play rrand_i(60, 96), release: 0.05, amp: 0.15\n    sleep 0.05\n  end\nend"
+  },
+  {
+    "name": "exp_phrygian_dark",
+    "code": "use_bpm 85\nuse_synth :blade\n\nwith_fx :reverb, room: 0.8 do\n  live_loop :phrygian do\n    notes = scale(:e3, :phrygian)\n    play notes.tick, release: 0.5, amp: 0.4\n    sleep 0.5\n  end\nend"
+  },
+  {
+    "name": "exp_polymetric",
+    "code": "use_bpm 100\n\nlive_loop :five do\n  use_synth :pluck\n  play scale(:c4, :minor_pentatonic).tick, release: 0.2, amp: 0.4\n  sleep 0.4\nend\n\nlive_loop :four do\n  sample :perc_snap, amp: 0.5\n  sleep 0.5\nend"
+  },
+  {
+    "name": "song_minimal_techno",
+    "code": "use_bpm 128\n\nlive_loop :met do\n  sleep 1\nend\n\nlive_loop :kick, sync: :met do\n  sample :bd_haus, amp: 1.5\n  sleep 1\nend\n\nlive_loop :hat, sync: :met do\n  sleep 0.5\n  sample :hat_bdu, amp: 0.3\n  sleep 0.5\nend\n\nlive_loop :bass, sync: :met do\n  use_synth :tb303\n  play ring(:c2, :c2, :eb2, :f2).tick, release: 0.2, cutoff: rrand(60, 100), amp: 0.5\n  sleep 0.5\nend\n\nlive_loop :pad, sync: :met do\n  use_synth :hollow\n  play chord(:c3, :minor7), release: 4, amp: 0.2\n  sleep 4\nend"
+  },
+  {
+    "name": "song_lo_fi_beat",
+    "code": "use_bpm 85\n\nwith_fx :lpf, cutoff: 90 do\n  with_fx :bitcrusher, bits: 12 do\n    live_loop :drums do\n      sample :bd_boom, amp: 1\n      sleep 0.5\n      sample :sn_dub, amp: 0.5\n      sleep 0.5\n    end\n\n    live_loop :keys, sync: :drums do\n      use_synth :piano\n      play chord(:eb3, :minor7), release: 1, amp: 0.3\n      sleep 2\n      play chord(:ab3, :major), release: 1, amp: 0.3\n      sleep 2\n    end\n  end\nend"
+  },
+  {
+    "name": "song_space_voyage",
+    "code": "use_bpm 70\n\nwith_fx :reverb, room: 0.95, mix: 0.8 do\n  live_loop :engine do\n    use_synth :dark_ambience\n    play :c2, release: 8, amp: 0.3\n    sleep 8\n  end\n\n  live_loop :stars, sync: :engine do\n    use_synth :pretty_bell\n    play scale(:c5, :major).choose, release: 2, amp: 0.15\n    sleep rrand(0.5, 2)\n  end\n\n  live_loop :pulse, sync: :engine do\n    use_synth :sine\n    play :c3, release: 0.5, amp: 0.2\n    sleep 2\n  end\nend"
+  },
+  {
+    "name": "song_funk_groove",
+    "code": "use_bpm 105\n\nlive_loop :drums do\n  sample :bd_haus, amp: 1.2\n  sleep 0.5\n  sample :hat_bdu, amp: 0.3\n  sleep 0.25\n  sample :hat_bdu, amp: 0.2\n  sleep 0.25\n  sample :sn_dub, amp: 0.7\n  sleep 0.5\n  sample :hat_bdu, amp: 0.3\n  sleep 0.5\nend\n\nlive_loop :bass, sync: :drums do\n  use_synth :fm\n  play :e2, release: 0.15, amp: 0.6\n  sleep 0.25\n  sleep 0.125\n  play :e2, release: 0.1, amp: 0.4\n  sleep 0.125\n  play :g2, release: 0.2, amp: 0.5\n  sleep 0.5\nend\n\nlive_loop :clav, sync: :drums do\n  use_synth :pluck\n  sleep 0.5\n  play :e4, release: 0.1, amp: 0.4\n  sleep 0.25\n  play :e4, release: 0.1, amp: 0.3\n  sleep 0.25\nend"
+  },
+  {
+    "name": "song_chill_wave",
+    "code": "use_bpm 95\n\nwith_fx :reverb, room: 0.8, mix: 0.6 do\n  live_loop :pad do\n    use_synth :supersaw\n    play chord(:d3, :minor7), attack: 2, release: 4, amp: 0.2, cutoff: 75\n    sleep 4\n    play chord(:g3, :major7), attack: 2, release: 4, amp: 0.2, cutoff: 75\n    sleep 4\n  end\n\n  live_loop :arp, sync: :pad do\n    use_synth :pluck\n    notes = scale(:d4, :minor_pentatonic)\n    play notes.tick, release: 0.5, amp: 0.3\n    sleep 0.5\n  end\n\n  live_loop :beat, sync: :pad do\n    sample :bd_boom, amp: 0.8\n    sleep 1\n  end\nend"
+  },
+  {
+    "name": "song_retro_game",
+    "code": "use_bpm 160\n\nlive_loop :beat do\n  sample :bd_808, amp: 1\n  sleep 0.5\nend\n\nlive_loop :melody, sync: :beat do\n  use_synth :chiplead\n  notes = ring(:c5, :e5, :g5, :e5, :c5, :g4, :c5, :e5)\n  play notes.tick, release: 0.1, amp: 0.4\n  sleep 0.25\nend\n\nlive_loop :bass, sync: :beat do\n  use_synth :chipbass\n  play ring(:c3, :c3, :g2, :g2).tick, release: 0.2, amp: 0.5\n  sleep 0.5\nend"
+  },
+  {
+    "name": "song_dnb_roller",
+    "code": "use_bpm 174\n\nlive_loop :drums do\n  sample :bd_haus, amp: 1.5\n  sleep 0.75\n  sample :sn_generic, amp: 1\n  sleep 0.5\n  sample :bd_haus, amp: 0.8\n  sleep 0.25\n  sleep 0.5\nend\n\nlive_loop :hats, sync: :drums do\n  sample :hat_bdu, amp: 0.25\n  sleep 0.25\nend\n\nlive_loop :bass, sync: :drums do\n  use_synth :dsaw\n  play :e1, release: 0.3, cutoff: 80, amp: 0.6\n  sleep 0.5\n  play :e1, release: 0.15, cutoff: 60, amp: 0.4\n  sleep 0.25\n  play :g1, release: 0.2, cutoff: 70, amp: 0.5\n  sleep 0.25\nend"
+  },
+  {
+    "name": "song_ambient_journey",
+    "code": "use_bpm 65\n\nwith_fx :reverb, room: 1, mix: 0.85 do\n  live_loop :base_drone do\n    use_synth :hollow\n    play :d2, attack: 1, sustain: 4, release: 2, amp: 0.4\n    sleep 8\n  end\n\n  live_loop :melody, sync: :base_drone do\n    use_synth :prophet\n    notes = scale(:d4, :dorian)\n    play notes.choose, release: 2, amp: 0.3, cutoff: 80\n    sleep rrand(1, 3)\n  end\n\n  live_loop :texture, sync: :base_drone do\n    sample :ambi_choir, rate: 0.5, amp: 0.15\n    sleep 8\n  end\nend"
+  },
+  {
+    "name": "song_dub_reggae",
+    "code": "use_bpm 72\n\nlive_loop :drums do\n  sample :bd_boom, amp: 1\n  sleep 0.75\n  sample :hat_bdu, amp: 0.3\n  sleep 0.25\n  sample :sn_dub, amp: 0.6\n  sleep 0.5\n  sample :hat_bdu, amp: 0.3\n  sleep 0.5\nend\n\nwith_fx :echo, phase: 0.375, decay: 4 do\n  live_loop :skank, sync: :drums do\n    use_synth :piano\n    sleep 0.5\n    play chord(:c4, :minor), release: 0.15, amp: 0.3\n    sleep 0.5\n  end\nend\n\nlive_loop :bass, sync: :drums do\n  use_synth :fm\n  play :c2, release: 0.5, amp: 0.6\n  sleep 1\n  play :g1, release: 0.3, amp: 0.5\n  sleep 0.5\n  play :c2, release: 0.2, amp: 0.4\n  sleep 0.5\nend"
+  },
+  {
+    "name": "song_epic_buildup",
+    "code": "use_bpm 140\n\nlive_loop :met do\n  sleep 1\nend\n\nlive_loop :kick, sync: :met do\n  sample :bd_808, amp: 2\n  sleep 1\nend\n\nlive_loop :snare, sync: :met do\n  sleep 1\n  sample :sn_generic, amp: 0.8\n  sleep 1\nend\n\nlive_loop :hat, sync: :met do\n  sample :hat_bdu, amp: 0.3\n  sleep 0.25\nend\n\nlive_loop :bass, sync: :met do\n  use_synth :dsaw\n  play ring(:e1, :e1, :g1, :a1).tick, release: 0.3, cutoff: 80, amp: 0.7\n  sleep 0.5\nend\n\nlive_loop :lead, sync: :met do\n  use_synth :supersaw\n  play scale(:e4, :minor).choose, release: 0.3, amp: 0.3, cutoff: 90\n  sleep 0.5\nend"
+  }
+]
