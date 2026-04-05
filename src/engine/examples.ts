@@ -311,859 +311,932 @@ live_loop("acid", async ({play, sleep, use_synth, use_bpm, ring, tick, rrand}) =
 })`,
   },
   // ========================================================================
-  // Advanced — Song recreations (recognizable riffs/drops in Sonic Pi style)
+  // Advanced — Original compositions (community-style Sonic Pi pieces)
   // ========================================================================
 
   {
-    name: 'Faded (Alan Walker)',
+    name: 'Midnight Drive',
     difficulty: 'advanced',
-    description: 'The iconic "Faded" lead melody and pulsing bass — ethereal EDM.',
+    description: 'Synthwave/retrowave — lush saw pads, arpeggiated lead, punchy drums, 80s feel.',
     ruby: `\
-use_bpm 90
+# "Midnight Drive" — Synthwave
+# Inspired by the Sonic Pi community
+# Technique: layered supersaws, gated arpeggios, retro drum programming
 
-# Director — controls song structure
+use_bpm 110
+
 live_loop :director do
-  set :section, 0  # intro: reverb lead solo
+  set :section, 0  # intro: pad + slow arp
   sleep 32
-  set :section, 1  # verse: lead + sub bass
+  set :section, 1  # verse: drums enter, bass joins
   sleep 32
-  set :section, 2  # build: drums enter
+  set :section, 2  # chorus: full energy, lead soars
+  sleep 48
+  set :section, 3  # breakdown: strip to pad + arp
   sleep 16
-  set :section, 3  # drop: full energy
-  sleep 64
-  set :section, 4  # breakdown: melody + pad
-  sleep 32
-  set :section, 5  # drop 2: full energy
-  sleep 64
-  set :section, 6  # outro: fade out
-  sleep 32
+  set :section, 4  # outro: fade all
+  sleep 16
   stop
 end
 
-# Haunting lead melody — Em G D C
-live_loop :lead do
+live_loop :pad do
+  s = get[:section]
+  use_synth :supersaw
+  vol = 0
+  vol = 0.3 if s == 0 or s == 3
+  vol = 0.25 if s == 1
+  vol = 0.4 if s == 2
+  vol = 0.15 if s == 4
+  with_fx :reverb, room: 0.85, mix: 0.6 do
+    with_fx :lpf, cutoff: 85 do
+      chords = [chord(:e3, :minor7), chord(:c3, :major7),
+                chord(:a2, :minor7), chord(:b2, :minor)]
+      play chords.tick, attack: 2, release: 6, amp: vol
+      sleep 4
+    end
+  end
+end
+
+live_loop :arp do
   s = get[:section]
   use_synth :saw
   vol = 0
-  vol = 0.3 if s == 0
-  vol = 0.5 if s == 1 or s == 4
-  vol = 0.6 if s == 2
-  vol = 0.7 if s == 3 or s == 5
-  vol = 0.25 if s == 6
-  with_fx :reverb, room: 0.8, mix: 0.6 do
-    with_fx :echo, phase: 0.375, decay: 4, mix: 0.4 do
-      notes = [:e4, :e4, :d4, :e4, :e4, :d4, :e4, :g4,
-               :g4, :fs4, :e4, :d4, :d4, :e4, :d4, :b3]
-      durs  = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1, 0.5,
-               0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 1, 1]
-      notes.length.times do |i|
-        play notes[i], release: durs[i] * 0.8, amp: vol, cutoff: 90
-        sleep durs[i]
-      end
-    end
+  vol = 0.2 if s == 0 or s == 3
+  vol = 0.3 if s == 1
+  vol = 0.4 if s == 2
+  vol = 0.1 if s == 4
+  notes = ring(:e4, :g4, :b4, :e5, :b4, :g4, :d5, :b4)
+  with_fx :echo, phase: 0.375, decay: 4, mix: 0.35 do
+    play notes.tick, release: 0.15, amp: vol, cutoff: 95
+    sleep 0.25
   end
 end
 
-# Pulsing sub bass — enters at verse
 live_loop :bass do
   s = get[:section]
-  use_synth :sine
+  use_synth :tb303
   vol = 0
-  vol = 0.6 if s == 1 or s == 4
+  vol = 0.5 if s == 1
   vol = 0.7 if s == 2
-  vol = 0.9 if s == 3 or s == 5
-  vol = 0.3 if s == 6
-  chords = [chord(:e2, :minor), chord(:g2, :major),
-            chord(:d2, :major), chord(:c2, :major)]
-  chords.each do |c|
-    4.times do
-      play c[0], release: 0.4, amp: vol
-      sleep 1
-    end
-  end
+  vol = 0.3 if s == 4
+  notes = ring(:e2, :e2, :c2, :c2, :a1, :a1, :b1, :b1)
+  play notes.tick, release: 0.3, cutoff: 70, res: 0.3, amp: vol
+  sleep 0.5
 end
 
-# Kick — enters at build
 live_loop :kick do
   s = get[:section]
   vol = 0
-  vol = 1.0 if s == 2
-  vol = 2.0 if s == 3 or s == 5
-  vol = 0.8 if s == 6
+  vol = 1.5 if s == 1
+  vol = 2.0 if s == 2
+  vol = 0.8 if s == 4
   sample :bd_haus, amp: vol
   sleep 1
 end
 
-# Hi-hats — drop only
+live_loop :snare do
+  s = get[:section]
+  vol = 0
+  vol = 0.8 if s == 1
+  vol = 1.2 if s == 2
+  sleep 1
+  sample :sn_dub, amp: vol
+  sleep 1
+end
+
 live_loop :hats do
   s = get[:section]
   vol = 0
-  vol = 0.5 if s == 3 or s == 5
-  sample :drum_cymbal_closed, amp: vol if spread(5, 8).tick
+  vol = rrand(0.2, 0.5) if s == 1 or s == 2
+  sample :drum_cymbal_closed, amp: vol
   sleep 0.25
 end
 
-# Pad — breakdown + outro
-live_loop :pad do
+live_loop :lead do
   s = get[:section]
-  use_synth :hollow
+  use_synth :saw
   vol = 0
-  vol = 0.4 if s == 4
-  vol = 0.3 if s == 6
-  with_fx :reverb, room: 0.9 do
-    play chord(:e3, :minor7), release: 8, amp: vol, cutoff: 80
+  vol = 0.35 if s == 2
+  notes = [:e5, :d5, :b4, :g4, :a4, :b4, :d5, :e5,
+           :g5, :e5, :d5, :b4, :a4, :g4, :a4, :b4]
+  with_fx :reverb, room: 0.7 do
+    with_fx :flanger, phase: 2, mix: 0.3 do
+      play notes.tick, release: 0.4, amp: vol, cutoff: 105
+      sleep 0.5
+    end
   end
-  sleep 8
 end`,
     js: '',
   },
 
   {
-    name: 'Years (Alesso)',
+    name: 'Rainforest',
     difficulty: 'advanced',
-    description: 'Progressive house anthem — big chord stabs and driving beat.',
+    description: 'Ambient/generative — layered nature textures, random plucks, evolving pad, no drums.',
     ruby: `\
-use_bpm 128
+# "Rainforest" — Ambient / Generative
+# Inspired by the Sonic Pi community
+# Technique: rrand for organic randomness, layered textures, no fixed rhythm
 
-# Director
+use_bpm 70
+
 live_loop :director do
-  set :section, 0  # intro: pad + sparse perc
+  set :section, 0  # dawn: quiet pad emerges
   sleep 32
-  set :section, 1  # verse: chord stabs + light kick
+  set :section, 1  # morning: bird plucks begin
+  sleep 48
+  set :section, 2  # midday: full canopy, all layers
+  sleep 64
+  set :section, 3  # dusk: thin out, slower
   sleep 32
-  set :section, 2  # build: filter sweep + snare roll
+  set :section, 4  # night: fade to silence
   sleep 16
-  set :section, 3  # drop: full supersaw + kick + arp
-  sleep 64
-  set :section, 4  # breakdown: pluck melody solo
-  sleep 32
-  set :section, 5  # drop 2: bigger
-  sleep 64
-  set :section, 6  # outro: fade
-  sleep 32
   stop
 end
 
-# Am - F - C - G chord stabs
-live_loop :chords do
+live_loop :canopy_pad do
   s = get[:section]
-  use_synth :supersaw
+  use_synth :dark_ambience
   vol = 0
-  vol = 0.4 if s == 1
-  vol = 0.5 if s == 2
-  vol = 0.8 if s == 3
-  vol = 0.9 if s == 5
-  vol = 0.3 if s == 6
-  co = 80
-  co = 100 if s >= 3
-  with_fx :reverb, room: 0.7 do
-    play chord(:a3, :minor), release: 0.8, amp: vol, cutoff: co
-    sleep 2
-    play chord(:f3, :major), release: 0.8, amp: vol, cutoff: co
-    sleep 2
-    play chord(:c4, :major), release: 0.8, amp: vol, cutoff: co
-    sleep 2
-    play chord(:g3, :major), release: 0.8, amp: vol, cutoff: co
-    sleep 2
+  vol = 0.2 if s == 0
+  vol = 0.3 if s == 1
+  vol = 0.4 if s == 2
+  vol = 0.25 if s == 3
+  vol = 0.1 if s == 4
+  with_fx :reverb, room: 0.95, mix: 0.8 do
+    notes = [chord(:e3, :minor7), chord(:g3, :major7),
+             chord(:a3, :minor), chord(:d3, :sus4)]
+    play notes.choose, attack: 4, release: 8, amp: vol, cutoff: rrand(60, 80)
+    sleep rrand(6, 10)
   end
 end
 
-# Atmospheric pad — intro + breakdown
+live_loop :bird_plucks do
+  s = get[:section]
+  use_synth :pluck
+  vol = 0
+  vol = 0.25 if s == 1
+  vol = 0.4 if s == 2
+  vol = 0.2 if s == 3
+  with_fx :echo, phase: rrand(0.2, 0.5), decay: 3, mix: 0.4 do
+    with_fx :reverb, room: 0.8 do
+      notes = scale(:e5, :minor_pentatonic, num_octaves: 2)
+      play notes.choose, release: rrand(0.1, 0.4), amp: vol
+    end
+  end
+  sleep rrand(0.3, 1.5)
+end
+
+live_loop :water_drops do
+  s = get[:section]
+  use_synth :sine
+  vol = 0
+  vol = 0.15 if s == 1 or s == 3
+  vol = 0.25 if s == 2
+  with_fx :reverb, room: 0.9 do
+    play rrand_i(72, 96), release: rrand(0.05, 0.2), amp: vol
+  end
+  sleep rrand(0.5, 3.0)
+end
+
+live_loop :wind do
+  s = get[:section]
+  use_synth :cnoise
+  vol = 0
+  vol = 0.03 if s == 0 or s == 4
+  vol = 0.04 if s == 1 or s == 3
+  vol = 0.06 if s == 2
+  with_fx :lpf, cutoff: rrand(50, 70) do
+    play :c4, release: rrand(3, 6), amp: vol
+  end
+  sleep rrand(4, 8)
+end
+
+live_loop :deep_pulse do
+  s = get[:section]
+  use_synth :sine
+  vol = 0
+  vol = 0.2 if s == 2
+  vol = 0.15 if s == 1 or s == 3
+  with_fx :reverb, room: 0.9 do
+    play [:e2, :g2, :a2, :d2].choose, attack: 2, release: 6, amp: vol
+  end
+  sleep rrand(6, 12)
+end
+
+live_loop :insects do
+  s = get[:section]
+  use_synth :square
+  vol = 0
+  vol = 0.05 if s == 2
+  vol = 0.03 if s == 3
+  with_fx :hpf, cutoff: 100 do
+    play rrand_i(90, 110), release: rrand(0.02, 0.08), amp: vol if one_in(3)
+  end
+  sleep rrand(0.1, 0.4)
+end`,
+    js: '',
+  },
+
+  {
+    name: 'Concrete Jungle',
+    difficulty: 'advanced',
+    description: 'Drum & Bass — fast breakbeat patterns, deep reese bass, chopped hats.',
+    ruby: `\
+# "Concrete Jungle" — Drum & Bass
+# Inspired by the Sonic Pi community
+# Technique: fast breakbeats, reese bass with wobble, chopped hat patterns
+
+use_bpm 174
+
+live_loop :director do
+  set :section, 0  # intro: hats + sparse kick
+  sleep 32
+  set :section, 1  # build: bass enters, drums fill
+  sleep 32
+  set :section, 2  # drop: full breakbeat + reese
+  sleep 64
+  set :section, 3  # breakdown: half-time, pad
+  sleep 16
+  set :section, 4  # drop 2: full, more chopped
+  sleep 64
+  stop
+end
+
+live_loop :kick do
+  s = get[:section]
+  vol = 0
+  vol = 0.8 if s == 0
+  vol = 1.5 if s == 1
+  vol = 2.5 if s == 2 or s == 4
+  vol = 1.0 if s == 3
+  pattern = spread(3, 8)
+  sample :bd_tek, amp: vol if pattern.tick
+  sleep 0.25
+end
+
+live_loop :snare do
+  s = get[:section]
+  vol = 0
+  vol = 0.6 if s == 1
+  vol = 1.5 if s == 2 or s == 4
+  vol = 0.8 if s == 3
+  sleep 1
+  sample :sn_dub, amp: vol
+  sleep 1
+end
+
+live_loop :hats do
+  s = get[:section]
+  vol = 0
+  vol = rrand(0.2, 0.5) if s == 0 or s == 1
+  vol = rrand(0.3, 0.7) if s == 2 or s == 4
+  vol = rrand(0.1, 0.3) if s == 3
+  sample :drum_cymbal_closed, amp: vol, rate: rrand(0.9, 1.3) if spread(5, 8).tick
+  sleep 0.125
+end
+
+live_loop :ghost_snares do
+  s = get[:section]
+  vol = 0
+  vol = 0.4 if s == 2 or s == 4
+  pattern = knit(false, 3, true, 1, false, 2, true, 1, false, 1)
+  sample :sn_dub, amp: vol * rrand(0.3, 0.6), rate: 1.4 if pattern.tick
+  sleep 0.25
+end
+
+live_loop :reese do
+  s = get[:section]
+  use_synth :tb303
+  vol = 0
+  vol = 0.4 if s == 1
+  vol = 0.7 if s == 2
+  vol = 0.8 if s == 4
+  vol = 0.3 if s == 3
+  notes = ring(:e1, :e1, :g1, :e1, :a1, :e1, :d1, :e1)
+  with_fx :wobble, phase: 0.5, mix: 0.6 do
+    with_fx :distortion, distort: 0.4 do
+      play notes.tick, release: 0.4, cutoff: rrand(60, 100), res: 0.7, amp: vol
+      sleep 0.5
+    end
+  end
+end
+
 live_loop :pad do
   s = get[:section]
   use_synth :hollow
   vol = 0
-  vol = 0.4 if s == 0
-  vol = 0.3 if s == 4
-  with_fx :reverb, room: 0.9, mix: 0.7 do
-    play chord(:a2, :minor7), release: 8, amp: vol, cutoff: 75
+  vol = 0.3 if s == 3
+  vol = 0.15 if s == 0
+  with_fx :reverb, room: 0.9 do
+    play chord(:e3, :minor7), release: 8, amp: vol, cutoff: 75
   end
   sleep 8
 end
 
-# Kick — light in verse, full in drop
+live_loop :stab do
+  s = get[:section]
+  use_synth :supersaw
+  vol = 0
+  vol = 0.4 if s == 2
+  vol = 0.5 if s == 4
+  if one_in(4)
+    with_fx :reverb, room: 0.6 do
+      play chord(:e4, :minor), release: 0.15, amp: vol, cutoff: 100
+    end
+  end
+  sleep 0.5
+end`,
+    js: '',
+  },
+
+  {
+    name: 'Solar Flare',
+    difficulty: 'advanced',
+    description: 'Progressive trance — building arpeggios, filter sweeps, euphoric chords, four-on-floor.',
+    ruby: `\
+# "Solar Flare" — Progressive Trance
+# Inspired by the Sonic Pi community
+# Technique: line() filter sweeps, building arpeggios, layered pads
+
+use_bpm 138
+
+live_loop :director do
+  set :section, 0  # intro: kick + rising filter arp
+  sleep 32
+  set :section, 1  # build: pads enter, arp intensifies
+  sleep 32
+  set :section, 2  # drop: full euphoric chords + bass
+  sleep 64
+  set :section, 3  # breakdown: pad solo, no drums
+  sleep 16
+  set :section, 4  # climax: everything, peak energy
+  sleep 48
+  stop
+end
+
 live_loop :kick do
   s = get[:section]
   vol = 0
-  vol = 0.3 if s == 0
-  vol = 1.2 if s == 1
-  vol = 1.5 if s == 2
-  vol = 2.5 if s == 3 or s == 5
-  vol = 1.8 if s == 6
+  vol = 1.5 if s == 0 or s == 1
+  vol = 2.0 if s == 2 or s == 4
   sample :bd_haus, amp: vol
+  sleep 1
+end
+
+live_loop :offbeat_hat do
+  s = get[:section]
+  vol = 0
+  vol = 0.4 if s == 0 or s == 1
+  vol = 0.6 if s == 2 or s == 4
+  sleep 0.5
+  sample :drum_cymbal_closed, amp: vol
   sleep 0.5
 end
 
-# Off-beat clap
 live_loop :clap do
   s = get[:section]
   vol = 0
   vol = 0.8 if s == 1
-  vol = 1.2 if s == 3 or s == 5
-  sleep 0.5
+  vol = 1.2 if s == 2 or s == 4
+  sleep 1
   sample :sn_dub, amp: vol
-  sleep 0.5
+  sleep 1
 end
 
-# Snare roll — build section
-live_loop :snare_roll do
-  s = get[:section]
-  if s == 2
-    sample :sn_dub, amp: 0.6, rate: 1.5
-    sleep 0.25
-  else
-    sleep 1
-  end
-end
-
-# Arpeggiated lead — drops only
 live_loop :arp do
   s = get[:section]
-  use_synth :pluck
+  use_synth :saw
   vol = 0
-  vol = 0.4 if s == 3
-  vol = 0.5 if s == 5
-  notes = scale(:a4, :minor_pentatonic)
-  with_fx :echo, phase: 0.25, decay: 3, mix: 0.3 do
-    play notes.choose, release: 0.2, amp: vol
-    sleep 0.25
+  vol = 0.2 if s == 0
+  vol = 0.3 if s == 1
+  vol = 0.4 if s == 2 or s == 4
+  vol = 0.15 if s == 3
+  co = 70
+  co = 90 if s == 1
+  co = 110 if s >= 2
+  notes = scale(:a3, :minor_pentatonic, num_octaves: 2)
+  with_fx :echo, phase: 0.25, decay: 4, mix: 0.4 do
+    play notes.tick, release: 0.15, amp: vol, cutoff: co
+    sleep 0.125
   end
 end
 
-# Pluck melody — breakdown
-live_loop :pluck_melody do
+live_loop :pad do
   s = get[:section]
-  use_synth :pluck
+  use_synth :prophet
   vol = 0
-  vol = 0.6 if s == 4
-  notes = [:a4, :c5, :e5, :c5, :a4, :g4, :f4, :e4]
-  notes.each do |n|
-    play n, release: 0.5, amp: vol
-    sleep 0.5
+  vol = 0.3 if s == 1
+  vol = 0.5 if s == 2
+  vol = 0.6 if s == 3
+  vol = 0.5 if s == 4
+  chords = [chord(:a3, :minor), chord(:f3, :major),
+            chord(:c4, :major), chord(:g3, :major)]
+  with_fx :reverb, room: 0.8, mix: 0.5 do
+    play chords.tick, attack: 1, release: 6, amp: vol, cutoff: 90
+    sleep 4
   end
+end
+
+live_loop :bass do
+  s = get[:section]
+  use_synth :sine
+  vol = 0
+  vol = 0.6 if s == 2
+  vol = 0.8 if s == 4
+  notes = ring(:a1, :a1, :f1, :f1, :c2, :c2, :g1, :g1)
+  play notes.tick, release: 0.4, amp: vol
+  sleep 0.5
+end
+
+live_loop :riser do
+  s = get[:section]
+  use_synth :cnoise
+  vol = 0
+  vol = 0.06 if s == 1
+  vol = 0.08 if s == 3
+  with_fx :hpf, cutoff: rrand(70, 100) do
+    play :c4, release: 4, amp: vol
+  end
+  sleep 4
 end`,
     js: '',
   },
 
   {
-    name: 'Spaceman Drop (Hardwell)',
+    name: 'Pocket Groove',
     difficulty: 'advanced',
-    description: 'Big room house drop — massive lead, pounding kick, festival energy.',
+    description: 'Lo-fi hip hop — dusty drums, mellow piano chords, vinyl crackle, jazzy bass.',
     ruby: `\
-use_bpm 128
+# "Pocket Groove" — Lo-fi Hip Hop
+# Inspired by the Sonic Pi community
+# Technique: swing timing, noise textures, mellow timbres, jazzy harmony
 
-# Director
+use_bpm 85
+
 live_loop :director do
-  set :section, 0  # build: rising sweep + snare buildup
-  sleep 32
-  set :section, 1  # drop: massive descending lead + festival kick
-  sleep 64
-  set :section, 2  # break: kick only
+  set :section, 0  # intro: vinyl + piano only
   sleep 16
-  set :section, 3  # drop 2: lead returns with FX variation
-  sleep 64
-  set :section, 4  # outro: lead drops, kick fades
+  set :section, 1  # verse: drums enter, bass joins
+  sleep 32
+  set :section, 2  # chorus: lead melody + full band
+  sleep 48
+  set :section, 3  # bridge: strip to piano + bass
+  sleep 16
+  set :section, 4  # outro: fade all layers
   sleep 16
   stop
 end
 
-# Big room lead — descending riff
+live_loop :vinyl do
+  s = get[:section]
+  use_synth :cnoise
+  vol = 0
+  vol = 0.03 if s <= 3
+  vol = 0.02 if s == 4
+  with_fx :lpf, cutoff: 80 do
+    with_fx :hpf, cutoff: 40 do
+      play :c4, release: 4, amp: vol
+    end
+  end
+  sleep 4
+end
+
+live_loop :piano do
+  s = get[:section]
+  use_synth :piano
+  vol = 0
+  vol = 0.4 if s == 0 or s == 3
+  vol = 0.35 if s == 1
+  vol = 0.5 if s == 2
+  vol = 0.2 if s == 4
+  chords = [chord(:d3, :minor7), chord(:g3, :dom7),
+            chord(:c3, :major7), chord(:a2, :minor7)]
+  with_fx :lpf, cutoff: 90 do
+    with_fx :reverb, room: 0.5, mix: 0.3 do
+      play chords.tick, release: 1.5, amp: vol
+      sleep 2
+    end
+  end
+end
+
+live_loop :kick do
+  s = get[:section]
+  vol = 0
+  vol = 1.2 if s == 1
+  vol = 1.5 if s == 2
+  sample :bd_808, amp: vol
+  sleep 1
+end
+
+live_loop :snare do
+  s = get[:section]
+  vol = 0
+  vol = 0.6 if s == 1
+  vol = 0.8 if s == 2
+  sleep 1
+  sample :sn_dub, amp: vol, rate: 0.9
+  sleep 1
+end
+
+live_loop :hats do
+  s = get[:section]
+  vol = 0
+  vol = rrand(0.15, 0.35) if s == 1 or s == 2
+  pattern = knit(true, 1, false, 1, true, 1, true, 1)
+  sample :drum_cymbal_closed, amp: vol, rate: rrand(0.8, 1.1) if pattern.tick
+  sleep 0.25
+end
+
+live_loop :bass do
+  s = get[:section]
+  use_synth :fm
+  vol = 0
+  vol = 0.4 if s == 1 or s == 3
+  vol = 0.5 if s == 2
+  vol = 0.2 if s == 4
+  notes = ring(:d2, :d2, :g2, :g2, :c2, :c2, :a1, :a1)
+  with_fx :lpf, cutoff: 75 do
+    play notes.tick, release: 0.5, amp: vol, cutoff: 70
+    sleep 0.5
+  end
+end
+
 live_loop :lead do
   s = get[:section]
-  use_synth :supersaw
+  use_synth :pluck
   vol = 0
-  vol = 0.7 if s == 1
+  vol = 0.35 if s == 2
+  notes = scale(:d4, :dorian)
+  with_fx :reverb, room: 0.6 do
+    play notes.choose, release: rrand(0.3, 0.6), amp: vol if one_in(2)
+  end
+  sleep 0.5
+end`,
+    js: '',
+  },
+
+  {
+    name: 'Neon Grid',
+    difficulty: 'advanced',
+    description: 'Cyberpunk techno — industrial kick, metallic hats, dark acid line, glitchy FX.',
+    ruby: `\
+# "Neon Grid" — Cyberpunk Techno
+# Inspired by the Sonic Pi community
+# Technique: TB-303 acid, krush/distortion, Euclidean patterns, glitch FX
+
+use_bpm 135
+
+live_loop :director do
+  set :section, 0  # intro: kick + sparse acid
+  sleep 32
+  set :section, 1  # build: hats enter, acid intensifies
+  sleep 32
+  set :section, 2  # drop: full acid + industrial drums
+  sleep 64
+  set :section, 3  # break: glitch noise + sparse hits
+  sleep 16
+  set :section, 4  # climax: everything crushed
+  sleep 48
+  stop
+end
+
+live_loop :kick do
+  s = get[:section]
+  vol = 0
+  vol = 1.5 if s == 0 or s == 1
+  vol = 2.5 if s == 2 or s == 4
   vol = 0.8 if s == 3
-  co = 110
-  co = 120 if s == 3
-  with_fx :distortion, distort: 0.3 do
-    notes = [:e4, :d4, :c4, :b3, :e4, :d4, :c4, :a3]
-    durs  = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.75, 0.75]
-    notes.length.times do |i|
-      play notes[i], release: durs[i] * 0.6, amp: vol, cutoff: co
+  with_fx :distortion, distort: 0.2 do
+    sample :bd_tek, amp: vol
+  end
+  sleep 0.5
+end
+
+live_loop :hats do
+  s = get[:section]
+  vol = 0
+  vol = rrand(0.2, 0.5) if s == 1
+  vol = rrand(0.3, 0.7) if s == 2 or s == 4
+  pattern = spread(7, 16)
+  sample :drum_cymbal_closed, amp: vol, rate: rrand(1.0, 1.5) if pattern.tick
+  sleep 0.125
+end
+
+live_loop :clap do
+  s = get[:section]
+  vol = 0
+  vol = 1.0 if s == 1 or s == 2
+  vol = 1.5 if s == 4
+  sleep 1
+  sample :sn_dub, amp: vol
+  sleep 1
+end
+
+live_loop :acid do
+  s = get[:section]
+  use_synth :tb303
+  vol = 0
+  vol = 0.3 if s == 0
+  vol = 0.5 if s == 1
+  vol = 0.7 if s == 2
+  vol = 0.8 if s == 4
+  vol = 0.2 if s == 3
+  lo = 50
+  hi = 100
+  lo = 60 if s >= 2
+  hi = 120 if s >= 2
+  with_fx :distortion, distort: 0.5 do
+    notes = ring(:e1, :e1, :e2, :e1, :g1, :e1, :bb1, :a1)
+    play notes.tick, release: 0.2, cutoff: rrand(lo, hi), res: 0.85, amp: vol
+    sleep 0.25
+  end
+end
+
+live_loop :glitch do
+  s = get[:section]
+  use_synth :cnoise
+  vol = 0
+  vol = 0.06 if s == 3
+  vol = 0.04 if s == 4
+  with_fx :krush, gain: 8, cutoff: rrand(60, 100) do
+    play :c4, release: rrand(0.05, 0.2), amp: vol if one_in(3)
+  end
+  sleep 0.125
+end
+
+live_loop :dark_pad do
+  s = get[:section]
+  use_synth :dark_ambience
+  vol = 0
+  vol = 0.2 if s == 0
+  vol = 0.25 if s == 2 or s == 4
+  vol = 0.3 if s == 3
+  with_fx :reverb, room: 0.8 do
+    play chord(:e2, :minor), release: 8, amp: vol
+  end
+  sleep 8
+end
+
+live_loop :perc do
+  s = get[:section]
+  vol = 0
+  vol = 0.4 if s == 2 or s == 4
+  pattern = spread(3, 8)
+  sample :perc_bell, amp: vol * rrand(0.3, 0.8), rate: rrand(0.5, 2.0) if pattern.tick
+  sleep 0.25
+end`,
+    js: '',
+  },
+
+  {
+    name: 'Cloud Cathedral',
+    difficulty: 'advanced',
+    description: 'Post-rock/ambient — reverb-drenched plucks, swelling pads, delayed melody that builds.',
+    ruby: `\
+# "Cloud Cathedral" — Post-rock / Ambient
+# Inspired by the Sonic Pi community
+# Technique: deep reverb/delay stacking, slow crescendo, tremolo swells
+
+use_bpm 100
+
+live_loop :director do
+  set :section, 0  # intro: single plucks in space
+  sleep 32
+  set :section, 1  # build: pad swells, melody forms
+  sleep 32
+  set :section, 2  # peak: full arrangement, drums enter
+  sleep 48
+  set :section, 3  # descent: strip layers, slow down
+  sleep 24
+  set :section, 4  # silence: final note rings out
+  sleep 8
+  stop
+end
+
+live_loop :plucks do
+  s = get[:section]
+  use_synth :pluck
+  vol = 0
+  vol = 0.3 if s == 0
+  vol = 0.35 if s == 1
+  vol = 0.4 if s == 2
+  vol = 0.25 if s == 3
+  vol = 0.15 if s == 4
+  notes = ring(:e4, :b4, :g4, :d5, :a4, :e5, :b4, :fs5)
+  with_fx :reverb, room: 0.95, mix: 0.7 do
+    with_fx :echo, phase: 0.75, decay: 6, mix: 0.5 do
+      play notes.tick, release: rrand(0.3, 0.8), amp: vol
+    end
+  end
+  sleep 1
+end
+
+live_loop :pad do
+  s = get[:section]
+  use_synth :hollow
+  vol = 0
+  vol = 0.2 if s == 1
+  vol = 0.4 if s == 2
+  vol = 0.3 if s == 3
+  vol = 0.1 if s == 4
+  chords = [chord(:e3, :sus4), chord(:b2, :sus2),
+            chord(:g3, :major7), chord(:d3, :sus4)]
+  with_fx :reverb, room: 0.9, mix: 0.6 do
+    with_fx :tremolo, phase: 4, mix: 0.3 do
+      play chords.tick, attack: 4, release: 8, amp: vol, cutoff: 80
+      sleep 8
+    end
+  end
+end
+
+live_loop :melody do
+  s = get[:section]
+  use_synth :blade
+  vol = 0
+  vol = 0.2 if s == 1
+  vol = 0.35 if s == 2
+  vol = 0.15 if s == 3
+  notes = [:e5, :d5, :b4, :a4, :g4, :a4, :b4, :d5]
+  durs = [1.5, 1, 0.5, 1, 1.5, 1, 0.5, 1]
+  with_fx :reverb, room: 0.85 do
+    with_fx :echo, phase: 0.5, decay: 4, mix: 0.4 do
+      i = tick % 8
+      play notes[i], release: durs[i] * 0.8, amp: vol, cutoff: 90
       sleep durs[i]
     end
   end
 end
 
-# Festival kick
-live_loop :kick do
-  s = get[:section]
-  vol = 0
-  vol = 0.8 if s == 0
-  vol = 3.0 if s == 1 or s == 3
-  vol = 2.0 if s == 2
-  vol = 1.0 if s == 4
-  sample :bd_tek, amp: vol
-  sleep 0.5
-end
-
-# Snare build — build section only
-live_loop :snare_build do
-  s = get[:section]
-  if s == 0
-    t = tick
-    rate = 1.0
-    rate = 1.5 if t > 16
-    rate = 2.0 if t > 24
-    sample :sn_dub, amp: 0.5, rate: rate
-    sleep 0.5
-  else
-    sleep 1
-  end
-end
-
-# Snare on 2 and 4 — drops
-live_loop :snare do
-  s = get[:section]
-  vol = 0
-  vol = 1.5 if s == 1 or s == 3
-  sleep 1
-  sample :sn_dub, amp: vol
-  sleep 1
-end
-
-# Hats — drops only
-live_loop :hats do
-  s = get[:section]
-  vol = 0
-  vol = rrand(0.3, 0.8) if s == 1 or s == 3
-  sample :drum_cymbal_closed, amp: vol if spread(5, 8).tick
-  sleep 0.25
-end
-
-# Rising noise sweep — build
-live_loop :riser do
-  s = get[:section]
-  use_synth :cnoise
-  vol = 0
-  vol = 0.1 if s == 0
-  play :c4, release: 4, amp: vol, cutoff: rrand(50, 90)
-  sleep 4
-end`,
-    js: '',
-  },
-
-  {
-    name: 'Porto (Worakls)',
-    difficulty: 'advanced',
-    description: 'Melodic techno — cinematic strings over driving beats.',
-    ruby: `\
-use_bpm 122
-
-# Director
-live_loop :director do
-  set :section, 0  # intro: pad alone
-  sleep 32
-  set :section, 1  # verse: melody enters, no drums
-  sleep 32
-  set :section, 2  # build: kick fades in
-  sleep 16
-  set :section, 3  # main: full arrangement
-  sleep 64
-  set :section, 4  # breakdown: melody solo + reverb
-  sleep 32
-  set :section, 5  # main 2: full arrangement variation
-  sleep 64
-  set :section, 6  # outro: pad fade
-  sleep 32
-  stop
-end
-
-# Cinematic melody
-live_loop :melody do
-  s = get[:section]
-  use_synth :hollow
-  vol = 0
-  vol = 0.4 if s == 1
-  vol = 0.5 if s == 2 or s == 3 or s == 5
-  vol = 0.6 if s == 4
-  vol = 0.2 if s == 6
-  mx = 0.5
-  mx = 0.8 if s == 4
-  with_fx :reverb, room: 0.9, mix: mx do
-    notes = [:d4, :f4, :a4, :g4, :f4, :e4, :d4, :c4]
-    notes.each do |n|
-      play n, attack: 0.3, release: 1.5, amp: vol, cutoff: 85
-      sleep 1
-    end
-  end
-end
-
-# Deep bass — main sections
-live_loop :bass do
-  s = get[:section]
-  use_synth :tb303
-  vol = 0
-  vol = 0.6 if s == 3
-  vol = 0.8 if s == 5
-  vol = 0.3 if s == 2
-  notes = ring(:d2, :d2, :f2, :d2)
-  play notes.tick, release: 0.4, cutoff: 60, res: 0.2, amp: vol
-  sleep 1
-end
-
-# Kick — fades in during build, full in main
-live_loop :kick do
-  s = get[:section]
-  vol = 0
-  vol = line(0.3, 1.5, steps: 16).tick if s == 2
-  vol = 2.0 if s == 3 or s == 5
-  sample :bd_haus, amp: vol
-  sleep 0.5
-end
-
-# Hats — main sections only
-live_loop :hats do
-  s = get[:section]
-  vol = 0
-  vol = rrand(0.2, 0.5) if s == 3 or s == 5
-  sample :drum_cymbal_closed, amp: vol if spread(7, 16).tick
-  sleep 0.25
-end
-
-# Atmospheric pad — intro, main, outro
-live_loop :pad do
-  s = get[:section]
-  use_synth :dark_ambience
-  vol = 0
-  vol = 0.4 if s == 0
-  vol = 0.25 if s == 1 or s == 2
-  vol = 0.3 if s == 3 or s == 5
-  vol = 0.35 if s == 6
-  play chord(:d3, :minor7), release: 8, amp: vol
-  sleep 8
-end`,
-    js: '',
-  },
-
-  {
-    name: 'Latch (Fred again..)',
-    difficulty: 'advanced',
-    description: 'UK garage-inspired chopped vocals and shuffled beats.',
-    ruby: `\
-use_bpm 124
-
-# Director
-live_loop :director do
-  set :section, 0  # intro: chopped stabs only
-  sleep 16
-  set :section, 1  # groove: garage beat enters
-  sleep 32
-  set :section, 2  # full: bass + stabs + beat
-  sleep 64
-  set :section, 3  # break: stabs + sub only
-  sleep 16
-  set :section, 4  # full 2: everything, stab variations
-  sleep 64
-  set :section, 5  # outro: beat drops, stabs fade
-  sleep 16
-  stop
-end
-
-# Garage-style shuffled beat
-live_loop :beat do
-  s = get[:section]
-  vol = 0
-  vol = 1.0 if s == 1
-  vol = 1.5 if s == 2 or s == 4
-  sample :bd_haus, amp: vol * 1.3
-  sleep 0.5
-  sample :drum_cymbal_closed, amp: vol * 0.4
-  sleep 0.25
-  sample :drum_cymbal_closed, amp: vol * 0.2
-  sleep 0.25
-  sample :sn_dub, amp: vol * 0.8
-  sleep 0.25
-  sample :drum_cymbal_closed, amp: vol * 0.3
-  sleep 0.25
-  sample :bd_haus, amp: vol
-  sleep 0.25
-  sample :drum_cymbal_closed, amp: vol * 0.25
-  sleep 0.25
-end
-
-# Chopped chord stabs
-live_loop :stabs do
-  s = get[:section]
-  use_synth :blade
-  vol = 0
-  vol = 0.5 if s == 0
-  vol = 0.4 if s == 1
-  vol = 0.6 if s == 2 or s == 4
-  vol = 0.5 if s == 3
-  vol = 0.25 if s == 5
-  with_fx :echo, phase: 0.375, decay: 2, mix: 0.3 do
-    with_fx :reverb, room: 0.6 do
-      play chord(:c4, :minor), release: 0.15, amp: vol, cutoff: 90 if one_in(2)
-      sleep 0.25
-      play chord(:eb4, :major), release: 0.15, amp: vol * 0.8, cutoff: 85 if one_in(3)
-      sleep 0.25
-    end
-  end
-end
-
-# Sub bass — enters at full
-live_loop :sub do
+live_loop :bass_drone do
   s = get[:section]
   use_synth :sine
-  vol = 0
-  vol = 0.7 if s == 2 or s == 4
-  vol = 0.5 if s == 3
-  vol = 0.3 if s == 5
-  notes = ring(:c2, :c2, :eb2, :bb1)
-  play notes.tick, release: 0.6, amp: vol
-  sleep 1
-end`,
-    js: '',
-  },
-
-  {
-    name: 'Scary Monsters (Skrillex)',
-    difficulty: 'advanced',
-    description: 'Dubstep wobble bass and aggressive beats — filthy drops.',
-    ruby: `\
-use_bpm 140
-
-# Director
-live_loop :director do
-  set :section, 0  # build: rising noise + sparse hits
-  sleep 16
-  set :section, 1  # drop: wobble + halftime drums + screech
-  sleep 64
-  set :section, 2  # break: silence then bass hit
-  sleep 8
-  set :section, 3  # drop 2: different wobble + faster screech
-  sleep 64
-  set :section, 4  # outro: drums only
-  sleep 16
-  stop
-end
-
-# Wobble bass
-live_loop :wobble do
-  s = get[:section]
-  use_synth :tb303
-  vol = 0
-  vol = 0.7 if s == 1
-  vol = 0.8 if s == 3
-  lo = 60
-  hi = 120
-  lo = 80 if s == 3
-  hi = 130 if s == 3
-  with_fx :wobble, phase: 0.25, mix: 0.8 do
-    with_fx :distortion, distort: 0.7 do
-      notes = ring(:e1, :e1, :g1, :e1, :bb1, :e1, :a1, :e1)
-      play notes.tick, release: 0.3, cutoff: rrand(lo, hi), res: 0.9, amp: vol
-      sleep 0.25
-    end
-  end
-end
-
-# Single bass hit — break section
-live_loop :bass_hit do
-  s = get[:section]
-  use_synth :tb303
-  if s == 2
-    sleep 1
-    play :e1, release: 1.5, amp: 0.9, cutoff: 80
-    sleep 3
-  else
-    sleep 1
-  end
-end
-
-# Halftime beat
-live_loop :drums do
-  s = get[:section]
-  vol = 0
-  vol = 1.0 if s == 1 or s == 3 or s == 4
-  sample :bd_tek, amp: vol * 3
-  sleep 0.5
-  sample :bd_tek, amp: vol * 1.5 if one_in(3)
-  sleep 0.25
-  sample :drum_cymbal_closed, amp: vol * 0.4
-  sleep 0.25
-  sample :sn_dub, amp: vol * 2
-  sleep 0.5
-  sample :drum_cymbal_closed, amp: vol * 0.5
-  sleep 0.25
-  sample :bd_tek, amp: vol * 1.2 if one_in(2)
-  sleep 0.25
-end
-
-# Screechy lead — drops only
-live_loop :screech do
-  s = get[:section]
-  use_synth :zawa
-  vol = 0
-  vol = 0.3 if s == 1
-  vol = 0.4 if s == 3
-  spd = 0.125
-  spd = 0.0625 if s == 3
-  play rrand_i(60, 84), release: 0.1, amp: vol, cutoff: rrand(80, 120) if one_in(3)
-  sleep spd
-end
-
-# Rising noise — build
-live_loop :riser do
-  s = get[:section]
-  use_synth :cnoise
-  vol = 0
-  vol = 0.08 if s == 0
-  play :c4, release: 2, amp: vol, cutoff: rrand(50, 90)
-  sleep 2
-end
-
-# Sparse build hits
-live_loop :build_hits do
-  s = get[:section]
-  if s == 0
-    sample :bd_tek, amp: 1.5
-    sleep 2
-    sample :sn_dub, amp: 0.8
-    sleep 2
-  else
-    sleep 1
-  end
-end`,
-    js: '',
-  },
-
-  {
-    name: 'Strobe (deadmau5)',
-    difficulty: 'advanced',
-    description: 'Progressive house masterpiece — slow build, deep pads, hypnotic arps.',
-    ruby: `\
-use_bpm 128
-
-# Director — long progressive build
-live_loop :director do
-  set :section, 0  # phase 1: pad alone, very quiet
-  sleep 64
-  set :section, 1  # phase 2: arp enters, no drums
-  sleep 64
-  set :section, 2  # phase 3: kick fades in, noise enters
-  sleep 64
-  set :section, 3  # phase 4: full energy
-  sleep 128
-  set :section, 4  # phase 5: strip to pad + arp
-  sleep 64
-  set :section, 5  # phase 6: full again, peak
-  sleep 64
-  set :section, 6  # end: fade everything
-  sleep 32
-  stop
-end
-
-# Deep evolving pad — always present
-live_loop :pad do
-  s = get[:section]
-  use_synth :hollow
-  vol = 0.2 if s == 0
-  vol = 0.3 if s == 1
-  vol = 0.35 if s == 2
-  vol = 0.4 if s == 3 or s == 5
-  vol = 0.35 if s == 4
-  vol = 0.15 if s == 6
-  co = 65
-  co = 75 if s >= 1
-  co = 85 if s >= 3
-  co = 70 if s == 6
-  with_fx :reverb, room: 0.95, mix: 0.8 do
-    play chord(:a2, :minor7), attack: 4, release: 8, amp: vol, cutoff: co
-    sleep 8
-  end
-end
-
-# Hypnotic arpeggio — enters phase 2
-live_loop :arp do
-  s = get[:section]
-  use_synth :saw
   vol = 0
   vol = 0.2 if s == 1
-  vol = 0.25 if s == 2
-  vol = 0.35 if s == 3
-  vol = 0.4 if s == 5
-  vol = 0.25 if s == 4
-  vol = 0.1 if s == 6
-  co = 80
-  co = 100 if s >= 3
-  co = 110 if s == 5
-  with_fx :echo, phase: 0.375, decay: 6, mix: 0.5 do
-    notes = scale(:a3, :minor_pentatonic, num_octaves: 2)
-    play notes.tick, release: 0.2, amp: vol, cutoff: co
-    sleep 0.25
-  end
+  vol = 0.35 if s == 2
+  vol = 0.15 if s == 3
+  notes = ring(:e2, :e2, :b1, :g2)
+  play notes.tick, attack: 2, release: 6, amp: vol
+  sleep 8
 end
 
-# Kick — fades in phase 3, full phase 4+
-live_loop :kick do
-  s = get[:section]
-  vol = 0
-  vol = line(0.2, 1.8, steps: 64).tick if s == 2
-  vol = 2.0 if s == 3
-  vol = 2.2 if s == 5
-  vol = 0.8 if s == 6
-  sample :bd_haus, amp: vol
-  sleep 1
-end
-
-# Atmospheric noise — enters phase 3
-live_loop :atmos do
-  s = get[:section]
-  use_synth :cnoise
-  vol = 0
-  vol = 0.04 if s == 2
-  vol = 0.06 if s == 3 or s == 5
-  vol = 0.03 if s == 6
-  play :c4, release: 4, amp: vol, cutoff: rrand(60, 80)
-  sleep 4
-end
-
-# Hi-hats — full energy sections only
-live_loop :hats do
-  s = get[:section]
-  vol = 0
-  vol = 0.3 if s == 3 or s == 5
-  sample :drum_cymbal_closed, amp: vol if spread(3, 8).tick
-  sleep 0.25
-end`,
-    js: '',
-  },
-
-  {
-    name: 'Runaway (Kanye West)',
-    difficulty: 'advanced',
-    description: 'The famous single-note piano intro that builds into a maximalist anthem.',
-    ruby: `\
-use_bpm 82
-
-# Director
-live_loop :director do
-  set :section, 0  # intro: solo E4 piano, sparse
-  sleep 32
-  set :section, 1  # verse: bass enters
-  sleep 32
-  set :section, 2  # pre-chorus: add hats, piano varies
-  sleep 16
-  set :section, 3  # chorus: full drums + bass + piano expands
-  sleep 64
-  set :section, 4  # break: solo piano, different rhythm
-  sleep 32
-  set :section, 5  # chorus 2: full, more intensity
-  sleep 64
-  set :section, 6  # outro: strip to piano, final note
-  sleep 16
-  stop
-end
-
-# The iconic piano
-live_loop :piano do
-  s = get[:section]
-  use_synth :piano
-  vol = 0.6
-  vol = 0.5 if s == 1
-  vol = 0.55 if s == 2
-  vol = 0.7 if s == 3 or s == 5
-  vol = 0.6 if s == 4
-  vol = 0.4 if s == 6
-  with_fx :reverb, room: 0.7, mix: 0.4 do
-    if s == 3 or s == 5
-      # expanded melody in chorus
-      play :e4, release: 0.8, amp: vol
-      sleep 0.5
-      play :b4, release: 0.5, amp: vol * 0.7
-      sleep 0.5
-      play :e4, release: 0.8, amp: vol
-      sleep 0.5
-      play :e4, release: 0.4, amp: vol * 0.6
-      sleep 0.5
-      play :d5, release: 0.8, amp: vol * 0.8
-      sleep 1
-      play :b4, release: 0.4, amp: vol * 0.6
-      sleep 0.5
-      play :e4, release: 0.8, amp: vol
-      sleep 0.5
-      play :e4, release: 0.8, amp: vol
-      sleep 1
-    elsif s == 4
-      # break — sparser rhythm
-      play :e4, release: 1.2, amp: vol
-      sleep 2
-      play :e4, release: 0.4, amp: vol * 0.5
-      sleep 0.5
-      play :e4, release: 0.8, amp: vol
-      sleep 1
-      play :e4, release: 0.8, amp: vol
-      sleep 1.5
-    elsif s == 6
-      # outro — slowing, final note
-      play :e4, release: 1.5, amp: vol
-      sleep 2
-      play :e4, release: 0.8, amp: vol * 0.6
-      sleep 1.5
-      play :e4, release: 3, amp: vol
-      sleep 1.5
-    else
-      # intro/verse pattern — the classic single note
-      play :e4, release: 0.8, amp: vol
-      sleep 1
-      play :e4, release: 0.8, amp: vol
-      sleep 1
-      play :e4, release: 0.8, amp: vol
-      sleep 0.5
-      play :e4, release: 0.4, amp: vol * 0.7
-      sleep 0.5
-      play :e4, release: 0.8, amp: vol
-      sleep 1
-      play :e4, release: 0.4, amp: vol * 0.7
-      sleep 0.5
-      play :e4, release: 0.8, amp: vol
-      sleep 0.5
-    end
-  end
-end
-
-# Bass — enters at verse
-live_loop :bass do
-  s = get[:section]
-  use_synth :sine
-  vol = 0
-  vol = 0.5 if s == 1
-  vol = 0.6 if s == 2
-  vol = 0.8 if s == 3 or s == 5
-  vol = 0.3 if s == 6
-  notes = ring(:e2, :e2, :c2, :c2, :d2, :d2, :a1, :a1)
-  play notes.tick, release: 0.8, amp: vol
-  sleep 1
-end
-
-# Drums — pre-chorus onward
 live_loop :drums do
   s = get[:section]
   k_vol = 0
   s_vol = 0
-  k_vol = 1.0 if s == 2
-  k_vol = 1.5 if s == 3
-  k_vol = 1.8 if s == 5
-  s_vol = 0.5 if s == 2
-  s_vol = 0.8 if s == 3
-  s_vol = 1.0 if s == 5
+  k_vol = 1.2 if s == 2
+  s_vol = 0.6 if s == 2
   sample :bd_haus, amp: k_vol
   sleep 1
   sample :sn_dub, amp: s_vol
   sleep 1
+  sample :bd_haus, amp: k_vol * 0.7
+  sleep 1
+  sample :sn_dub, amp: s_vol * 0.8
+  sleep 1
 end
 
-# Hi-hats — pre-chorus and chorus
-live_loop :hats do
+live_loop :shimmer do
+  s = get[:section]
+  use_synth :saw
+  vol = 0
+  vol = 0.08 if s == 2
+  vol = 0.05 if s == 3
+  with_fx :reverb, room: 0.95, mix: 0.9 do
+    with_fx :hpf, cutoff: 90 do
+      play scale(:e5, :minor_pentatonic).choose, release: 0.1, amp: vol if one_in(3)
+    end
+  end
+  sleep 0.25
+end`,
+    js: '',
+  },
+
+  {
+    name: 'Algorithm',
+    difficulty: 'advanced',
+    description: 'Algorave/live-coding showcase — randomized params, Euclidean rhythms, density variations.',
+    ruby: `\
+# "Algorithm" — Algorave
+# Inspired by the Sonic Pi community
+# Technique: every parameter randomized within ranges, Euclidean rhythms, density, spread
+
+use_bpm 128
+
+live_loop :director do
+  set :section, 0  # intro: sparse algorithmic textures
+  sleep 32
+  set :section, 1  # build: layers accumulate
+  sleep 32
+  set :section, 2  # peak: maximum density
+  sleep 48
+  set :section, 3  # variation: shift all patterns
+  sleep 32
+  set :section, 4  # outro: dissolve
+  sleep 16
+  stop
+end
+
+live_loop :algo_kick do
+  s = get[:section]
+  vol = 0
+  vol = 1.5 if s == 0 or s == 1
+  vol = 2.0 if s == 2 or s == 3
+  vol = 1.0 if s == 4
+  hits = 4
+  hits = 5 if s == 3
+  pattern = spread(hits, 8)
+  sample :bd_haus, amp: vol if pattern.tick
+  sleep 0.25
+end
+
+live_loop :algo_snare do
+  s = get[:section]
+  vol = 0
+  vol = 0.6 if s == 1
+  vol = 1.0 if s == 2 or s == 3
+  vol = 0.4 if s == 4
+  hits = 3
+  hits = 5 if s == 3
+  pattern = spread(hits, 16)
+  sample :sn_dub, amp: vol * rrand(0.6, 1.0) if pattern.tick
+  sleep 0.25
+end
+
+live_loop :algo_hats do
+  s = get[:section]
+  vol = 0
+  vol = rrand(0.1, 0.3) if s == 0
+  vol = rrand(0.2, 0.5) if s == 1 or s == 2
+  vol = rrand(0.3, 0.6) if s == 3
+  vol = rrand(0.05, 0.2) if s == 4
+  hits = 5
+  hits = 7 if s >= 2
+  steps = 8
+  steps = 16 if s >= 2
+  pattern = spread(hits, steps)
+  sample :drum_cymbal_closed, amp: vol, rate: rrand(0.8, 1.6) if pattern.tick
+  sleep 0.125
+end
+
+live_loop :algo_bass do
+  s = get[:section]
+  use_synth :tb303
+  vol = 0
+  vol = 0.4 if s == 0
+  vol = 0.5 if s == 1
+  vol = 0.7 if s == 2
+  vol = 0.6 if s == 3
+  vol = 0.3 if s == 4
+  notes = scale(:e1, :minor_pentatonic)
+  with_fx :distortion, distort: rrand(0.1, 0.5) do
+    play notes.choose, release: 0.2, cutoff: rrand(50, 110), res: rrand(0.2, 0.9), amp: vol
+    sleep 0.25
+  end
+end
+
+live_loop :algo_lead do
+  s = get[:section]
+  synths = [:saw, :square, :pluck, :blade, :zawa]
+  use_synth synths.choose
+  vol = 0
+  vol = 0.2 if s == 1
+  vol = 0.35 if s == 2
+  vol = 0.3 if s == 3
+  vol = 0.1 if s == 4
+  notes = scale(:e4, :minor_pentatonic, num_octaves: 2)
+  with_fx :echo, phase: [0.25, 0.375, 0.5].choose, decay: rrand(2, 6), mix: 0.4 do
+    with_fx :reverb, room: rrand(0.4, 0.9) do
+      play notes.choose, release: rrand(0.1, 0.4), amp: vol, cutoff: rrand(70, 110) if one_in(2)
+    end
+  end
+  sleep 0.25
+end
+
+live_loop :algo_pad do
+  s = get[:section]
+  use_synth [:prophet, :hollow, :dark_ambience].choose
+  vol = 0
+  vol = 0.2 if s == 1
+  vol = 0.3 if s == 2
+  vol = 0.35 if s == 3
+  vol = 0.15 if s == 4
+  roots = [:e3, :a3, :b3, :d3, :g3]
+  types = [:minor7, :minor, :sus4, :sus2]
+  with_fx :reverb, room: rrand(0.6, 0.95) do
+    play chord(roots.choose, types.choose), attack: 2, release: rrand(4, 8), amp: vol
+  end
+  sleep rrand(4, 8)
+end
+
+live_loop :algo_perc do
   s = get[:section]
   vol = 0
   vol = 0.3 if s == 2
-  vol = 0.4 if s == 3 or s == 5
-  sample :drum_cymbal_closed, amp: vol
-  sleep 0.5
+  vol = 0.4 if s == 3
+  vol = 0.15 if s == 4
+  sample :perc_bell, amp: vol * rrand(0.2, 0.8), rate: rrand(0.3, 3.0) if one_in(4)
+  sleep 0.25
 end`,
     js: '',
   },
