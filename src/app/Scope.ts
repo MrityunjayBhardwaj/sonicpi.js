@@ -299,10 +299,10 @@ export class Scope {
       for (let b = binLow; b <= binHigh; b++) { sum += data[b]; count++ }
       const mag = count > 0 ? sum / count / 255 : 0
 
-      // Gradient: superman blue (#0099FF) → magenta (#FF00FF)
+      // Gradient: magenta (#FF00FF) → superman blue (#0099FF)
       const t = i / numBars
-      const r = Math.round(0 + t * 255)
-      const g = Math.round(153 - t * 153)
+      const r = Math.round(255 - t * 255)
+      const g = Math.round(t * 153)
       const b2 = 255
       ctx.shadowColor = `rgb(${r}, ${g}, ${b2})`
       ctx.fillStyle = `rgba(${r}, ${g}, ${b2}, ${0.4 + mag * 0.6})`
