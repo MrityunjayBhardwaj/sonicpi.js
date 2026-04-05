@@ -16,6 +16,7 @@ import { spread } from './EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq, hzToMidi } from './NoteToFreq'
 import { chord, scale, chord_invert, note, note_range, chord_degree, degree, chord_names, scale_names } from './ChordScale'
 import { getSampleNames, getCategories } from './SampleCatalog'
+import { loadAllCustomSamples, type CustomSampleRecord } from './CustomSampleStore'
 import type { Program } from './Program'
 
 // ---------------------------------------------------------------------------
@@ -827,6 +828,37 @@ export class SonicPiEngine {
   /** Get SuperSonic scsynth metrics for diagnostics. */
   getMetrics(): Record<string, unknown> | null {
     return this.bridge?.getMetrics() ?? null
+  }
+
+  /**
+   * Register a custom user-uploaded sample with the audio engine.
+   * The sample becomes playable as `sample :user_<name>` in code.
+   * Requires engine to be initialized with audio support.
+   */
+  async registerCustomSample(name: string, audioData: ArrayBuffer): Promise<void> {
+    if (!this.bridge) throw new Error('Audio engine not available — cannot register custom sample')
+    await this.bridge.registerCustomSample(name, audioData)
+  }
+
+  /**
+   * Load all custom samples from IndexedDB into the audio engine.
+   * Called automatically during init when audio is available.
+   * Safe to call again after uploading new samples.
+   */
+  async loadCustomSamplesFromDB(): Promise<number> {
+    if (!this.bridge) return 0
+    try {
+      const records = await loadAllCustomSamples()
+      for (const record of records) {
+        if (!this.bridge.isSampleLoaded(record.name)) {
+          await this.bridge.registerCustomSample(record.name, record.audioData)
+        }
+      }
+      return records.length
+    } catch {
+      // IndexedDB unavailable (e.g. tests, incognito) — non-fatal
+      return 0
+    }
   }
 
   get components(): Partial<EngineComponents> {

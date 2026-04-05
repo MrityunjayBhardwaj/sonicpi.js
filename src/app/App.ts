@@ -71,6 +71,7 @@ export class App {
   private console!: Console
   private cueLog!: CueLog
   private toolbar!: Toolbar
+  private menuBar!: MenuBar
   private playing = false
   private root: HTMLElement
   private panelVisibility: Record<string, boolean> = {
@@ -285,11 +286,12 @@ export class App {
     // Must be created after Scope so toggleMode/getActiveModes are available.
     const menuBarAnchor = this.root.querySelector('.spw-main')
     if (menuBarAnchor) {
-      new MenuBar(this.root, {
+      this.menuBar = new MenuBar(this.root, {
         onToggleScope: (mode) => this.scope.toggleMode(mode),
         getActiveModes: () => this.scope.getActiveModes(),
         onTogglePanel: (panel, visible) => this.togglePanel(panel, visible),
         getPanelVisibility: () => this.panelVisibility,
+        onLog: (msg) => this.console.logSystem(msg),
       })
       // Move menu bar before main content
       const menuEl = this.root.lastElementChild!
@@ -415,6 +417,15 @@ export class App {
           const base = (ctx.baseLatency ?? 0) * 1000
           const output = (ctx.outputLatency ?? 0) * 1000
           this.console.logSystem(`  Audio latency: ${base.toFixed(1)}ms base + ${output.toFixed(1)}ms output = ${(base + output).toFixed(1)}ms`)
+        }
+
+        // Wire custom sample uploader to the engine and load samples from IndexedDB
+        if (this.menuBar) {
+          this.menuBar.sampleUploader.setEngine(this.engine)
+        }
+        const customCount = await this.engine.loadCustomSamplesFromDB()
+        if (customCount > 0) {
+          this.console.logSystem(`  Loaded ${customCount} custom sample${customCount > 1 ? 's' : ''} from storage.`)
         }
 
         const elapsed = ((performance.now() - t0) / 1000).toFixed(1)
@@ -645,5 +656,6 @@ export class App {
     this.console.dispose()
     this.cueLog.dispose()
     this.toolbar.dispose()
+    this.menuBar?.dispose()
   }
 }

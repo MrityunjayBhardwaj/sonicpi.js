@@ -738,6 +738,27 @@ export class SuperSonicBridge {
     this.freeBuses.push(busNum)
   }
 
+  /**
+   * Register a custom (user-uploaded) sample from raw audio file bytes.
+   * The ArrayBuffer is passed to SuperSonic's loadSample() which decodes
+   * it via Web Audio and copies the PCM data to the WASM shared buffer.
+   * After registration, `sample :user_mykick` works like any built-in sample.
+   */
+  async registerCustomSample(name: string, audioData: ArrayBuffer): Promise<void> {
+    if (!this.sonic) throw new Error('SuperSonic not initialized')
+    const bufNum = this.nextBufNum++
+    // SuperSonic.loadSample accepts ArrayBuffer directly (lib_buffer_manager.js:prepareFromBlob)
+    await this.sonic.loadSample(bufNum, audioData as unknown as string)
+    this.loadedSamples.set(name, bufNum)
+    // Decode via Web Audio for duration cache
+    try {
+      const audioBuffer = await this.sonic.audioContext.decodeAudioData(audioData.slice(0))
+      this.sampleDurations.set(name, audioBuffer.duration)
+    } catch {
+      // Duration unknown — beat_stretch won't work, but playback still will
+    }
+  }
+
   /** Check if a sample has been loaded (duration cached). */
   isSampleLoaded(name: string): boolean {
     return this.loadedSamples.has(name)

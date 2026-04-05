@@ -6,6 +6,7 @@
  */
 
 import { type ScopeMode, ALL_SCOPE_MODES } from './Scope'
+import { SampleUploader } from './SampleUploader'
 
 const SCOPE_LABELS: Record<ScopeMode, string> = {
   mono: 'Mono',
@@ -30,6 +31,7 @@ export class MenuBar {
   private onTogglePanel: (panel: string, visible: boolean) => void
   private getPanelVisibility: () => Record<string, boolean>
   private activeDropdown: HTMLElement | null = null
+  readonly sampleUploader: SampleUploader
 
   constructor(
     parent: HTMLElement,
@@ -38,6 +40,7 @@ export class MenuBar {
       getActiveModes: () => Set<ScopeMode>
       onTogglePanel: (panel: string, visible: boolean) => void
       getPanelVisibility: () => Record<string, boolean>
+      onLog?: (msg: string) => void
     }
   ) {
     this.onToggleScope = options.onToggleScope
@@ -66,6 +69,13 @@ export class MenuBar {
 
     // Visuals menu
     this.addMenu('Visuals', () => this.buildVisualsMenu())
+
+    // Samples menu (custom sample upload)
+    this.sampleUploader = new SampleUploader(
+      document.createElement('div'), // placeholder parent — real parent is the dropdown
+      { onLog: options.onLog },
+    )
+    this.addMenu('Samples', () => this.buildSamplesMenu())
 
     // Close dropdown on outside click
     document.addEventListener('click', (e) => {
@@ -349,8 +359,52 @@ export class MenuBar {
     return dropdown
   }
 
+  private buildSamplesMenu(): HTMLElement {
+    const dropdown = document.createElement('div')
+    dropdown.style.cssText = `
+      position: fixed;
+      background: #1c2128;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      padding: 0.4rem 0.6rem;
+      min-width: 220px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 1000;
+      font-family: inherit;
+    `
+
+    // Section header
+    const header = document.createElement('div')
+    header.textContent = 'Custom Samples'
+    header.style.cssText = `
+      padding: 0.2rem 0.2rem 0.3rem;
+      font-size: 0.55rem;
+      color: #484f58;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    `
+    dropdown.appendChild(header)
+
+    // Hint
+    const hint = document.createElement('div')
+    hint.textContent = 'Upload audio files to use as sample :user_<name>'
+    hint.style.cssText = `
+      font-size: 0.6rem;
+      color: #484f58;
+      padding: 0 0.2rem 0.3rem;
+    `
+    dropdown.appendChild(hint)
+
+    // Re-parent the SampleUploader into this dropdown
+    const uploaderContainer = this.sampleUploader['container'] as HTMLElement
+    dropdown.appendChild(uploaderContainer)
+
+    return dropdown
+  }
+
   dispose(): void {
     this.closeDropdown()
+    this.sampleUploader.dispose()
     this.container.remove()
   }
 }
