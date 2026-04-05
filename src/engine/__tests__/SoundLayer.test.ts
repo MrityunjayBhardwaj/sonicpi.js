@@ -675,6 +675,7 @@ describe('ProgramBuilder use_arg_bpm_scaling', () => {
     b.use_arg_bpm_scaling(false)
     b.with_fx('echo', { phase: 0.25 }, (inner) => {
       inner.play(60)
+      return inner
     })
     const steps = b.build()
     if (steps[0].tag === 'fx') {
