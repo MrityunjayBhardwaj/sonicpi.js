@@ -230,6 +230,111 @@ const ERROR_PATTERNS: Array<{
       }
     },
   },
+  // Transpile failure — code couldn't be converted to JS
+  {
+    test: (msg) => /transpile|tree-?sitter|invalid js output/i.test(msg),
+    transform: (msg) => {
+      const detail = msg.replace(/.*?:\s*/, '')
+      return {
+        title: 'Code couldn\'t be understood',
+        message: `Your code has a syntax issue the transpiler couldn't handle.\n\n` +
+          `Detail: ${detail}\n\n` +
+          `Common causes:\n` +
+          `  - Unclosed do/end block (every "do" needs a matching "end")\n` +
+          `  - Missing comma between arguments\n` +
+          `  - Unsupported Ruby syntax (not all Ruby features are available)\n\n` +
+          `Tip: Try commenting out sections to find which part causes the issue.`,
+      }
+    },
+  },
+  // Infinite loop detected
+  {
+    test: (msg) => /infinite loop|did you forget.*sleep/i.test(msg),
+    transform: () => ({
+      title: 'Infinite loop detected',
+      message: `Your code is running in a tight loop without sleeping.\n\n` +
+        `Every live_loop and loop needs a sleep:\n\n` +
+        `  live_loop :drums do\n` +
+        `    sample :bd_haus\n` +
+        `    sleep 0.5          # ← don't forget this!\n` +
+        `  end\n\n` +
+        `Without sleep, the loop runs thousands of times per second and freezes the browser.`,
+    }),
+  },
+  // Nil/undefined access (very common with get/set)
+  {
+    test: (msg) => /cannot read prop.*of undefined|cannot read prop.*of null|undefined is not an object/i.test(msg),
+    transform: (msg) => {
+      const propMatch = msg.match(/property '(\w+)'/i) ?? msg.match(/property "(\w+)"/i)
+      const prop = propMatch?.[1] ?? 'unknown'
+      return {
+        title: 'Trying to use something that doesn\'t exist yet',
+        message: `You tried to access .${prop} on something that is nil/undefined.\n\n` +
+          `Common causes:\n` +
+          `  - Using get[:name] before set :name was called\n` +
+          `  - Variable not yet assigned in this iteration\n` +
+          `  - case/when didn't match any branch (variables inside when are undefined outside)\n\n` +
+          `Tip: Make sure set() runs before get[], or provide a default:\n` +
+          `  val = get[:myval] || 0`,
+      }
+    },
+  },
+  // Wrong number of arguments
+  {
+    test: (msg) => /expected \d+ arguments|takes \d+ arguments|too (many|few) arguments/i.test(msg),
+    transform: (msg) => ({
+      title: 'Wrong number of arguments',
+      message: `${msg}\n\n` +
+        `Check the function signature. In Sonic Pi:\n` +
+        `  play 60                    → one note\n` +
+        `  play 60, amp: 0.5          → note + options\n` +
+        `  sample :bd_haus, rate: 2   → sample + options\n\n` +
+        `Options use key: value syntax (colon after the name).`,
+    }),
+  },
+  // Stack overflow (deeply nested calls)
+  {
+    test: (msg) => /maximum call stack|stack overflow/i.test(msg),
+    transform: () => ({
+      title: 'Code nested too deeply',
+      message: `Your code has too many nested calls — it ran out of stack space.\n\n` +
+        `Common causes:\n` +
+        `  - A define function calling itself without stopping (infinite recursion)\n` +
+        `  - Very deeply nested with_fx blocks (try reducing nesting)\n\n` +
+        `Tip: Make sure recursive functions have a base case that stops the recursion.`,
+    }),
+  },
+  // Redeclaration error (const/let)
+  {
+    test: (msg) => /redeclaration|has already been declared|identifier.*already/i.test(msg),
+    transform: (msg) => {
+      const varMatch = msg.match(/(?:of\s+|identifier\s+)'?(\w+)'?/i)
+      const name = varMatch?.[1] ?? 'variable'
+      return {
+        title: `"${name}" declared twice`,
+        message: `The variable "${name}" is being declared more than once.\n\n` +
+          `In Sonic Pi, you can reassign variables freely:\n` +
+          `  x = 1\n` +
+          `  x = 2    # ← this is fine\n\n` +
+          `If you're seeing this error, it may be a transpiler issue.\n` +
+          `Try renaming the variable or restarting.`,
+      }
+    },
+  },
+  // Invalid note / NaN play
+  {
+    test: (msg) => /NaN.*play|play.*NaN|invalid.*midi/i.test(msg),
+    transform: () => ({
+      title: 'Note couldn\'t be played',
+      message: `The note value resolved to something that isn't a valid pitch.\n\n` +
+        `Valid notes:\n` +
+        `  play 60          → MIDI note 60 (middle C)\n` +
+        `  play :c4          → C in octave 4\n` +
+        `  play :eb3         → E-flat in octave 3\n` +
+        `  play :fs5         → F-sharp in octave 5\n\n` +
+        `Note: Sharps use "s" (not #), flats use "b".`,
+    }),
+  },
   // Type errors (common JS mistakes)
   {
     test: (msg) => /is not a function/i.test(msg),
