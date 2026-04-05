@@ -15,6 +15,7 @@ import { Toolbar, type MidiDeviceInfo } from './Toolbar'
 import { MenuBar } from './MenuBar'
 import { CueLog } from './CueLog'
 import { SampleBrowser } from './SampleBrowser'
+import { HelpPanel } from './HelpPanel'
 
 // Sonic Pi's actual welcome buffer
 const WELCOME_CODE = `# Welcome to SonicPi.js
@@ -85,6 +86,7 @@ export class App {
   private recorder: Recorder | null = null
   private isRecording = false
   private sessionLog = new SessionLog()
+  private helpPanel!: HelpPanel
   private sampleBrowser: SampleBrowser | null = null
   private midiInitialized = false
   /** Set of selected MIDI input device IDs (tracked locally for UI state). */
@@ -140,6 +142,7 @@ export class App {
     await this.editor.init(this.buffers[0] || WELCOME_CODE)
     this.editor.onRun(() => this.handlePlay())
     this.editor.onStop(() => this.handleStop())
+    this.editor.onCursorWord((word) => this.helpPanel.updateWord(word))
 
     // Show buffer content indicators
     this.updateBufferIndicators()
@@ -252,6 +255,9 @@ export class App {
     editorPanel.appendChild(editorWrap)
     this.editor = new Editor(editorWrap)
 
+    // Help panel (below editor, hidden by default)
+    this.helpPanel = new HelpPanel(editorPanel)
+
     // Divider
     const divider = document.createElement('div')
     divider.style.cssText = `
@@ -292,6 +298,8 @@ export class App {
         onTogglePanel: (panel, visible) => this.togglePanel(panel, visible),
         getPanelVisibility: () => this.panelVisibility,
         onLog: (msg) => this.console.logSystem(msg),
+        onToggleHelp: () => this.helpPanel.toggle(),
+        isHelpVisible: () => this.helpPanel.isVisible,
       })
       // Move menu bar before main content
       const menuEl = this.root.lastElementChild!
@@ -652,6 +660,7 @@ export class App {
     this.sampleBrowser?.dispose()
     this.engine?.dispose()
     this.editor.dispose()
+    this.helpPanel.dispose()
     this.scope.dispose()
     this.console.dispose()
     this.cueLog.dispose()

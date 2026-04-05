@@ -30,6 +30,8 @@ export class MenuBar {
   private getActiveModes: () => Set<ScopeMode>
   private onTogglePanel: (panel: string, visible: boolean) => void
   private getPanelVisibility: () => Record<string, boolean>
+  private onToggleHelp: (() => void) | null
+  private isHelpVisible: (() => boolean) | null
   private activeDropdown: HTMLElement | null = null
   readonly sampleUploader: SampleUploader
 
@@ -41,12 +43,16 @@ export class MenuBar {
       onTogglePanel: (panel: string, visible: boolean) => void
       getPanelVisibility: () => Record<string, boolean>
       onLog?: (msg: string) => void
+      onToggleHelp?: () => void
+      isHelpVisible?: () => boolean
     }
   ) {
     this.onToggleScope = options.onToggleScope
     this.getActiveModes = options.getActiveModes
     this.onTogglePanel = options.onTogglePanel
     this.getPanelVisibility = options.getPanelVisibility
+    this.onToggleHelp = options.onToggleHelp ?? null
+    this.isHelpVisible = options.isHelpVisible ?? null
 
     this.container = document.createElement('div')
     this.container.style.cssText = `
@@ -76,6 +82,9 @@ export class MenuBar {
       { onLog: options.onLog },
     )
     this.addMenu('Samples', () => this.buildSamplesMenu())
+
+    // View menu (help panel toggle)
+    this.addMenu('View', () => this.buildViewMenu())
 
     // Close dropdown on outside click
     document.addEventListener('click', (e) => {
@@ -399,6 +408,78 @@ export class MenuBar {
     const uploaderContainer = this.sampleUploader['container'] as HTMLElement
     dropdown.appendChild(uploaderContainer)
 
+    return dropdown
+  }
+
+  private buildViewMenu(): HTMLElement {
+    const dropdown = document.createElement('div')
+    dropdown.style.cssText = `
+      position: fixed;
+      background: #1c2128;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      padding: 0.4rem 0;
+      min-width: 180px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 1000;
+      font-family: inherit;
+    `
+
+    // Help panel toggle
+    const item = document.createElement('div')
+    item.style.cssText = `
+      display: flex;
+      align-items: center;
+      padding: 0.3rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.7rem;
+      color: #c9d1d9;
+      gap: 0.5rem;
+      transition: background 0.1s;
+      user-select: none;
+    `
+    item.addEventListener('mouseenter', () => {
+      item.style.background = 'rgba(255,255,255,0.06)'
+    })
+    item.addEventListener('mouseleave', () => {
+      item.style.background = 'none'
+    })
+
+    const check = document.createElement('span')
+    const isOn = this.isHelpVisible?.() ?? false
+    check.style.cssText = `
+      width: 14px; height: 14px;
+      border: 1px solid ${isOn ? '#82AAFF' : 'rgba(255,255,255,0.2)'};
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6rem;
+      flex-shrink: 0;
+      background: ${isOn ? '#82AAFF' : 'none'};
+      color: ${isOn ? '#fff' : 'transparent'};
+      transition: all 0.15s;
+    `
+    check.textContent = isOn ? '\u2713' : ''
+
+    const label = document.createElement('span')
+    label.textContent = 'Show Help'
+
+    item.appendChild(check)
+    item.appendChild(label)
+
+    item.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.onToggleHelp?.()
+      // Update checkbox state
+      const nowOn = this.isHelpVisible?.() ?? false
+      check.textContent = nowOn ? '\u2713' : ''
+      check.style.color = nowOn ? '#fff' : 'transparent'
+      check.style.background = nowOn ? '#82AAFF' : 'none'
+      check.style.borderColor = nowOn ? '#82AAFF' : 'rgba(255,255,255,0.2)'
+    })
+
+    dropdown.appendChild(item)
     return dropdown
   }
 
