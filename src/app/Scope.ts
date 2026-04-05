@@ -15,7 +15,7 @@ const SCOPE_COLORS: Record<ScopeMode, string> = {
   stereo: '#5EBDAB',
   lissajous: '#C792EA',
   mirror: '#82AAFF',
-  spectrum: '#FFCB6B',
+  spectrum: '#0099FF',
 }
 
 const SCOPE_LABELS: Record<ScopeMode, string> = {
@@ -302,7 +302,7 @@ export class Scope {
 
       const barH = mag * h * 0.9
       const x = (w / numBars) * i
-      ctx.fillStyle = `rgba(255, 203, 107, ${0.4 + mag * 0.6})`
+      ctx.fillStyle = `rgba(0, 153, 255, ${0.4 + mag * 0.6})`
       ctx.fillRect(x, h - barH, barWidth, barH)
     }
     ctx.shadowBlur = 0
