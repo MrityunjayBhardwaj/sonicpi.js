@@ -50,7 +50,10 @@ function wrapBareCode(code: string): string {
   let hasBareCode = false
   for (const l of lines) {
     const t = l.trim()
+    // Count block openers — anything that has a matching `end`
     if (/^(live_loop|define|in_thread|with_fx|at|time_warp)\s/.test(t)) bareCheckDepth++
+    else if (/\bdo\s*(\|.*\|)?\s*$/.test(t) && bareCheckDepth > 0) bareCheckDepth++
+    else if (/^(if|unless|case|begin|loop|while|until|for)\s/.test(t) && bareCheckDepth > 0) bareCheckDepth++
     if (t === 'end' && bareCheckDepth > 0) bareCheckDepth--
     if (bareCheckDepth === 0) {
       if (/^\s*(play|sleep|sample)\s/.test(l) || /^\s*(\d+\.times\s+do|.*\.each\s+do)\s*/.test(l)) {
