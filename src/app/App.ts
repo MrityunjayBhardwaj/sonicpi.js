@@ -25,12 +25,8 @@ const WELCOME_CODE = `# =====================================================
 #   ___) | (_) | | | | | (__  |  __/| |   \\ V  V /  __/ |_) |
 #  |____/ \\___/|_| |_|_|\\___| |_|   |_|    \\_/\\_/ \\___|_.__/
 #
-#  The Live Coding Music Synth — In Your Browser
+#  Your Sonic Pi code, now portable.
 # =====================================================
-#
-#  Zero install. Open a URL and make music.
-#  No download, no Ruby, no SuperCollider setup.
-#  Works on any device with a browser.
 #
 #  Press Run (Ctrl+Enter or Alt+R) to hear this piece.
 #  Press Stop (Esc or Alt+S) to silence everything.
@@ -38,7 +34,7 @@ const WELCOME_CODE = `# =====================================================
 #
 #  github.com/MrityunjayBhardwaj/SonicPi.js
 #
-#  Built with love on top of:
+#  Standing on the shoulders of giants:
 #    Sonic Pi & Sam Aaron  — sonic-pi.net
 #    SuperCollider          — supercollider.github.io
 #    Algorave community     — algorave.com
@@ -154,14 +150,10 @@ const WELCOME_LOG = [
   '    ____) | (_) | | | | | (__  | |   | ||_| / / |  __/| |_) |',
   '   |_____/ \\___/|_| |_|_|\\___| |_|   |_|(_)/_/   \\___||_.__/',
   '',
-  '   The Live Coding Music Synth -- In Your Browser',
-  '',
-  '  Zero install. Open a URL and make music.',
-  '  No download, no Ruby, no SuperCollider setup.',
-  '  Works on any device with a browser.',
+  '   Your Sonic Pi code, now portable.',
   '',
   '  -------------------------------------------------------',
-  '  Built with love on top of:',
+  '  Standing on the shoulders of giants:',
   '    Sonic Pi & Sam Aaron    sonic-pi.net',
   '    SuperCollider            supercollider.github.io',
   '    Algorave community       algorave.com',
