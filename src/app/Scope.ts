@@ -79,7 +79,7 @@ export class Scope {
     this.rebuildCanvases()
   }
 
-  private rebuildCanvases(): void {
+  rebuildCanvases(): void {
     // Clear everything — canvases AND their wrapper divs
     this.canvases.clear()
     this.canvasContainer.innerHTML = ''

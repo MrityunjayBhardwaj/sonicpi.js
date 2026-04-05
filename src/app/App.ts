@@ -374,13 +374,102 @@ export class App {
     // Help panel (below editor, hidden by default)
     this.helpPanel = new HelpPanel(editorPanel)
 
-    // Divider
-    const divider = document.createElement('div')
-    divider.style.cssText = `
-      width: 1px; background: rgba(255,255,255,0.06);
-      flex-shrink: 0;
-    `
-    main.appendChild(divider)
+    // --- Reusable draggable splitter factory ---
+    const self = this
+    function createSplitter(
+      direction: 'horizontal' | 'vertical',
+      storageKey: string,
+      onResize: (delta: number) => void,
+    ): HTMLElement {
+      const el = document.createElement('div')
+      const isH = direction === 'horizontal'
+      let dragging = false
+
+      el.style.cssText = [
+        isH ? 'height: 4px; cursor: row-resize;' : 'width: 4px; cursor: col-resize;',
+        'background: rgba(255,255,255,0.06);',
+        'flex-shrink: 0;',
+        'transition: background 0.15s;',
+        'position: relative;',
+        'z-index: 5;',
+      ].join(' ')
+
+      const setIdle = () => {
+        el.style.background = 'rgba(255,255,255,0.06)'
+        el.style[isH ? 'height' : 'width'] = '4px'
+      }
+
+      el.addEventListener('mouseenter', () => {
+        el.style.background = 'rgba(232,82,124,0.4)'
+        el.style[isH ? 'height' : 'width'] = '6px'
+      })
+      el.addEventListener('mouseleave', () => { if (!dragging) setIdle() })
+
+      const startDrag = (startPos: number, getPos: (e: MouseEvent | Touch) => number) => {
+        dragging = true
+        el.style.background = 'rgba(232,82,124,0.6)'
+        let last = startPos
+
+        const onMove = (e: MouseEvent) => {
+          const pos = getPos(e)
+          onResize(pos - last)
+          last = pos
+        }
+        const onUp = () => {
+          dragging = false
+          setIdle()
+          document.removeEventListener('mousemove', onMove)
+          document.removeEventListener('mouseup', onUp)
+        }
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseup', onUp)
+      }
+
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        startDrag(isH ? e.clientY : e.clientX, (ev) => isH ? ev.clientY : ev.clientX)
+      })
+
+      // Touch support
+      el.addEventListener('touchstart', (e) => {
+        e.preventDefault()
+        const t = e.touches[0]
+        dragging = true
+        el.style.background = 'rgba(232,82,124,0.6)'
+        let last = isH ? t.clientY : t.clientX
+
+        const onTouchMove = (ev: TouchEvent) => {
+          const pos = isH ? ev.touches[0].clientY : ev.touches[0].clientX
+          onResize(pos - last)
+          last = pos
+        }
+        const onTouchEnd = () => {
+          dragging = false
+          setIdle()
+          document.removeEventListener('touchmove', onTouchMove)
+          document.removeEventListener('touchend', onTouchEnd)
+        }
+        document.addEventListener('touchmove', onTouchMove, { passive: false })
+        document.addEventListener('touchend', onTouchEnd)
+      }, { passive: false })
+
+      return el
+    }
+
+    // --- Vertical splitter (editor <-> right panel) ---
+    const mainSplitter = createSplitter('vertical', 'spw-split-main', (delta) => {
+      const edW = editorPanel.getBoundingClientRect().width + delta
+      const rpW = rightPanel.getBoundingClientRect().width - delta
+      if (edW >= 200 && rpW >= 200) {
+        editorPanel.style.flex = 'none'
+        editorPanel.style.width = `${edW}px`
+        rightPanel.style.width = `${rpW}px`
+        rightPanel.style.maxWidth = 'none'
+        try { localStorage.setItem('spw-split-main', JSON.stringify({ ed: edW, rp: rpW })) } catch {}
+        self.scope?.rebuildCanvases?.()
+      }
+    })
+    main.appendChild(mainSplitter)
 
     // Right panel
     const rightPanel = document.createElement('div')
@@ -391,6 +480,18 @@ export class App {
       overflow: hidden; background: #0d1117;
     `
     main.appendChild(rightPanel)
+
+    // Load saved main split
+    try {
+      const saved = localStorage.getItem('spw-split-main')
+      if (saved) {
+        const { ed, rp } = JSON.parse(saved)
+        editorPanel.style.flex = 'none'
+        editorPanel.style.width = `${ed}px`
+        rightPanel.style.width = `${rp}px`
+        rightPanel.style.maxWidth = 'none'
+      }
+    } catch {}
 
     // Scope
     const scopeContainer = document.createElement('div')
@@ -403,6 +504,23 @@ export class App {
     `
     rightPanel.appendChild(scopeContainer)
     this.scope = new Scope(scopeContainer)
+
+    // Load saved scope height
+    try {
+      const savedH = localStorage.getItem('spw-split-right')
+      if (savedH) scopeContainer.style.height = `${parseInt(savedH)}px`
+    } catch {}
+
+    // --- Horizontal splitter (scope <-> console) ---
+    const rightSplitter = createSplitter('horizontal', 'spw-split-right', (delta) => {
+      const h = scopeContainer.getBoundingClientRect().height + delta
+      if (h >= 60 && h <= rightPanel.getBoundingClientRect().height - 80) {
+        scopeContainer.style.height = `${h}px`
+        try { localStorage.setItem('spw-split-right', String(Math.round(h))) } catch {}
+        self.scope?.rebuildCanvases?.()
+      }
+    })
+    rightPanel.appendChild(rightSplitter)
 
     // Menu bar — topmost element, above toolbar.
     // Must be created after Scope so toggleMode/getActiveModes are available.
@@ -443,24 +561,57 @@ export class App {
     const mq = window.matchMedia('(max-width: 700px)')
     const apply = (mobile: boolean) => {
       main.style.flexDirection = mobile ? 'column' : 'row'
-      rightPanel.style.width = mobile ? '100%' : '40%'
-      rightPanel.style.maxWidth = mobile ? 'none' : '520px'
-      divider.style.width = mobile ? '0' : '1px'
-      divider.style.height = mobile ? '1px' : '0'
-      divider.style.background = 'rgba(255,255,255,0.06)'
+      mainSplitter.style.display = mobile ? 'none' : ''
       if (mobile) {
-        editorPanel.style.height = '50%'
         editorPanel.style.flex = 'none'
+        editorPanel.style.height = '50%'
+        editorPanel.style.width = ''
+        rightPanel.style.width = '100%'
+        rightPanel.style.maxWidth = 'none'
       } else {
-        editorPanel.style.height = ''
-        editorPanel.style.flex = '1'
+        // Restore saved split or defaults
+        try {
+          const saved = localStorage.getItem('spw-split-main')
+          if (saved) {
+            const { ed, rp } = JSON.parse(saved)
+            editorPanel.style.flex = 'none'
+            editorPanel.style.width = `${ed}px`
+            editorPanel.style.height = ''
+            rightPanel.style.width = `${rp}px`
+            rightPanel.style.maxWidth = 'none'
+          } else {
+            editorPanel.style.flex = '1'
+            editorPanel.style.width = ''
+            editorPanel.style.height = ''
+            rightPanel.style.width = '40%'
+            rightPanel.style.maxWidth = '520px'
+          }
+        } catch {
+          editorPanel.style.flex = '1'
+          editorPanel.style.width = ''
+          editorPanel.style.height = ''
+          rightPanel.style.width = '40%'
+          rightPanel.style.maxWidth = '520px'
+        }
       }
+      self.scope?.rebuildCanvases?.()
     }
     apply(mq.matches)
     mq.addEventListener('change', (e) => apply(e.matches))
 
     // Apply saved panel visibility
     this.applyPanelVisibility()
+
+    // Window resize — keep panels within bounds
+    window.addEventListener('resize', () => {
+      const mainW = main.getBoundingClientRect().width
+      const edW = editorPanel.getBoundingClientRect().width
+      const rpW = rightPanel.getBoundingClientRect().width
+      if (edW + rpW + 4 > mainW && rpW > 200) {
+        rightPanel.style.width = `${Math.max(200, mainW - edW - 8)}px`
+      }
+      self.scope?.rebuildCanvases?.()
+    })
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
