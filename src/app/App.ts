@@ -28,17 +28,19 @@ const WELCOME_CODE = `# =====================================================
 #  The Live Coding Music Synth — In Your Browser
 # =====================================================
 #
+#  Zero install. Open a URL and make music.
+#  No download, no Ruby, no SuperCollider setup.
+#  Works on any device with a browser.
+#
 #  Press Run (Ctrl+Enter or Alt+R) to hear this piece.
 #  Press Stop (Esc or Alt+S) to silence everything.
 #  Edit the code while it plays — changes apply instantly!
 #
 #  github.com/MrityunjayBhardwaj/SonicPi.js
 #
-#  Standing on the shoulders of giants:
+#  Built with love on top of:
 #    Sonic Pi & Sam Aaron  — sonic-pi.net
 #    SuperCollider          — supercollider.github.io
-#    SuperSonic             — scsynth compiled to WebAssembly
-#    Web Audio API          — the browser audio standard
 #    Algorave community     — algorave.com
 #
 # =====================================================
@@ -154,14 +156,15 @@ const WELCOME_LOG = [
   '',
   '   The Live Coding Music Synth -- In Your Browser',
   '',
-  '  -------------------------------------------------------',
-  '  Standing on the shoulders of giants:',
+  '  Zero install. Open a URL and make music.',
+  '  No download, no Ruby, no SuperCollider setup.',
+  '  Works on any device with a browser.',
   '',
+  '  -------------------------------------------------------',
+  '  Built with love on top of:',
   '    Sonic Pi & Sam Aaron    sonic-pi.net',
   '    SuperCollider            supercollider.github.io',
   '    Algorave community       algorave.com',
-  '    Web Audio API + AudioWorklets',
-  '    SuperSonic (scsynth -> WebAssembly)',
   '  -------------------------------------------------------',
   '',
   '  Shortcuts:',
