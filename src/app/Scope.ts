@@ -287,7 +287,6 @@ export class Scope {
     const binCount = data.length
     const nyquist = sampleRate / 2
 
-    ctx.shadowColor = color
     ctx.shadowBlur = 4
 
     for (let i = 0; i < numBars; i++) {
@@ -300,9 +299,16 @@ export class Scope {
       for (let b = binLow; b <= binHigh; b++) { sum += data[b]; count++ }
       const mag = count > 0 ? sum / count / 255 : 0
 
+      // Gradient: superman blue (#0099FF) → magenta (#FF00FF)
+      const t = i / numBars
+      const r = Math.round(0 + t * 255)
+      const g = Math.round(153 - t * 153)
+      const b2 = 255
+      ctx.shadowColor = `rgb(${r}, ${g}, ${b2})`
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b2}, ${0.4 + mag * 0.6})`
+
       const barH = mag * h * 0.9
       const x = (w / numBars) * i
-      ctx.fillStyle = `rgba(255, 0, 255, ${0.4 + mag * 0.6})`
       ctx.fillRect(x, h - barH, barWidth, barH)
     }
     ctx.shadowBlur = 0
