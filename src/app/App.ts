@@ -11,9 +11,10 @@ import { examples as allExamples, type Example } from '../engine/examples'
 import { Editor } from './Editor'
 import { Scope } from './Scope'
 import { Console } from './Console'
-import { Toolbar } from './Toolbar'
+import { Toolbar, type MidiDeviceInfo } from './Toolbar'
 import { MenuBar } from './MenuBar'
 import { CueLog } from './CueLog'
+import { SampleBrowser } from './SampleBrowser'
 
 // Sonic Pi's actual welcome buffer
 const WELCOME_CODE = `# Welcome to SonicPi.js
@@ -83,6 +84,12 @@ export class App {
   private recorder: Recorder | null = null
   private isRecording = false
   private sessionLog = new SessionLog()
+  private sampleBrowser: SampleBrowser | null = null
+  private midiInitialized = false
+  /** Set of selected MIDI input device IDs (tracked locally for UI state). */
+  private selectedMidiInputs = new Set<string>()
+  /** Set of selected MIDI output device IDs (tracked locally for UI state). */
+  private selectedMidiOutputs = new Set<string>()
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -190,6 +197,9 @@ export class App {
       onExample: (ex) => this.loadExample(ex),
       onBufferSelect: (i) => this.switchBuffer(i),
       onVolumeChange: (v) => { if (this.engine) this.engine.setVolume(v) },
+      getMidiDevices: () => this.getMidiDevices(),
+      onMidiDeviceToggle: (id, type, selected) => this.toggleMidiDevice(id, type, selected),
+      onOpenSampleBrowser: () => this.openSampleBrowser(),
     })
 
     // Main area
@@ -538,8 +548,97 @@ export class App {
     if (cueLogEl) cueLogEl.style.display = this.panelVisibility.cueLog !== false ? '' : 'none'
   }
 
+  // ---------------------------------------------------------------------------
+  // MIDI device management
+  // ---------------------------------------------------------------------------
+
+  private getMidiDevices(): MidiDeviceInfo[] {
+    if (!this.engine) return []
+    // Lazy-init MIDI on first dropdown open
+    if (!this.midiInitialized) {
+      this.engine.midiBridge.init().then((ok) => {
+        this.midiInitialized = ok
+      })
+      return [] // will populate on next open
+    }
+    const devices = this.engine.midiBridge.getDevices()
+    return devices.map(d => ({
+      id: d.id,
+      name: d.name,
+      type: d.type,
+      selected: d.type === 'input'
+        ? this.selectedMidiInputs.has(d.id)
+        : this.selectedMidiOutputs.has(d.id),
+    }))
+  }
+
+  private toggleMidiDevice(deviceId: string, type: 'input' | 'output', selected: boolean): void {
+    if (!this.engine) return
+    const bridge = this.engine.midiBridge
+    if (type === 'input') {
+      if (selected) {
+        bridge.selectInput(deviceId)
+        this.selectedMidiInputs.add(deviceId)
+      } else {
+        bridge.deselectInput(deviceId)
+        this.selectedMidiInputs.delete(deviceId)
+      }
+    } else {
+      if (selected) {
+        bridge.selectOutput(deviceId)
+        this.selectedMidiOutputs.add(deviceId)
+      } else {
+        bridge.deselectOutput(deviceId)
+        this.selectedMidiOutputs.delete(deviceId)
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sample browser
+  // ---------------------------------------------------------------------------
+
+  private openSampleBrowser(): void {
+    if (this.sampleBrowser?.isOpen) {
+      this.sampleBrowser.close()
+      return
+    }
+    this.sampleBrowser = new SampleBrowser({
+      onPreviewSample: (name) => this.previewSample(name),
+      onInsertText: (text) => {
+        this.editor.insertAtCursor(text)
+      },
+    })
+    this.sampleBrowser.open()
+  }
+
+  private async previewSample(name: string): Promise<void> {
+    try {
+      if (!this.engine) {
+        this.console.logSystem('  Start the engine first to preview samples.')
+        return
+      }
+      // Evaluate a one-shot sample play
+      const code = `sample :${name}`
+      const result = await this.engine.evaluate(code)
+      if (result.error) {
+        this.console.logError('Preview failed', result.error.message)
+        return
+      }
+      this.engine.play()
+      // If not already playing, mark as playing so stop works
+      if (!this.playing) {
+        this.playing = true
+        this.toolbar.setPlaying(true)
+      }
+    } catch (err) {
+      this.console.logError('Preview failed', String(err))
+    }
+  }
+
   dispose(): void {
     this.handleStop()
+    this.sampleBrowser?.dispose()
     this.engine?.dispose()
     this.editor.dispose()
     this.scope.dispose()

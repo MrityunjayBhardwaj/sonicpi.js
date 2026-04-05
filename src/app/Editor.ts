@@ -144,6 +144,22 @@ export class Editor {
     }
   }
 
+  /** Insert text at the current cursor position (or replace selection). */
+  insertAtCursor(text: string): void {
+    if (this.view) {
+      const sel = this.view.state.selection?.main ?? { from: 0, to: 0 }
+      this.view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: text },
+      })
+    } else if (this.fallbackTextarea) {
+      const ta = this.fallbackTextarea
+      const start = ta.selectionStart
+      const end = ta.selectionEnd
+      ta.value = ta.value.substring(0, start) + text + ta.value.substring(end)
+      ta.selectionStart = ta.selectionEnd = start + text.length
+    }
+  }
+
   onRun(callback: () => void): void { this.onRunCallback = callback }
   onStop(callback: () => void): void { this.onStopCallback = callback }
 

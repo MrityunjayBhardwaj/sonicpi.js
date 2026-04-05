@@ -4,6 +4,13 @@
 
 import { examples, getExamplesByDifficulty, type Example } from '../engine/examples'
 
+export interface MidiDeviceInfo {
+  id: string
+  name: string
+  type: 'input' | 'output'
+  selected: boolean
+}
+
 export interface ToolbarCallbacks {
   onPlay: () => void
   onStop: () => void
@@ -11,6 +18,9 @@ export interface ToolbarCallbacks {
   onExample: (example: Example) => void
   onBufferSelect: (index: number) => void
   onVolumeChange: (vol: number) => void
+  onMidiDeviceToggle?: (deviceId: string, type: 'input' | 'output', selected: boolean) => void
+  getMidiDevices?: () => MidiDeviceInfo[]
+  onOpenSampleBrowser?: () => void
 }
 
 const BUFFER_COUNT = 10
@@ -25,6 +35,8 @@ export class Toolbar {
   private playing = false
   private recording = false
   private bpmLabel: HTMLElement
+  private midiDropdown: HTMLElement | null = null
+  private midiOutsideClickHandler: ((e: MouseEvent) => void) | null = null
 
   constructor(container: HTMLElement, private callbacks: ToolbarCallbacks) {
     this.el = document.createElement('div')
@@ -126,6 +138,28 @@ export class Toolbar {
     `
     this.bpmLabel.textContent = '120 BPM'
     topRow.appendChild(this.bpmLabel)
+
+    topRow.appendChild(this.separator())
+
+    // MIDI button
+    const midiBtn = this.iconButton(
+      '\u{1F3B9}', 'MIDI',
+      () => this.toggleMidiDropdown(midiBtn),
+      { bg: '#555', hover: '#777' }
+    )
+    midiBtn.title = 'MIDI Devices'
+    midiBtn.style.opacity = '0.7'
+    topRow.appendChild(midiBtn)
+
+    // Samples button
+    const samplesBtn = this.iconButton(
+      '\u{1F3B5}', 'Samples',
+      () => this.callbacks.onOpenSampleBrowser?.(),
+      { bg: '#555', hover: '#777' }
+    )
+    samplesBtn.title = 'Browse Samples'
+    samplesBtn.style.opacity = '0.7'
+    topRow.appendChild(samplesBtn)
 
     topRow.appendChild(this.separator())
 
@@ -325,7 +359,189 @@ export class Toolbar {
     return btn
   }
 
+  private toggleMidiDropdown(anchor: HTMLElement): void {
+    if (this.midiDropdown) {
+      this.closeMidiDropdown()
+      return
+    }
+
+    const dropdown = document.createElement('div')
+    dropdown.style.cssText = `
+      position: fixed;
+      background: #1c2128;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      padding: 0.4rem 0;
+      min-width: 220px;
+      max-height: 320px;
+      overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 1000;
+      font-family: inherit;
+    `
+
+    const rect = anchor.getBoundingClientRect()
+    dropdown.style.left = `${rect.left}px`
+    dropdown.style.top = `${rect.bottom + 4}px`
+
+    this.buildMidiDropdownContent(dropdown)
+
+    document.body.appendChild(dropdown)
+    this.midiDropdown = dropdown
+
+    // Close on outside click
+    this.midiOutsideClickHandler = (e: MouseEvent) => {
+      if (!dropdown.contains(e.target as Node) && !anchor.contains(e.target as Node)) {
+        this.closeMidiDropdown()
+      }
+    }
+    setTimeout(() => {
+      document.addEventListener('click', this.midiOutsideClickHandler!)
+    }, 0)
+  }
+
+  private closeMidiDropdown(): void {
+    if (this.midiOutsideClickHandler) {
+      document.removeEventListener('click', this.midiOutsideClickHandler)
+      this.midiOutsideClickHandler = null
+    }
+    if (this.midiDropdown) {
+      this.midiDropdown.remove()
+      this.midiDropdown = null
+    }
+  }
+
+  private buildMidiDropdownContent(dropdown: HTMLElement): void {
+    dropdown.innerHTML = ''
+
+    const getMidiDevices = this.callbacks.getMidiDevices
+    if (!getMidiDevices) {
+      this.addMidiMessage(dropdown, 'MIDI not available')
+      return
+    }
+
+    const devices = getMidiDevices()
+
+    // Check for Web MIDI support
+    if (!navigator.requestMIDIAccess) {
+      this.addMidiMessage(dropdown, 'MIDI not supported in this browser')
+      return
+    }
+
+    if (devices.length === 0) {
+      this.addMidiMessage(dropdown, 'No MIDI devices found')
+      return
+    }
+
+    const inputs = devices.filter(d => d.type === 'input')
+    const outputs = devices.filter(d => d.type === 'output')
+
+    if (inputs.length > 0) {
+      this.addMidiSectionHeader(dropdown, 'Inputs')
+      for (const dev of inputs) {
+        this.addMidiDeviceRow(dropdown, dev)
+      }
+    }
+
+    if (outputs.length > 0) {
+      if (inputs.length > 0) {
+        const sep = document.createElement('div')
+        sep.style.cssText = 'height: 1px; background: rgba(255,255,255,0.06); margin: 0.3rem 0;'
+        dropdown.appendChild(sep)
+      }
+      this.addMidiSectionHeader(dropdown, 'Outputs')
+      for (const dev of outputs) {
+        this.addMidiDeviceRow(dropdown, dev)
+      }
+    }
+  }
+
+  private addMidiMessage(container: HTMLElement, text: string): void {
+    const msg = document.createElement('div')
+    msg.textContent = text
+    msg.style.cssText = `
+      padding: 0.8rem;
+      text-align: center;
+      color: #484f58;
+      font-size: 0.7rem;
+    `
+    container.appendChild(msg)
+  }
+
+  private addMidiSectionHeader(container: HTMLElement, text: string): void {
+    const header = document.createElement('div')
+    header.textContent = text
+    header.style.cssText = `
+      padding: 0.3rem 0.8rem 0.2rem;
+      font-size: 0.55rem;
+      color: #484f58;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    `
+    container.appendChild(header)
+  }
+
+  private addMidiDeviceRow(container: HTMLElement, device: MidiDeviceInfo): void {
+    const row = document.createElement('div')
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      padding: 0.3rem 0.8rem;
+      cursor: pointer;
+      font-size: 0.7rem;
+      color: #c9d1d9;
+      gap: 0.5rem;
+      transition: background 0.1s;
+      user-select: none;
+    `
+    row.addEventListener('mouseenter', () => {
+      row.style.background = 'rgba(255,255,255,0.06)'
+    })
+    row.addEventListener('mouseleave', () => {
+      row.style.background = 'none'
+    })
+
+    // Checkbox
+    const check = document.createElement('span')
+    check.style.cssText = `
+      width: 14px; height: 14px;
+      border: 1px solid ${device.selected ? '#E8527C' : 'rgba(255,255,255,0.2)'};
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6rem;
+      flex-shrink: 0;
+      background: ${device.selected ? '#E8527C' : 'none'};
+      color: ${device.selected ? '#fff' : 'transparent'};
+      transition: all 0.15s;
+    `
+    check.textContent = device.selected ? '\u2713' : ''
+
+    const label = document.createElement('span')
+    label.textContent = device.name
+    label.style.cssText = `
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    `
+
+    row.append(check, label)
+    row.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const newSelected = !device.selected
+      this.callbacks.onMidiDeviceToggle?.(device.id, device.type, newSelected)
+      // Rebuild content in place
+      if (this.midiDropdown) {
+        this.buildMidiDropdownContent(this.midiDropdown)
+      }
+    })
+
+    container.appendChild(row)
+  }
+
   dispose(): void {
+    this.closeMidiDropdown()
     this.el.remove()
   }
 }
