@@ -21,7 +21,7 @@ const SCOPE_COLORS: Record<ScopeMode, string> = {
   stereo: '#5EBDAB',
   lissajous: '#C792EA',
   mirror: '#82AAFF',
-  spectrum: '#8B5CF6',
+  spectrum: '#FF00FF',
 }
 
 export class MenuBar {
