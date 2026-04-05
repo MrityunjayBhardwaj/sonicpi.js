@@ -293,23 +293,20 @@ export class App {
     rightPanel.appendChild(scopeContainer)
     this.scope = new Scope(scopeContainer)
 
-    // Menu bar — inserted after toolbar, before main content.
+    // Menu bar — topmost element, above toolbar.
     // Must be created after Scope so toggleMode/getActiveModes are available.
-    const menuBarAnchor = this.root.querySelector('.spw-main')
-    if (menuBarAnchor) {
-      this.menuBar = new MenuBar(this.root, {
-        onToggleScope: (mode) => this.scope.toggleMode(mode),
-        getActiveModes: () => this.scope.getActiveModes(),
-        onTogglePanel: (panel, visible) => this.togglePanel(panel, visible),
-        getPanelVisibility: () => this.panelVisibility,
-        onLog: (msg) => this.console.logSystem(msg),
-        onToggleHelp: () => this.helpPanel.toggle(),
-        isHelpVisible: () => this.helpPanel.isVisible,
-      })
-      // Move menu bar before main content
-      const menuEl = this.root.lastElementChild!
-      this.root.insertBefore(menuEl, menuBarAnchor)
-    }
+    this.menuBar = new MenuBar(this.root, {
+      onToggleScope: (mode) => this.scope.toggleMode(mode),
+      getActiveModes: () => this.scope.getActiveModes(),
+      onTogglePanel: (panel, visible) => this.togglePanel(panel, visible),
+      getPanelVisibility: () => this.panelVisibility,
+      onLog: (msg) => this.console.logSystem(msg),
+      onToggleHelp: () => this.helpPanel.toggle(),
+      isHelpVisible: () => this.helpPanel.isVisible,
+    })
+    // Move menu bar to the very top (before toolbar)
+    const menuEl = this.root.lastElementChild!
+    this.root.insertBefore(menuEl, this.root.firstElementChild!)
 
     // Console
     const consoleContainer = document.createElement('div')
