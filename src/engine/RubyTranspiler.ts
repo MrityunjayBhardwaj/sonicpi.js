@@ -164,6 +164,9 @@ export function transpileRubyToJS(ruby: string): string {
       if (t.endsWith('\\')) {
         ln = t.slice(0, -1).trimEnd() + ' ' + rawLines[j + 1].trim()
         j++
+      } else if (/^\/[^/].*\/$/.test(t.trim())) {
+        // Sonic Pi /comment/ line — don't join with next line
+        break
       } else if (t.endsWith(',') || /(?:&&|\|\||[+*\/%]|\band\b|\bor\b)$/.test(t)) {
         ln = t + ' ' + rawLines[j + 1].trim()
         j++
@@ -213,6 +216,13 @@ export function transpileRubyToJS(ruby: string): string {
     // --- Full-line comment ---
     if (code.startsWith('#')) {
       result.push(`${indent}//${code.slice(1)}`)
+      i++
+      continue
+    }
+
+    // --- Sonic Pi /comment/ syntax (Ruby regex used as multi-line comment) ---
+    if (/^\/[^/].*\/$/.test(code) && !/[=~<>!]/.test(code)) {
+      result.push(`${indent}// ${code.slice(1, -1).trim()}`)
       i++
       continue
     }

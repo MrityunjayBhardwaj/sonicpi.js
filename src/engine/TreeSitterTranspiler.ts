@@ -582,6 +582,8 @@ function transpileNode(node: any, ctx: TranspileContext): string {
     case 'unary': {
       const operand = node.namedChildren[0]
       const op = node.children[0]?.text ?? '-'
+      // defined? x → typeof x !== 'undefined'
+      if (op === 'defined?') return `(typeof ${transpileNode(operand, ctx)} !== 'undefined')`
       const jsOp = op === 'not' ? '!' : op
       return `${jsOp}${transpileNode(operand, ctx)}`
     }
@@ -745,6 +747,32 @@ function transpileNode(node: any, ctx: TranspileContext): string {
         : ''
       const bodyStr = body ? transpileNode(body, ctx) : ''
       return `function ${nameNode.text}(${paramStr}) {\n${bodyStr}\n${ctx.indent}}`
+    }
+
+    // ---- Lambda ----
+    case 'lambda': {
+      // ->(x) { x * 2 } → (x) => { return x * 2 }
+      const params = node.namedChildren.find((c: any) => c.type === 'lambda_parameters' || c.type === 'block_parameters')
+      const body = node.namedChildren.find((c: any) => c.type === 'block' || c.type === 'do_block') ?? node.namedChildren[node.namedChildCount - 1]
+      const paramStr = params ? params.namedChildren.map((c: any) => transpileNode(c, ctx)).join(', ') : ''
+      const bodyStr = body ? transpileNode(body, ctx) : ''
+      return `(${paramStr}) => { ${bodyStr} }`
+    }
+
+    // ---- Block argument (&:method → (x) => x.method()) ----
+    case 'block_argument': {
+      const inner = node.namedChildren[0]
+      if (inner?.type === 'simple_symbol') {
+        const method = inner.text.slice(1) // strip :
+        return `(__x) => __x.${method}()`
+      }
+      return transpileNode(inner, ctx)
+    }
+
+    // ---- Multiple assignment: a, b = [1, 2] → [a, b] = [1, 2] ----
+    case 'left_assignment_list': {
+      const vars = node.namedChildren.map((c: any) => transpileNode(c, ctx))
+      return `[${vars.join(', ')}]`
     }
 
     // ---- Splat/rest ----
