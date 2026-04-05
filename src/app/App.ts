@@ -17,47 +17,158 @@ import { CueLog } from './CueLog'
 import { SampleBrowser } from './SampleBrowser'
 import { HelpPanel } from './HelpPanel'
 
-// Sonic Pi's actual welcome buffer
-const WELCOME_CODE = `# Welcome to SonicPi.js
-# The Live Coding Music Synth for Everyone.
+// Sonic Pi's actual welcome buffer — the Blade Runner demo
+const WELCOME_CODE = `# =====================================================
+#   ____              _        ____  _  __        __   _
+#  / ___|  ___  _ __ (_) ___  |  _ \\(_) \\ \\      / /__| |__
+#  \\___ \\ / _ \\| '_ \\| |/ __| | |_) | |  \\ \\ /\\ / / _ \\ '_ \\
+#   ___) | (_) | | | | | (__  |  __/| |   \\ V  V /  __/ |_) |
+#  |____/ \\___/|_| |_|_|\\___| |_|   |_|    \\_/\\_/ \\___|_.__/
 #
-# Press Run (or Ctrl+Enter) to hear this code.
-# Press Stop (or Esc) to silence everything.
-# Try changing the code while it plays!
+#  The Live Coding Music Synth — In Your Browser
+# =====================================================
+#
+#  Press Run (Ctrl+Enter or Alt+R) to hear this piece.
+#  Press Stop (Esc or Alt+S) to silence everything.
+#  Edit the code while it plays — changes apply instantly!
+#
+#  github.com/MrityunjayBhardwaj/SonicPi.js
+#
+#  Standing on the shoulders of giants:
+#    Sonic Pi & Sam Aaron  — sonic-pi.net
+#    SuperCollider          — supercollider.github.io
+#    SuperSonic             — scsynth compiled to WebAssembly
+#    Web Audio API          — the browser audio standard
+#    Algorave community     — algorave.com
+#
+# =====================================================
+#  BLADE RUNNER — HOPE EDIT
+#  Key: C minor with a hopeful resolution arc
+#  Cm (shadow) -> Gm (tension) -> Eb (warmth) -> G (hope)
+# =====================================================
 
-live_loop :drums do
-  sample :bd_haus
-  sleep 0.5
-  sample :sn_dub
-  sleep 0.5
-end
+use_bpm 52
 
-live_loop :bass do
-  use_synth :tb303
-  play :e2, release: 0.3, cutoff: rrand(60, 120)
-  sleep 0.25
+with_fx :reverb, room: 0.92, mix: 0.72 do
+  with_fx :echo, phase: 1.5, decay: 4, mix: 0.20 do
+
+    # Pad chords — the harmonic foundation
+    live_loop :blade_runner do
+      use_synth :blade
+
+      [:c3, :eb3, :g3].each do |n|
+        play n, release: 6, attack: 2, amp: 0.5,
+          cutoff: 70, vibrato_rate: 5, vibrato_depth: 0.10,
+          vibrato_delay: 1.0
+      end
+      sleep 6
+
+      [:g3, :bb3, :d4].each do |n|
+        play n, release: 6, attack: 2, amp: 0.5,
+          cutoff: 72, vibrato_rate: 5, vibrato_depth: 0.10,
+          vibrato_delay: 1.0
+      end
+      sleep 6
+
+      [:eb3, :g3, :bb3].each do |n|
+        play n, release: 6, attack: 2, amp: 0.55,
+          cutoff: 82, vibrato_rate: 5.5, vibrato_depth: 0.14,
+          vibrato_delay: 0.8
+      end
+      sleep 6
+
+      [:g3, :b3, :d4].each do |n|
+        play n, release: 7, attack: 2, amp: 0.55,
+          cutoff: 85, vibrato_rate: 6, vibrato_depth: 0.16,
+          vibrato_delay: 0.6
+      end
+      sleep 6
+    end
+
+    # Rising melody — climbs one step per bar, never resolves
+    live_loop :hope_melody, sync: :blade_runner do
+      use_synth :blade
+
+      play :c4, attack: 1.5, sustain: 2.0, release: 2.0, amp: 0.55,
+        cutoff: 78, vibrato_rate: 5.5, vibrato_depth: 0.16,
+        vibrato_delay: 0.7, vibrato_onset: 0.4
+      sleep 3
+      play :eb4, attack: 0.8, sustain: 1.5, release: 1.5, amp: 0.50,
+        cutoff: 76, vibrato_rate: 5.2, vibrato_depth: 0.14,
+        vibrato_delay: 0.6, vibrato_onset: 0.3
+      sleep 3
+
+      play :d4, attack: 1.5, sustain: 2.5, release: 2.0, amp: 0.52,
+        cutoff: 80, vibrato_rate: 5.8, vibrato_depth: 0.17,
+        vibrato_delay: 0.7, vibrato_onset: 0.4
+      sleep 4
+      play :f4, attack: 0.8, sustain: 1.0, release: 1.5, amp: 0.48,
+        cutoff: 78, vibrato_rate: 5.5, vibrato_depth: 0.15,
+        vibrato_delay: 0.5, vibrato_onset: 0.3
+      sleep 2
+
+      play :g4, attack: 2.0, sustain: 3.0, release: 2.5, amp: 0.60,
+        cutoff: 88, vibrato_rate: 6.2, vibrato_depth: 0.22,
+        vibrato_delay: 0.9, vibrato_onset: 0.5
+      sleep 6
+
+      play :d5, attack: 2.5, sustain: 3.5, release: 3.0, amp: 0.58,
+        cutoff: 92, vibrato_rate: 6.8, vibrato_depth: 0.24,
+        vibrato_delay: 1.0, vibrato_onset: 0.6
+      sleep 6
+    end
+
+    # High shimmer — sparse, probabilistic sparkles
+    live_loop :shimmer, sync: :blade_runner do
+      use_synth :blade
+      notes = [:c5, :eb5, :g5, :bb5, :d6, :g5, :eb5, :c5]
+      notes.each do |n|
+        if one_in(2)
+          play n,
+            attack: rrand(1.5, 3.0),
+            sustain: rrand(1.0, 2.5),
+            release: rrand(3.0, 5.0),
+            amp: rrand(0.10, 0.22),
+            cutoff: rrand(88, 100),
+            vibrato_rate: rrand(7, 9),
+            vibrato_depth: rrand(0.12, 0.28),
+            vibrato_delay: 0.4,
+            vibrato_onset: 0.3
+        end
+        sleep rrand_i(2, 5)
+      end
+    end
+
+  end
 end`
 
-// Welcome log — same spirit as Sam Aaron's boot message
+// Welcome log — credits and shortcuts
 const WELCOME_LOG = [
   '',
-  '  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
-  '  ~~  Welcome to SonicPi.js                               ~~',
-  '  ~~  The Live Coding Music Synth for Everyone              ~~',
-  '  ~~                                                        ~~',
-  '  ~~  Based on Sonic Pi by Sam Aaron                        ~~',
-  '  ~~  https://sonic-pi.net                                  ~~',
-  '  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+  '     _____             _        ____  _  _      __     _',
+  '    / ____|           (_)      |  _ \\(_)| |    / /    | |',
+  '   | (___   ___  _ __  _  ___  | |_) |_ | |   / / ___ | |__',
+  '    \\___ \\ / _ \\| \'_ \\| |/ __| |  __/| || |  / / / _ \\| \'_ \\',
+  '    ____) | (_) | | | | | (__  | |   | ||_| / / |  __/| |_) |',
+  '   |_____/ \\___/|_| |_|_|\\___| |_|   |_|(_)/_/   \\___||_.__/',
   '',
-  '  Powered by:',
-  '    - VirtualTimeScheduler (Promise-controlled cooperative scheduling)',
-  '    - SuperSonic (scsynth compiled to WebAssembly)',
+  '   The Live Coding Music Synth -- In Your Browser',
+  '',
+  '  -------------------------------------------------------',
+  '  Standing on the shoulders of giants:',
+  '',
+  '    Sonic Pi & Sam Aaron    sonic-pi.net',
+  '    SuperCollider            supercollider.github.io',
+  '    Algorave community       algorave.com',
+  '    Web Audio API + AudioWorklets',
+  '    SuperSonic (scsynth -> WebAssembly)',
+  '  -------------------------------------------------------',
   '',
   '  Shortcuts:',
-  '    Ctrl+Enter  Run code',
-  '    Alt+R       Run code',
-  '    Escape      Stop all',
-  '    Alt+S       Stop all',
+  '    Ctrl+Enter / Alt+R    Run code',
+  '    Escape / Alt+S        Stop all',
+  '    Ctrl+/                Toggle comment',
+  '    F11                   Fullscreen',
   '',
   '  Happy live coding!',
   '',
