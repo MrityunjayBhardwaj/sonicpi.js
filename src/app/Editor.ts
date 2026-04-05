@@ -344,12 +344,12 @@ export class Editor {
     // @codemirror/state instances (which break instanceof checks).
     // See src/engine/cdn-manifest.ts for the full dependency manifest.
 
-    // @ts-ignore — CDN URLs
+    // @ts-ignore — CDN URLs. Pin exact versions to avoid multiple @codemirror/state instances.
     const viewMod = await import(/* @vite-ignore */ 'https://esm.sh/@codemirror/view@6')
     // @ts-ignore
     const stateMod = await import(/* @vite-ignore */ 'https://esm.sh/@codemirror/state@6')
-    // @ts-ignore
-    const cmMod = await import(/* @vite-ignore */ 'https://esm.sh/codemirror@6')
+    // @ts-ignore — commands for history (undo/redo), keymaps
+    const cmdMod = await import(/* @vite-ignore */ 'https://esm.sh/@codemirror/commands@6')
 
     // Sonic Pi syntax highlighting — inline tokenizer, no CDN dependency
     let rubyLang: unknown = null
@@ -362,10 +362,13 @@ export class Editor {
       if (langMod.StreamLanguage) {
         rubyLang = langMod.StreamLanguage.define(sonicPiStreamParser)
       }
-      if (langMod.syntaxHighlighting && highlightMod.HighlightStyle && highlightMod.tags) {
-        const t = highlightMod.tags
+      // HighlightStyle lives in @codemirror/language (not @lezer/highlight) on esm.sh
+      const HighlightStyle = langMod.HighlightStyle ?? highlightMod.HighlightStyle
+      const tags = highlightMod.tags
+      if (langMod.syntaxHighlighting && HighlightStyle && tags) {
+        const t = tags
         highlightStyle = langMod.syntaxHighlighting(
-          highlightMod.HighlightStyle.define([
+          HighlightStyle.define([
             // Keywords: live_loop, do, end, with_fx, if, etc.
             { tag: t.keyword, color: '#C792EA', fontWeight: '500' },
             // Symbols: :bd_haus, :reverb, :minor (non-note symbols)
@@ -408,9 +411,33 @@ export class Editor {
       // Autocomplete CDN unavailable — editor works without it
     }
 
-    const { EditorView, keymap } = viewMod
+    const { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
+            drawSelection, dropCursor, rectangularSelection, crosshairCursor,
+            highlightSpecialChars } = viewMod
     const { EditorState } = stateMod
-    const { basicSetup } = cmMod
+    // Build basicSetup manually — esm.sh's 'codemirror' package doesn't export it reliably.
+    // This mirrors CodeMirror 6's basicSetup: line numbers, active line, history, bracket matching, etc.
+    const basicSetup: unknown[] = []
+    if (lineNumbers) basicSetup.push(lineNumbers())
+    if (highlightActiveLineGutter) basicSetup.push(highlightActiveLineGutter())
+    if (highlightSpecialChars) basicSetup.push(highlightSpecialChars())
+    if (cmdMod.history) basicSetup.push(cmdMod.history())
+    if (drawSelection) basicSetup.push(drawSelection())
+    if (dropCursor) basicSetup.push(dropCursor())
+    if (rectangularSelection) basicSetup.push(rectangularSelection())
+    if (crosshairCursor) basicSetup.push(crosshairCursor())
+    if (highlightActiveLine) basicSetup.push(highlightActiveLine())
+    // Bracket matching from language module
+    try {
+      // @ts-ignore
+      const langMod2 = await import(/* @vite-ignore */ 'https://esm.sh/@codemirror/language@6')
+      if (langMod2.bracketMatching) basicSetup.push(langMod2.bracketMatching())
+      if (langMod2.indentOnInput) basicSetup.push(langMod2.indentOnInput())
+    } catch { /* optional */ }
+    // Default keybindings (undo, redo, indent, etc.)
+    if (cmdMod.defaultKeymap) basicSetup.push(keymap.of(cmdMod.defaultKeymap))
+    if (cmdMod.historyKeymap) basicSetup.push(keymap.of(cmdMod.historyKeymap))
+
     return { EditorView, EditorState, basicSetup, keymap, rubyLang, highlightStyle, autocompletion: autocompletionFn } as unknown as CMModule
   }
 
@@ -418,8 +445,12 @@ export class Editor {
     // Build extensions array — each one is optional, skip if it fails
     const extensions: unknown[] = []
 
-    // Basic setup (line numbers, bracket matching, etc.)
-    if (cm.basicSetup) extensions.push(cm.basicSetup)
+    // Basic setup (line numbers, bracket matching, history, etc.)
+    if (Array.isArray(cm.basicSetup)) {
+      extensions.push(...cm.basicSetup)
+    } else if (cm.basicSetup) {
+      extensions.push(cm.basicSetup)
+    }
 
     // Dark theme
     try {
