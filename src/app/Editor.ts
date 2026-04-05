@@ -68,11 +68,14 @@ const sonicPiStreamParser = {
   token(stream: { match(re: RegExp): string[] | null; next(): string; eol(): boolean; skipToEnd(): void; peek(): string; sol(): boolean }, state: SonicPiParserState) {
     // Comment
     if (stream.match(/^#.*/)) return 'comment'
-    // String
+    // String (double-quoted with interpolation, single-quoted)
     if (stream.match(/^"(?:[^"\\]|\\.)*"/)) return 'string'
     if (stream.match(/^'(?:[^'\\]|\\.)*'/)) return 'string'
-    // Symbol :name
+    // Symbol :name — notes like :c4, :eb3 get special treatment
+    if (stream.match(/^:[a-g][sb#]?\d+/)) return 'atom' // note symbols — same as other symbols
     if (stream.match(/^:\w+/)) return 'atom'
+    // Hash key (word followed by colon) — amp:, release:, cutoff:
+    if (stream.match(/^\w+(?=:\s)/)) return 'propertyName'
     // Number
     if (stream.match(/^-?\d+\.?\d*/)) return 'number'
     // Word
@@ -93,8 +96,12 @@ const sonicPiStreamParser = {
       if (SP_BUILTINS.has(w)) return 'builtin'
       return 'variable'
     }
+    // Pipe delimiters |x| in block params
+    if (stream.match(/^\|/)) return 'bracket'
     // Operator
     if (stream.match(/^[+\-*/%=<>!&|^~]+/)) return 'operator'
+    // Brackets and punctuation
+    if (stream.match(/^[()[\]{},;.]/)) return 'punctuation'
     // Skip unknown
     stream.next()
     return null
@@ -359,14 +366,29 @@ export class Editor {
         const t = highlightMod.tags
         highlightStyle = langMod.syntaxHighlighting(
           highlightMod.HighlightStyle.define([
-            { tag: t.keyword, color: '#C792EA' },
+            // Keywords: live_loop, do, end, with_fx, if, etc.
+            { tag: t.keyword, color: '#C792EA', fontWeight: '500' },
+            // Symbols: :bd_haus, :reverb, :minor (non-note symbols)
             { tag: t.atom, color: '#F78C6C' },
+            // Numbers: 60, 0.5, 120
             { tag: t.number, color: '#F78C6C' },
+            // Strings: "hello", 'world'
             { tag: t.string, color: '#99C794' },
-            { tag: t.comment, color: '#65737E', fontStyle: 'italic' },
+            // Comments: # this is a comment
+            { tag: t.comment, color: '#546E7A', fontStyle: 'italic' },
+            // Variables: x, pattern, n
             { tag: t.variableName, color: '#CDD3DE' },
+            // DSL builtins: play, sleep, sample, ring, spread, etc.
             { tag: t.function(t.variableName), color: '#82AAFF' },
+            // Hash keys: amp:, release:, cutoff:
+            { tag: t.propertyName, color: '#FFCB6B' },
+            // Operators: +, -, *, ==, etc.
             { tag: t.operator, color: '#89DDFF' },
+            // Brackets and pipes: |x|, (), []
+            { tag: t.bracket, color: '#89DDFF' },
+            { tag: t.paren, color: '#89DDFF' },
+            // Punctuation: commas, dots
+            { tag: t.punctuation, color: '#546E7A' },
           ])
         )
       }
