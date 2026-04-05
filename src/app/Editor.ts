@@ -408,8 +408,9 @@ export class Editor {
           lineHeight: '1.65',
         },
         '.cm-content': { color: '#CDD3DE', caretColor: '#E8527C', padding: '0.5rem 0' },
-        '.cm-gutters': { background: '#15232D', color: '#4F5B66', border: 'none' },
-        '.cm-activeLineGutter': { background: 'rgba(232,82,124,0.08)', color: '#8892B0' },
+        '.cm-gutters': { background: '#15232D', color: '#6B7C8D', border: 'none', paddingRight: '8px', minWidth: '3.5em' },
+        '.cm-lineNumbers .cm-gutterElement': { minWidth: '3em', textAlign: 'right', paddingRight: '8px' },
+        '.cm-activeLineGutter': { background: 'rgba(232,82,124,0.12)', color: '#CDD3DE' },
         '.cm-activeLine': { background: 'rgba(255,255,255,0.02)' },
         '&.cm-focused .cm-cursor': { borderLeftColor: '#E8527C', borderLeftWidth: '2px' },
         '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
