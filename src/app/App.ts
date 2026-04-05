@@ -17,7 +17,7 @@ import { CueLog } from './CueLog'
 import { SampleBrowser } from './SampleBrowser'
 import { HelpPanel } from './HelpPanel'
 
-// Sonic Pi's actual welcome buffer — the Blade Runner demo
+// Welcome buffer — the Blade Runner Ecstasy Edit
 const WELCOME_CODE = `# =====================================================
 #   ____              _        ____  _  __        __   _
 #  / ___|  ___  _ __ (_) ___  |  _ \\(_) \\ \\      / /__| |__
@@ -33,6 +33,7 @@ const WELCOME_CODE = `# =====================================================
 #  Edit the code while it plays — changes apply instantly!
 #
 #  github.com/MrityunjayBhardwaj/SonicPi.js
+#  Also checkout Sonic Tau: https://sonic-pi.net/tau/
 #
 #  Standing on the shoulders of giants:
 #    Sonic Pi & Sam Aaron  — sonic-pi.net
@@ -40,100 +41,155 @@ const WELCOME_CODE = `# =====================================================
 #    Algorave community     — algorave.com
 #
 # =====================================================
-#  BLADE RUNNER — HOPE EDIT
-#  Key: C minor with a hopeful resolution arc
-#  Cm (shadow) -> Gm (tension) -> Eb (warmth) -> G (hope)
+#  BLADE RUNNER — ECSTASY EDIT
+#  Key: C minor -> Eb major -> Ab major -> G major
+#  Six synced loops: pads, melody, tears, ecstasy, shimmer, pulse
 # =====================================================
 
-use_bpm 52
+use_bpm 54
 
-with_fx :reverb, room: 0.92, mix: 0.72 do
-  with_fx :echo, phase: 1.5, decay: 4, mix: 0.20 do
+with_fx :reverb, room: 0.97, mix: 0.82, damp: 0.4 do
+  with_fx :echo, phase: 1.333, decay: 6, mix: 0.28 do
 
-    # Pad chords — the harmonic foundation
-    live_loop :blade_runner do
+    # 1. PADS — maj7 chord wash
+    live_loop :pads do
       use_synth :blade
 
-      [:c3, :eb3, :g3].each do |n|
-        play n, release: 6, attack: 2, amp: 0.5,
-          cutoff: 70, vibrato_rate: 5, vibrato_depth: 0.10,
-          vibrato_delay: 1.0
+      [:c3, :eb3, :g3, :b3].each do |n|
+        play n, attack: 3.5, sustain: 5.0, release: 4.0, amp: 0.4,
+          cutoff: 72, vibrato_rate: 4.5, vibrato_depth: 0.10,
+          vibrato_delay: 1.5, vibrato_onset: 0.8
       end
-      sleep 6
+      sleep 12
 
-      [:g3, :bb3, :d4].each do |n|
-        play n, release: 6, attack: 2, amp: 0.5,
-          cutoff: 72, vibrato_rate: 5, vibrato_depth: 0.10,
-          vibrato_delay: 1.0
+      [:eb3, :g3, :bb3, :d4, :f4].each do |n|
+        play n, attack: 3.5, sustain: 5.0, release: 4.0, amp: 0.35,
+          cutoff: 80, vibrato_rate: 5.0, vibrato_depth: 0.12,
+          vibrato_delay: 1.2, vibrato_onset: 0.7
       end
-      sleep 6
+      sleep 12
 
-      [:eb3, :g3, :bb3].each do |n|
-        play n, release: 6, attack: 2, amp: 0.55,
-          cutoff: 82, vibrato_rate: 5.5, vibrato_depth: 0.14,
-          vibrato_delay: 0.8
+      [:ab2, :c3, :eb3, :g3].each do |n|
+        play n, attack: 3.5, sustain: 5.0, release: 4.5, amp: 0.4,
+          cutoff: 86, vibrato_rate: 5.5, vibrato_depth: 0.15,
+          vibrato_delay: 1.0, vibrato_onset: 0.6
       end
-      sleep 6
+      sleep 12
 
-      [:g3, :b3, :d4].each do |n|
-        play n, release: 7, attack: 2, amp: 0.55,
-          cutoff: 85, vibrato_rate: 6, vibrato_depth: 0.16,
-          vibrato_delay: 0.6
+      [:g2, :b2, :d3, :f3, :a3].each do |n|
+        play n, attack: 4.0, sustain: 5.0, release: 5.0, amp: 0.38,
+          cutoff: 92, vibrato_rate: 6.0, vibrato_depth: 0.18,
+          vibrato_delay: 0.8, vibrato_onset: 0.5
       end
-      sleep 6
+      sleep 12
     end
 
-    # Rising melody — climbs one step per bar, never resolves
-    live_loop :hope_melody, sync: :blade_runner do
+    # 2. MELODY — soaring lead, climbs a 10th over 48 beats
+    live_loop :melody, sync: :pads do
       use_synth :blade
 
-      play :c4, attack: 1.5, sustain: 2.0, release: 2.0, amp: 0.55,
-        cutoff: 78, vibrato_rate: 5.5, vibrato_depth: 0.16,
-        vibrato_delay: 0.7, vibrato_onset: 0.4
-      sleep 3
-      play :eb4, attack: 0.8, sustain: 1.5, release: 1.5, amp: 0.50,
-        cutoff: 76, vibrato_rate: 5.2, vibrato_depth: 0.14,
-        vibrato_delay: 0.6, vibrato_onset: 0.3
-      sleep 3
-
-      play :d4, attack: 1.5, sustain: 2.5, release: 2.0, amp: 0.52,
-        cutoff: 80, vibrato_rate: 5.8, vibrato_depth: 0.17,
-        vibrato_delay: 0.7, vibrato_onset: 0.4
-      sleep 4
-      play :f4, attack: 0.8, sustain: 1.0, release: 1.5, amp: 0.48,
-        cutoff: 78, vibrato_rate: 5.5, vibrato_depth: 0.15,
-        vibrato_delay: 0.5, vibrato_onset: 0.3
-      sleep 2
-
-      play :g4, attack: 2.0, sustain: 3.0, release: 2.5, amp: 0.60,
-        cutoff: 88, vibrato_rate: 6.2, vibrato_depth: 0.22,
+      play :c5, attack: 2.0, sustain: 3.0, release: 3.0, amp: 0.62,
+        cutoff: 80, vibrato_rate: 5.5, vibrato_depth: 0.18,
         vibrato_delay: 0.9, vibrato_onset: 0.5
+      sleep 5
+      play :eb5, attack: 1.0, sustain: 2.0, release: 2.0, amp: 0.58,
+        cutoff: 78, vibrato_rate: 5.2, vibrato_depth: 0.16,
+        vibrato_delay: 0.6, vibrato_onset: 0.4
+      sleep 4
+      play :g5, attack: 0.8, sustain: 1.5, release: 2.0, amp: 0.55,
+        cutoff: 82, vibrato_rate: 5.8, vibrato_depth: 0.18,
+        vibrato_delay: 0.5, vibrato_onset: 0.3
+      sleep 3
+
+      play :bb5, attack: 2.5, sustain: 4.0, release: 3.0, amp: 0.68,
+        cutoff: 86, vibrato_rate: 6.0, vibrato_depth: 0.22,
+        vibrato_delay: 1.0, vibrato_onset: 0.5
+      sleep 6
+      play :g5, attack: 1.0, sustain: 2.0, release: 2.0, amp: 0.60,
+        cutoff: 84, vibrato_rate: 5.8, vibrato_depth: 0.20,
+        vibrato_delay: 0.7, vibrato_onset: 0.4
       sleep 6
 
-      play :d5, attack: 2.5, sustain: 3.5, release: 3.0, amp: 0.58,
-        cutoff: 92, vibrato_rate: 6.8, vibrato_depth: 0.24,
-        vibrato_delay: 1.0, vibrato_onset: 0.6
-      sleep 6
+      play :c6, attack: 3.0, sustain: 6.0, release: 3.5, amp: 0.72,
+        cutoff: 94, vibrato_rate: 6.5, vibrato_depth: 0.26,
+        vibrato_delay: 1.2, vibrato_onset: 0.6
+      sleep 12
+
+      play :d6, attack: 3.5, sustain: 5.0, release: 4.0, amp: 0.70,
+        cutoff: 98, vibrato_rate: 7.0, vibrato_depth: 0.28,
+        vibrato_delay: 1.0, vibrato_onset: 0.7
+      sleep 8
+      play :b5, attack: 1.5, sustain: 2.0, release: 2.5, amp: 0.60,
+        cutoff: 92, vibrato_rate: 6.5, vibrato_depth: 0.22,
+        vibrato_delay: 0.6, vibrato_onset: 0.4
+      sleep 4
     end
 
-    # High shimmer — sparse, probabilistic sparkles
-    live_loop :shimmer, sync: :blade_runner do
+    # 3. TEARS — sparse high notes, the melancholic thread
+    live_loop :tears, sync: :pads do
       use_synth :blade
-      notes = [:c5, :eb5, :g5, :bb5, :d6, :g5, :eb5, :c5]
-      notes.each do |n|
-        if one_in(2)
-          play n,
-            attack: rrand(1.5, 3.0),
-            sustain: rrand(1.0, 2.5),
-            release: rrand(3.0, 5.0),
-            amp: rrand(0.10, 0.22),
-            cutoff: rrand(88, 100),
-            vibrato_rate: rrand(7, 9),
-            vibrato_depth: rrand(0.12, 0.28),
-            vibrato_delay: 0.4,
-            vibrato_onset: 0.3
+      tear_notes = [:eb6, :g6, :c7, :b6]
+      tear_sleeps = [14, 12, 16, 6]
+      tear_notes.length.times do |i|
+        play tear_notes[i],
+          attack: rrand(3.0, 5.0), sustain: rrand(3.0, 6.0),
+          release: rrand(5.0, 8.0), amp: rrand(0.14, 0.26),
+          cutoff: rrand(95, 108), vibrato_rate: rrand(5.0, 7.0),
+          vibrato_depth: rrand(0.20, 0.35),
+          vibrato_delay: rrand(1.5, 2.5), vibrato_onset: rrand(0.5, 1.0)
+        sleep tear_sleeps[i]
+      end
+    end
+
+    # 4. ECSTASY — rising arpeggios
+    live_loop :ecstasy, sync: :pads do
+      use_synth :blade
+      arp_sets = [
+        [:c4, :eb4, :g4, :b4, :c5, :g4, :eb4, :b4],
+        [:eb4, :g4, :bb4, :d5, :f5, :bb4, :g4, :d5],
+        [:ab4, :c5, :eb5, :g5, :ab5, :eb5, :c5, :g5],
+        [:g4, :b4, :d5, :f5, :a5, :d5, :b4, :f5],
+      ]
+      4.times do |i|
+        arp = arp_sets[i]
+        base_speed = 1.2 - (i * 0.05)
+        base_cutoff = 75 + (i * 6)
+        arp.each do |n|
+          play n, attack: 0.1, sustain: base_speed * 0.4,
+            release: base_speed * 0.8, amp: rrand(0.22, 0.38),
+            cutoff: base_cutoff + rrand(-4, 8),
+            vibrato_rate: rrand(6, 9), vibrato_depth: rrand(0.08, 0.18),
+            vibrato_delay: 0.2, vibrato_onset: 0.1
+          sleep base_speed
         end
-        sleep rrand_i(2, 5)
+        sleep 4 - (i * 0.2)
+      end
+    end
+
+    # 5. SHIMMER — dense high harmonics
+    live_loop :shimmer, sync: :pads do
+      use_synth :blade
+      shimmer_pool = [:c6, :eb6, :g6, :bb6, :d7, :c7, :g6, :eb6, :ab6, :f6, :b6, :d6]
+      shimmer_pool.each do |n|
+        unless one_in(3)
+          play n, attack: rrand(1.0, 3.5), sustain: rrand(0.5, 2.0),
+            release: rrand(4.0, 7.0), amp: rrand(0.08, 0.20),
+            cutoff: rrand(96, 115), vibrato_rate: rrand(7.5, 10.0),
+            vibrato_depth: rrand(0.15, 0.32),
+            vibrato_delay: rrand(0.3, 0.8), vibrato_onset: rrand(0.2, 0.5)
+        end
+        sleep rrand(1.0, 3.5)
+      end
+    end
+
+    # 6. PULSE — sub bass heartbeat
+    live_loop :pulse, sync: :pads do
+      use_synth :blade
+      [:c2, :eb2, :ab2, :g2].each do |root|
+        play root, attack: 6.0, sustain: 2.0, release: 4.0, amp: 0.22,
+          cutoff: 38, vibrato_rate: 2.5, vibrato_depth: 0.04,
+          vibrato_delay: 3.0, vibrato_onset: 1.5
+        sleep 12
       end
     end
 
