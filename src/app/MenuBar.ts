@@ -8,6 +8,23 @@
 import { type ScopeMode, ALL_SCOPE_MODES } from './Scope'
 import { SampleUploader } from './SampleUploader'
 
+function detectBrowser(ua: string): string {
+  if (ua.includes('Firefox')) return 'Firefox'
+  if (ua.includes('Edg/')) return 'Edge'
+  if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari'
+  if (ua.includes('Chrome')) return 'Chrome'
+  return 'Other'
+}
+
+function detectOS(ua: string): string {
+  if (ua.includes('Mac OS')) return 'macOS'
+  if (ua.includes('Windows')) return 'Windows'
+  if (ua.includes('Linux')) return 'Linux'
+  if (ua.includes('Android')) return 'Android'
+  if (ua.includes('iPhone') || ua.includes('iPad')) return 'iOS'
+  return ua.substring(0, 50)
+}
+
 const SCOPE_LABELS: Record<ScopeMode, string> = {
   mono: 'Mono',
   stereo: 'Stereo',
@@ -40,6 +57,7 @@ export class MenuBar {
   private activeDropdown: HTMLElement | null = null
   readonly sampleUploader: SampleUploader
   private prefsCallbacks: PrefsCallbacks
+  private getReportData: (() => { code: string; engineState: string }) | null
 
   constructor(
     parent: HTMLElement,
@@ -52,6 +70,7 @@ export class MenuBar {
       onToggleHelp?: () => void
       isHelpVisible?: () => boolean
       prefs?: PrefsCallbacks
+      getReportData?: () => { code: string; engineState: string }
     }
   ) {
     this.onToggleScope = options.onToggleScope
@@ -61,6 +80,7 @@ export class MenuBar {
     this.onToggleHelp = options.onToggleHelp ?? null
     this.isHelpVisible = options.isHelpVisible ?? null
     this.prefsCallbacks = options.prefs ?? {}
+    this.getReportData = options.getReportData ?? null
 
     this.container = document.createElement('div')
     this.container.style.cssText = `
@@ -89,6 +109,32 @@ export class MenuBar {
     )
     this.addMenu('Samples', () => this.buildSamplesMenu())
     this.addMenu('Prefs', () => this.buildPrefsMenu())
+
+    // Spacer pushes Report Bug to the right
+    const spacer = document.createElement('div')
+    spacer.style.flex = '1'
+    this.container.appendChild(spacer)
+
+    // Report Bug button
+    const bugBtn = document.createElement('button')
+    bugBtn.textContent = 'Report Bug'
+    bugBtn.style.cssText = `
+      background: none; border: 1px solid rgba(232,82,124,0.3);
+      color: #E8527C; font-family: inherit; font-size: 0.65rem;
+      padding: 0.15rem 0.6rem; cursor: pointer; border-radius: 4px;
+      height: 22px; letter-spacing: 0.5px; transition: all 0.15s;
+      margin-right: 0.5rem; align-self: center;
+    `
+    bugBtn.addEventListener('mouseenter', () => {
+      bugBtn.style.background = 'rgba(232,82,124,0.1)'
+      bugBtn.style.borderColor = '#E8527C'
+    })
+    bugBtn.addEventListener('mouseleave', () => {
+      bugBtn.style.background = 'none'
+      bugBtn.style.borderColor = 'rgba(232,82,124,0.3)'
+    })
+    bugBtn.addEventListener('click', () => this.openBugReport())
+    this.container.appendChild(bugBtn)
 
     // Close dropdown on outside click
     document.addEventListener('click', (e) => {
@@ -660,6 +706,23 @@ export class MenuBar {
     addReadonly('Max Loop Budget', '100,000 iterations')
 
     return dropdown
+  }
+
+  private openBugReport(): void {
+    const data = this.getReportData?.()
+    const browser = navigator.userAgent
+    const url = new URL('https://github.com/MrityunjayBhardwaj/SonicPi.js/issues/new')
+    url.searchParams.set('template', 'bug_report.yml')
+    url.searchParams.set('labels', 'bug,reported-via-app,needs-triage')
+
+    // Pre-fill fields via URL params (GitHub issue forms support this)
+    if (data?.code) {
+      url.searchParams.set('sonic-pi-code', data.code.substring(0, 2000))
+    }
+    url.searchParams.set('browser', detectBrowser(browser))
+    url.searchParams.set('os', detectOS(browser))
+
+    window.open(url.toString(), '_blank')
   }
 
   dispose(): void {
