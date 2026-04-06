@@ -207,22 +207,43 @@ export class VirtualTimeScheduler {
     bpm?: number
     synth?: string
   }): void {
-    // Hot-swap or start loops
-    for (const [name, fn] of loops) {
-      const existing = this.tasks.get(name)
-      if (existing && existing.running) {
-        // Hot-swap: preserve virtual time (SV6)
-        existing.asyncFn = fn
-      } else {
-        this.registerLoop(name, fn, options)
-      }
-    }
+    // Save previous state for rollback on failure
+    const previousFns = new Map<string, () => Promise<void>>()
+    const newlyStarted: string[] = []
 
-    // Stop loops that are no longer present
-    for (const [name, task] of this.tasks) {
-      if (!loops.has(name) && task.running) {
-        task.running = false
+    try {
+      // Hot-swap or start loops
+      for (const [name, fn] of loops) {
+        const existing = this.tasks.get(name)
+        if (existing && existing.running) {
+          // Save previous function for rollback
+          previousFns.set(name, existing.asyncFn)
+          // Hot-swap: preserve virtual time (SV6)
+          existing.asyncFn = fn
+        } else {
+          this.registerLoop(name, fn, options)
+          newlyStarted.push(name)
+        }
       }
+
+      // Stop loops that are no longer present
+      for (const [name, task] of this.tasks) {
+        if (!loops.has(name) && task.running) {
+          task.running = false
+        }
+      }
+    } catch (err) {
+      // Rollback: restore previous functions for swapped loops
+      for (const [name, prevFn] of previousFns) {
+        const task = this.tasks.get(name)
+        if (task) task.asyncFn = prevFn
+      }
+      // Stop newly started loops
+      for (const name of newlyStarted) {
+        const task = this.tasks.get(name)
+        if (task) task.running = false
+      }
+      throw err
     }
   }
 
