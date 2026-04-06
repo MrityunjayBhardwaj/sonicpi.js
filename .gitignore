@@ -11,8 +11,9 @@ dist/
 # Vercel project config
 .vercel/
 
-# Reference docs, ground truth, source code (moved to ~/.anvideck)
-artifacts/ref/
+# Dev artifacts (moved to ~/.anvideck/projects/sonicPiWeb/)
+artifacts/*
+!artifacts/README.md
 
 # Planning artifacts (internal)
 .planning/

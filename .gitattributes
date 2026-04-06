@@ -1,5 +1,1 @@
-# Collapse internal development artifacts in PR diffs
-artifacts/.anvi/** linguist-generated=true
-artifacts/ref/** linguist-generated=true
-artifacts/investigations/** linguist-generated=true
-artifacts/paper/** linguist-generated=true
+# No special attributes needed — dev artifacts are in ~/.anvideck, not in this repo

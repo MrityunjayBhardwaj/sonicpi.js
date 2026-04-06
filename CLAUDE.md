@@ -183,7 +183,7 @@ Do NOT save routine experiment results. Save ONLY high-entropy findings that cha
 
 ## Project Catalogues
 
-Location: `artifacts/.anvi/`
+Location: `~/.anvideck/projects/sonicPiWeb/.anvi/`
 - `hetvabhasa.md` — 22 error patterns (SP1-SP22), each with REF to our source code
 - `vyapti.md` — 15 invariants (SV15 NOT YET IMPLEMENTED — cold-start warmup)
 - `krama.md` — 10 lifecycle patterns (SK10 = cross-platform cold-start comparison)
