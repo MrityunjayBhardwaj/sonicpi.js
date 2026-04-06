@@ -39,7 +39,7 @@ export class Scope {
   private dataL: Uint8Array | null = null
   private dataR: Uint8Array | null = null
   private freqData: Uint8Array | null = null
-  private activeModes: Set<ScopeMode> = new Set(['mono'])
+  private activeModes: Set<ScopeMode> = new Set(['spectrum'])
   private container: HTMLElement
   private canvasContainer: HTMLElement
 
@@ -81,7 +81,7 @@ export class Scope {
 
   /** Set exactly which modes are active */
   setModes(modes: ScopeMode[]): void {
-    this.activeModes = new Set(modes.length > 0 ? modes : ['mono'])
+    this.activeModes = new Set(modes.length > 0 ? modes : ['spectrum'])
     this.rebuildCanvases()
   }
 

@@ -6,30 +6,19 @@
   <img src="assets/hero.jpg" alt="Sonic Pi Web — live coding in the browser" width="100%">
 </p>
 
-<!-- badges -->
 [![CI](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions/workflows/deploy.yml/badge.svg)](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions)
 [![npm](https://img.shields.io/npm/v/@mjayb/sonicpijs)](https://www.npmjs.com/package/@mjayb/sonicpijs)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
-**[Try it at sonicpi.cc](https://sonicpi.cc)** | Also checkout [Sonic Tau](https://sonic-pi.net/tau/)
+**[Try it now at sonicpi.cc](https://sonicpi.cc)** | Also checkout [Sonic Tau](https://sonic-pi.net/tau/)
 
 ---
 
-## What is this?
+## Make music with code. In your browser.
 
-SonicPi.js is a browser-native reimplementation of [Sonic Pi](https://sonic-pi.net/)'s live coding environment. It runs real SuperCollider synthesis in the browser via SuperSonic (scsynth compiled to WebAssembly) with a scheduler-controlled Promise architecture that gives JavaScript cooperative concurrency with virtual time. Zero install — open [sonicpi.cc](https://sonicpi.cc) and start making music.
+Open the link. Write code. Hit Run. Hear music. Change the code while it plays. That's it.
 
-## Quick Start
-
-```bash
-npx sonicpijs
-```
-
-This starts a local server and opens the editor in your default browser. That's it.
-
-## Try It Now
-
-Paste this into the editor and press Run:
+No install. No Ruby. No SuperCollider setup. Just a browser.
 
 ```ruby
 live_loop :drums do
@@ -40,68 +29,49 @@ live_loop :drums do
 end
 ```
 
-Add a second loop while it's playing -- the drums keep going:
+Press Run. Now add this while the drums are playing:
 
 ```ruby
 live_loop :bass do
   use_synth :tb303
-  play :e2, release: 0.3, cutoff: 70
-  sleep 0.5
+  play :e2, release: 0.3, cutoff: rrand(60, 120)
+  sleep 0.25
 end
 ```
 
-## Features
+The bass joins in. Change a number. Hit Run again. The music updates instantly. That's live coding.
 
-### DSL
+---
 
-Full Sonic Pi Ruby DSL with automatic transpilation to JavaScript:
+## What can I do with it?
 
-- `live_loop`, `in_thread`, `loop`, `N.times`
-- `play`, `sleep`, `sample`, `use_synth`, `use_bpm`
-- `with_fx` (nested effect chains)
-- `define` (named functions)
-- `density`, `at`, `time_warp`
-- `sync`, `cue` (inter-loop coordination with virtual time inheritance)
-- `control` with parameter slides
-- `.each`, `.map`, `.select`, `.reject`
-- `begin`/`rescue`, `if`/`elsif`/`else`/`unless`
-- `rrand`, `rrand_i`, `dice`, `one_in`, `choose` (seeded PRNG)
+**Write Sonic Pi code** -- the same Ruby DSL you know from desktop. `live_loop`, `play`, `sleep`, `sample`, `with_fx`, `use_synth`, `sync`, `cue` -- it all works.
 
-### Music Theory
+**Perform live** -- 10 buffers, hot-swap on Re-run, Alt+R/Alt+S shortcuts, fullscreen mode, spectrum visualizer. Built for the stage.
 
-- 30+ chord types (`major`, `minor`, `dom7`, `dim`, `aug`, ...)
-- 50+ scales (`major`, `minor_pentatonic`, `dorian`, `blues`, ...)
-- `note`, `note_range`, `chord_invert`
-- `tick`, `look` (stateful iteration)
-- `ring`, `knit`, `range`, `spread` (Euclidean rhythms)
+**Teach** -- zero setup means students open a URL and start coding. Friendly error messages with line numbers. Built-in examples from simple beats to full compositions.
 
-### Audio
+**Embed anywhere** -- drop the engine into any web page, LMS, or creative coding tool as an npm package.
 
-- 127 SuperCollider SynthDefs (same definitions as desktop Sonic Pi)
-- Sample library organized by category (`bd_haus`, `sn_dub`, `hat_snap`, ...)
-- FX chain: reverb, distortion, echo, flanger, lpf, hpf, and more
-- `live_audio` for microphone input
-- Recording to WAV via `Recorder`
-- MIDI bridge for external controllers
-- Ableton Link synchronization
+---
 
-### Editor
+## Getting Started
 
-- CodeMirror 6 with Ruby syntax highlighting
-- Auto-indent and bracket matching
-- 10 buffer tabs (like desktop Sonic Pi)
-- 10 built-in examples from beginner to advanced
-- Friendly error messages with line numbers
+### Option 1: Just open the website
 
-### Security
+**[sonicpi.cc](https://sonicpi.cc)** -- nothing to install.
 
-- Proxy-based sandbox isolating student code from browser globals
-- Session logging with Ed25519 cryptographic signing
-- Content Security Policy (CSP) ready for institutional deployment
+### Option 2: Run locally
 
-## For Developers
+```bash
+npx sonicpijs
+```
 
-Embed the engine in your own application:
+### Option 3: Embed in your app
+
+```bash
+npm install @mjayb/sonicpijs
+```
 
 ```ts
 import { SonicPiEngine } from '@mjayb/sonicpijs'
@@ -117,65 +87,77 @@ await engine.evaluate(`
 engine.play()
 ```
 
-The engine exposes components for visualization and analysis:
+---
 
-```ts
-const components = engine.getComponents()
+## What's included
 
-// Subscribe to sound events
-components.streaming.eventStream.subscribe(event => {
-  console.log(event.type, event.time)
-})
+| Feature | Details |
+|---------|---------|
+| **66 synths** | beep, saw, prophet, tb303, supersaw, blade, hollow, pluck, piano, and more |
+| **197 samples** | Kicks, snares, hats, loops, ambient, bass, electronic, tabla |
+| **42 FX** | reverb, echo, distortion, flanger, slicer, wobble, chorus, pitch_shift, and more |
+| **Full DSL** | live_loop, with_fx, define, in_thread, sync/cue, density, time_warp |
+| **Music theory** | 30+ chord types, 50+ scales, rings, spreads, Euclidean rhythms |
+| **10 buffers** | Switch between code tabs like desktop Sonic Pi |
+| **Scope visualizer** | Mono, stereo, lissajous, mirror, spectrum modes |
+| **MIDI I/O** | Connect hardware controllers via Web MIDI |
+| **Recording** | Capture your session to WAV |
+| **17 examples** | From "Hello Beep" to full Blade Runner x Techno compositions |
+| **Autocomplete** | Code hints for synths, samples, FX, and parameters |
+| **Help panel** | Inline docs for 33 functions with signatures and examples |
+| **Preferences** | Audio, visuals, editor, and performance settings |
+| **Custom samples** | Upload your own WAV/MP3/OGG files |
+| **Save/Load** | Export and import your code as files |
+| **Friendly errors** | 18 error patterns with "did you mean?" suggestions |
 
-// Query deterministic output (no audio needed)
-const events = await components.capture.queryRange(0, 4)
-```
+---
 
-## Documentation
+## Keyboard shortcuts
 
-- [Getting Started](docs/GETTING-STARTED.md)
-- [API Reference](docs/API.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [DSL Reference](docs/DSL-REFERENCE.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+Enter / Alt+R | Run code |
+| Escape / Alt+S | Stop all |
+| Ctrl+/ | Toggle comment |
+| F11 | Fullscreen |
+| A- / A+ | Font size |
 
-## Built With
+---
 
-- **VirtualTimeScheduler** -- scheduler-controlled Promise resolution for cooperative concurrency
-- **SuperSonic** -- scsynth (SuperCollider) compiled to WebAssembly
-- **CodeMirror 6** -- extensible code editor for the browser
-- **Vite** -- build tooling and dev server
+## How it works (for the curious)
 
-## How It Works
+`sleep()` returns a Promise that only the VirtualTimeScheduler can resolve. This gives JavaScript cooperative concurrency with virtual time -- multiple `live_loop`s run concurrently, each advancing through their own timeline.
 
-`sleep()` returns a Promise that only the VirtualTimeScheduler can resolve. This gives JavaScript cooperative concurrency with virtual time -- multiple `live_loop`s run concurrently, each advancing through their own timeline, with the scheduler controlling exactly when each one wakes up. Previous attempts at browser-based Sonic Pi tried to make `sleep` block the JavaScript thread (impossible without freezing the UI). Our insight: you don't need blocking, you need scheduler-controlled Promise resolution.
+Previous attempts at browser-based Sonic Pi tried to make `sleep` block the JS thread (impossible without freezing the UI). Our insight: you don't need blocking, you need scheduler-controlled Promise resolution.
+
+The audio runs through SuperSonic -- SuperCollider's scsynth compiled to WebAssembly. Same synth definitions, same sound. The Ruby DSL is transpiled to JavaScript via a Tree-sitter AST parser.
+
+---
 
 ## Compatibility with Desktop Sonic Pi
 
-Approximately 95% of Sonic Pi syntax runs unmodified. The Ruby DSL is transpiled to JavaScript through a recursive descent parser that handles Sonic Pi's idiomatic patterns.
+~95% of Sonic Pi syntax runs unmodified.
 
-**What matches exactly:**
+**Identical:** seeded PRNG (Mersenne Twister), synth definitions, sample library, music theory, timing semantics, hot-swap, sync/cue.
 
-- Seeded PRNG (Mersenne Twister MT19937) -- same random sequences as desktop
-- SynthDef definitions -- same SuperCollider synthesis graphs
-- Sample names and categories
-- Music theory (chords, scales, rings, spreads)
-- Timing semantics (virtual time, hot-swap, sync/cue)
+**Different:** no native OSC output (browser limitation -- use the OSC hook for host integration), browser audio latency is higher (~20ms vs ~5ms), some niche Ruby syntax may not be covered.
 
-**Differences:**
+See [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) for the full list.
 
-- No OSC output (browser networking restrictions)
-- No Erlang runtime (scheduling is pure JavaScript)
-- Browser audio latency is higher than native (~20ms vs ~5ms depending on hardware)
-- Some niche Ruby syntax may not be covered by the transpiler
+---
+
+## Standing on the shoulders of giants
+
+- **[Sonic Pi](https://sonic-pi.net/)** by Sam Aaron -- the inspiration for everything here
+- **[SuperCollider](https://supercollider.github.io/)** -- the synthesis engine underneath
+- **[Algorave community](https://algorave.com/)** -- the live coding movement that makes this meaningful
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Issues and PRs welcome.
 
 ## License
 
-MIT. See [LICENSE](LICENSE) for details.
-
-## Credits
-
-Based on [Sonic Pi](https://sonic-pi.net/) by Sam Aaron and contributors. SonicPi.js is an independent reimplementation -- it does not share code with the desktop application.
-
-SuperSonic (scsynth WASM) by the SuperSonic contributors. Loaded via CDN at runtime (GPL-licensed, never bundled).
+MIT. See [LICENSE](LICENSE).
