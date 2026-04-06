@@ -685,6 +685,7 @@ export class App {
         self.scope?.rebuildCanvases?.()
       }
     })
+    rightSplitter.className = 'spw-scope-splitter'
     rightPanel.appendChild(rightSplitter)
 
     // Menu bar — topmost element, above toolbar.
@@ -1055,12 +1056,24 @@ export class App {
 
   private applyPanelVisibility(): void {
     const scope = this.root.querySelector('.spw-scope') as HTMLElement
+    const splitter = this.root.querySelector('.spw-scope-splitter') as HTMLElement
     const consoleEl = this.root.querySelector('.spw-console') as HTMLElement
     const cueLogEl = this.root.querySelector('.spw-cuelog') as HTMLElement
 
-    if (scope) scope.style.display = this.panelVisibility.scope !== false ? '' : 'none'
+    const scopeVisible = this.panelVisibility.scope !== false
+    if (scope) scope.style.display = scopeVisible ? '' : 'none'
+    if (splitter) splitter.style.display = scopeVisible ? '' : 'none'
     if (consoleEl) consoleEl.style.display = this.panelVisibility.log !== false ? '' : 'none'
     if (cueLogEl) cueLogEl.style.display = this.panelVisibility.cueLog !== false ? '' : 'none'
+
+    // Toolbar rows
+    this.toolbar.setButtonsVisible(this.panelVisibility.buttons !== false)
+    this.toolbar.setTabsVisible(this.panelVisibility.tabs !== false)
+
+    // Rebuild scope canvases after layout change
+    if (scopeVisible) {
+      requestAnimationFrame(() => this.scope?.rebuildCanvases?.())
+    }
   }
 
   // ---------------------------------------------------------------------------
