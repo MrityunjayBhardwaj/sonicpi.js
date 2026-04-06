@@ -853,6 +853,10 @@ export class App {
           this.console.log(msg, 'info')
         })
 
+        this.engine.setCueHandler((name, time) => {
+          this.cueLog.logCue(name, this.cueLog.currentRun, time * 1000)
+        })
+
         this.console.logSystem('  Loading synthdefs + initialising scsynth...')
         await this.engine.init()
         // Apply saved volume from prefs

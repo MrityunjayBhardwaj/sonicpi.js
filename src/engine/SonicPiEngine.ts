@@ -51,6 +51,7 @@ export class SonicPiEngine {
   private playing = false
   private runtimeErrorHandler: ((err: Error) => void) | null = null
   private printHandler: ((msg: string) => void) | null = null
+  private cueHandler: ((name: string, time: number) => void) | null = null
   private currentCode = ''
   private currentStratum: Stratum = Stratum.S1
   private bridgeOptions: SuperSonicBridgeOptions
@@ -196,6 +197,13 @@ export class SonicPiEngine {
           if (this.runtimeErrorHandler) this.runtimeErrorHandler(err)
           if (this.printHandler) this.printHandler(msg)
           else console.error('[SonicPi]', msg)
+        })
+
+        this.scheduler.onEvent((event) => {
+          if (event.type === 'cue' && this.cueHandler) {
+            const name = (event.params as { name: string }).name
+            this.cueHandler(name, event.audioTime)
+          }
         })
 
         this.loopBuilders.clear()
@@ -820,6 +828,11 @@ export class SonicPiEngine {
   /** Register a handler for `puts` / `print` output from user code. */
   setPrintHandler(handler: (msg: string) => void): void {
     this.printHandler = handler
+  }
+
+  /** Register a handler for cue events (for the CueLog panel). */
+  setCueHandler(handler: (name: string, time: number) => void): void {
+    this.cueHandler = handler
   }
 
   /**
