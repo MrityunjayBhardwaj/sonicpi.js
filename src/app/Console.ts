@@ -20,6 +20,12 @@ export class Console {
   private body: HTMLElement
   private entries: LogEntry[] = []
   private autoScroll = true
+
+  /** Set auto-scroll behavior. */
+  setAutoScroll(on: boolean): void { this.autoScroll = on }
+
+  /** Get auto-scroll state. */
+  getAutoScroll(): boolean { return this.autoScroll }
   private runCount = 0
   private startTime = 0
   /** Pending entries waiting for next animation frame flush (#73 — DOM throttling). */
@@ -207,11 +213,37 @@ export class Console {
         content.style.color = '#5EBDAB'
         line.style.borderLeftColor = '#5EBDAB33'
         break
-      case 'error':
-        content.style.color = '#E8527C'
-        line.style.background = 'rgba(232,82,124,0.05)'
+      case 'error': {
+        // Structured error block — Desktop SP style
+        line.style.background = 'rgba(232,82,124,0.06)'
         line.style.borderLeftColor = '#E8527C'
+        line.style.borderLeftWidth = '3px'
+        line.style.padding = '0.4rem 0.6rem'
+        line.style.margin = '0.2rem 0'
+        line.style.borderRadius = '0 4px 4px 0'
+
+        // Split title from message (first line is title)
+        const parts = entry.text.split('\n')
+        const titleText = parts[0] || 'Error'
+        const bodyText = parts.slice(1).join('\n').trim()
+
+        // Title line — bold, larger
+        const titleEl = document.createElement('div')
+        titleEl.style.cssText = 'color: #E8527C; font-weight: 600; font-size: 0.75rem; margin-bottom: 0.25rem;'
+        titleEl.textContent = `⚠ ${titleText}`
+        content.appendChild(titleEl)
+
+        // Body — softer color, preserve formatting
+        if (bodyText) {
+          const bodyEl = document.createElement('div')
+          bodyEl.style.cssText = 'color: #B0606E; font-size: 0.68rem; white-space: pre-wrap; line-height: 1.5;'
+          bodyEl.textContent = bodyText
+          content.appendChild(bodyEl)
+        }
+
+        content.style.color = '' // Reset — children handle color
         break
+      }
       case 'cue':
         content.style.color = '#C792EA'
         line.style.borderLeftColor = '#C792EA33'

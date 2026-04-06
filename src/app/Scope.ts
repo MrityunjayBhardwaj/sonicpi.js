@@ -15,7 +15,7 @@ const SCOPE_COLORS: Record<ScopeMode, string> = {
   stereo: '#5EBDAB',
   lissajous: '#C792EA',
   mirror: '#82AAFF',
-  spectrum: '#FFCB6B',
+  spectrum: '#FF00FF',
 }
 
 const SCOPE_LABELS: Record<ScopeMode, string> = {
@@ -27,7 +27,7 @@ const SCOPE_LABELS: Record<ScopeMode, string> = {
 }
 
 /** Phosphor trail alpha — 0=no trail, 1=full persistence. Matches Sonic Tau. */
-const TRAIL_ALPHA = 0.25
+const DEFAULT_TRAIL_ALPHA = 0.25
 
 export class Scope {
   private canvases = new Map<ScopeMode, HTMLCanvasElement>()
@@ -39,9 +39,15 @@ export class Scope {
   private dataL: Uint8Array | null = null
   private dataR: Uint8Array | null = null
   private freqData: Uint8Array | null = null
-  private activeModes: Set<ScopeMode> = new Set(['mono'])
+  private activeModes: Set<ScopeMode> = new Set(['spectrum'])
   private container: HTMLElement
   private canvasContainer: HTMLElement
+
+  // Configurable visual parameters (set via Prefs panel)
+  private _lineWidth = 2
+  private _glow = 4
+  private _trail = DEFAULT_TRAIL_ALPHA
+  private _hueShift = 0
 
   constructor(container: HTMLElement) {
     this.container = container
@@ -75,11 +81,28 @@ export class Scope {
 
   /** Set exactly which modes are active */
   setModes(modes: ScopeMode[]): void {
-    this.activeModes = new Set(modes.length > 0 ? modes : ['mono'])
+    this.activeModes = new Set(modes.length > 0 ? modes : ['spectrum'])
     this.rebuildCanvases()
   }
 
-  private rebuildCanvases(): void {
+  /** Set waveform line width (1-6). */
+  setLineWidth(w: number): void { this._lineWidth = w }
+
+  /** Set glow/shadow blur radius (0-20). */
+  setGlow(blur: number): void { this._glow = blur }
+
+  /** Set trail persistence (0-0.95). 0=no trail, 0.95=long persistence. */
+  setTrail(alpha: number): void { this._trail = alpha }
+
+  /** Set hue shift in degrees (0-360). Rotates all scope colors. */
+  setHueShift(deg: number): void { this._hueShift = deg }
+
+  /** Get current visual parameters. */
+  getVisualParams(): { lineWidth: number; glow: number; trail: number; hueShift: number } {
+    return { lineWidth: this._lineWidth, glow: this._glow, trail: this._trail, hueShift: this._hueShift }
+  }
+
+  rebuildCanvases(): void {
     // Clear everything — canvases AND their wrapper divs
     this.canvases.clear()
     this.canvasContainer.innerHTML = ''
@@ -168,7 +191,7 @@ export class Scope {
       const ctx = canvas.getContext('2d')!
 
       // Phosphor trail
-      ctx.globalAlpha = 1 - TRAIL_ALPHA
+      ctx.globalAlpha = 1 - this._trail
       ctx.fillStyle = '#0d1117'
       ctx.fillRect(0, 0, w, h)
       ctx.globalAlpha = 1.0
@@ -190,9 +213,30 @@ export class Scope {
     }
   }
 
+  /** Apply hue shift to a hex color. Returns CSS hsl() string if shifted, original if 0. */
+  private shiftColor(hex: string): string {
+    if (this._hueShift === 0) return hex
+    // Parse hex → RGB → HSL, shift hue, return hsl()
+    const r = parseInt(hex.slice(1, 3), 16) / 255
+    const g = parseInt(hex.slice(3, 5), 16) / 255
+    const b = parseInt(hex.slice(5, 7), 16) / 255
+    const max = Math.max(r, g, b), min = Math.min(r, g, b)
+    const l = (max + min) / 2
+    let h = 0, s = 0
+    if (max !== min) {
+      const d = max - min
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+      else if (max === g) h = ((b - r) / d + 2) / 6
+      else h = ((r - g) / d + 4) / 6
+    }
+    const newH = ((h * 360 + this._hueShift) % 360 + 360) % 360
+    return `hsl(${newH}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`
+  }
+
   private drawMono(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     if (!this.dataMono) return
-    this.drawWaveform(ctx, this.dataMono, w, h, 0, h, SCOPE_COLORS.mono, 2)
+    this.drawWaveform(ctx, this.dataMono, w, h, 0, h, this.shiftColor(SCOPE_COLORS.mono), this._lineWidth)
   }
 
   private drawStereo(ctx: CanvasRenderingContext2D, w: number, h: number): void {
@@ -206,22 +250,22 @@ export class Scope {
     ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2)
     ctx.stroke()
 
-    this.drawWaveform(ctx, dataL, w, h / 2, 0, h / 2, '#5EBDAB', 1.5)
-    this.drawWaveform(ctx, dataR, w, h / 2, h / 2, h / 2, '#F78C6C', 1.5)
+    this.drawWaveform(ctx, dataL, w, h / 2, 0, h / 2, this.shiftColor('#5EBDAB'), this._lineWidth * 0.75)
+    this.drawWaveform(ctx, dataR, w, h / 2, h / 2, h / 2, this.shiftColor('#F78C6C'), this._lineWidth * 0.75)
   }
 
   private drawMirror(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const data = this.dataMono
     if (!data) return
     const mid = h / 2
-    const color = SCOPE_COLORS.mirror
+    const color = this.shiftColor(SCOPE_COLORS.mirror)
     const len = data.length
     const step = w / len
 
     ctx.shadowColor = color
-    ctx.shadowBlur = 6
+    ctx.shadowBlur = this._glow
     ctx.strokeStyle = color
-    ctx.lineWidth = 1.5 * devicePixelRatio
+    ctx.lineWidth = this._lineWidth * 0.75 * devicePixelRatio
 
     ctx.beginPath()
     for (let i = 0; i < len; i++) {
@@ -245,12 +289,12 @@ export class Scope {
     const cx = w / 2
     const cy = h / 2
     const radius = Math.min(cx, cy) * 0.85
-    const color = SCOPE_COLORS.lissajous
+    const color = this.shiftColor(SCOPE_COLORS.lissajous)
 
     ctx.shadowColor = color
-    ctx.shadowBlur = 6
+    ctx.shadowBlur = this._glow
     ctx.strokeStyle = color
-    ctx.lineWidth = 1.5 * devicePixelRatio
+    ctx.lineWidth = this._lineWidth * 0.75 * devicePixelRatio
     ctx.beginPath()
 
     const dataX = this.dataL ?? this.dataMono
@@ -287,8 +331,7 @@ export class Scope {
     const binCount = data.length
     const nyquist = sampleRate / 2
 
-    ctx.shadowColor = color
-    ctx.shadowBlur = 4
+    ctx.shadowBlur = this._glow
 
     for (let i = 0; i < numBars; i++) {
       const freqLow = 40 * Math.pow(nyquist / 40, i / numBars)
@@ -300,9 +343,16 @@ export class Scope {
       for (let b = binLow; b <= binHigh; b++) { sum += data[b]; count++ }
       const mag = count > 0 ? sum / count / 255 : 0
 
+      // Gradient: magenta (#FF00FF) → superman blue (#0099FF)
+      const t = i / numBars
+      const r = Math.round(255 - t * 255)
+      const g = Math.round(t * 153)
+      const b2 = 255
+      ctx.shadowColor = `rgb(${r}, ${g}, ${b2})`
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b2}, ${0.4 + mag * 0.6})`
+
       const barH = mag * h * 0.9
       const x = (w / numBars) * i
-      ctx.fillStyle = `rgba(255, 203, 107, ${0.4 + mag * 0.6})`
       ctx.fillRect(x, h - barH, barWidth, barH)
     }
     ctx.shadowBlur = 0
@@ -315,7 +365,7 @@ export class Scope {
     color: string, lineWidth: number,
   ): void {
     ctx.shadowColor = color
-    ctx.shadowBlur = 8
+    ctx.shadowBlur = this._glow
     ctx.strokeStyle = color
     ctx.lineWidth = lineWidth * devicePixelRatio
     ctx.beginPath()

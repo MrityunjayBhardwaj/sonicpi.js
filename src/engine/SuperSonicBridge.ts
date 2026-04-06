@@ -360,9 +360,18 @@ export class SuperSonicBridge {
       const bundle = this.oscEncoder!.encodeSingleBundle(ntpTime, msg.address, msg.args)
       this.sonic.sendOSC(bundle)
     } else {
-      // Multiple messages — batch into one bundle
-      const bundle = fallbackEncodeBundle(ntpTime, this.messageQueue)
-      this.sonic.sendOSC(bundle)
+      // Multiple messages — try batching, fall back to individual sends
+      // if the combined bundle exceeds SuperSonic's 1024-byte limit.
+      try {
+        const bundle = fallbackEncodeBundle(ntpTime, this.messageQueue)
+        this.sonic.sendOSC(bundle)
+      } catch {
+        // Bundle too large — send each message as its own bundle
+        for (const msg of this.messageQueue) {
+          const single = this.oscEncoder!.encodeSingleBundle(ntpTime, msg.address, msg.args)
+          this.sonic.sendOSC(single)
+        }
+      }
     }
     this.messageQueue.length = 0
   }
@@ -736,6 +745,27 @@ export class SuperSonicBridge {
   /** Release a private audio bus back to the pool. */
   freeBus(busNum: number): void {
     this.freeBuses.push(busNum)
+  }
+
+  /**
+   * Register a custom (user-uploaded) sample from raw audio file bytes.
+   * The ArrayBuffer is passed to SuperSonic's loadSample() which decodes
+   * it via Web Audio and copies the PCM data to the WASM shared buffer.
+   * After registration, `sample :user_mykick` works like any built-in sample.
+   */
+  async registerCustomSample(name: string, audioData: ArrayBuffer): Promise<void> {
+    if (!this.sonic) throw new Error('SuperSonic not initialized')
+    const bufNum = this.nextBufNum++
+    // SuperSonic.loadSample accepts ArrayBuffer directly (lib_buffer_manager.js:prepareFromBlob)
+    await this.sonic.loadSample(bufNum, audioData as unknown as string)
+    this.loadedSamples.set(name, bufNum)
+    // Decode via Web Audio for duration cache
+    try {
+      const audioBuffer = await this.sonic.audioContext.decodeAudioData(audioData.slice(0))
+      this.sampleDurations.set(name, audioBuffer.duration)
+    } catch {
+      // Duration unknown — beat_stretch won't work, but playback still will
+    }
   }
 
   /** Check if a sample has been loaded (duration cached). */
