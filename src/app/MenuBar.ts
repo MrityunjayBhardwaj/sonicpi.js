@@ -658,6 +658,7 @@ export class MenuBar {
     addReadonly('Font Size', `${typeof prefs['fontSize'] === 'number' ? prefs['fontSize'] : 14}px (use A\u2212/A+ buttons)`)
     addCheckbox('Auto-scroll log', 'autoScrollLog', true)
     addCheckbox('Show line numbers', 'showLineNumbers', true)
+    addCheckbox('Word wrap', 'wordWrap', false)
 
     // --- Performance ---
     addSection('Performance')

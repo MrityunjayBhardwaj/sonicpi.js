@@ -329,6 +329,19 @@ export class Editor {
     }
   }
 
+  /** Toggle word wrap. */
+  setWordWrap(on: boolean): void {
+    if (this.view) {
+      const content = this.view.dom.querySelector('.cm-content') as HTMLElement | null
+      if (content) content.style.whiteSpace = on ? 'pre-wrap' : 'pre'
+      const scroller = this.view.dom.querySelector('.cm-scroller') as HTMLElement | null
+      if (scroller) scroller.style.overflowX = on ? 'hidden' : 'auto'
+    } else if (this.fallbackTextarea) {
+      this.fallbackTextarea.style.whiteSpace = on ? 'pre-wrap' : 'pre'
+      this.fallbackTextarea.style.overflowX = on ? 'hidden' : 'auto'
+    }
+  }
+
   /** Change editor font size by delta px. Persists to localStorage. */
   changeFontSize(delta: number): void {
     this.currentFontSize = Math.max(10, Math.min(24, this.currentFontSize + delta))

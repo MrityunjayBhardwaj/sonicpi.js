@@ -341,6 +341,9 @@ export class App {
       case 'showLineNumbers':
         this.editor.setLineNumbers(value as boolean)
         break
+      case 'wordWrap':
+        this.editor.setWordWrap(value as boolean)
+        break
 
       // Performance
       case 'schedAheadTime':
@@ -361,6 +364,7 @@ export class App {
       fontSize: this.editor?.getFontSize?.() ?? 14,
       autoScrollLog: true,
       showLineNumbers: true,
+      wordWrap: false,
       schedAheadTime: 0.3,
       ...this.prefs,
     }
@@ -376,6 +380,7 @@ export class App {
     this.scope.setHueShift(p.scopeHue as number)
     if (p.autoScrollLog === false) this.console.setAutoScroll(false)
     if (p.showLineNumbers === false) this.editor.setLineNumbers(false)
+    if (p.wordWrap === true) this.editor.setWordWrap(true)
   }
 
   /** Load buffers from localStorage, falling back to welcome code. */
