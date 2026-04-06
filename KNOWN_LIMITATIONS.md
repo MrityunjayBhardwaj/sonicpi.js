@@ -20,7 +20,7 @@ Current known limitations and browser-specific behaviors for Sonic Pi Web.
 
 ## DSL Differences from Desktop Sonic Pi
 
-- **`osc` / `osc_send`**: Not implemented — no external OSC communication (transpiles to a no-op with warning)
+- **`osc` / `osc_send`**: Hook-based — the engine emits OSC messages, but the host app must provide a transport (e.g., WebSocket-to-UDP bridge). Without a handler, messages are logged with a warning
 - **`use_timing_guarantees`**: Not implemented (test-only feature in desktop Sonic Pi)
 - **`sound_out` FX**: Not available
 - **MIDI**: Requires Web MIDI API (Chrome/Edge only) — not available in Firefox or Safari
@@ -37,7 +37,7 @@ Current known limitations and browser-specific behaviors for Sonic Pi Web.
 
 ## Not Yet Implemented
 
-- `osc` / `osc_send` (external OSC communication)
 - `use_timing_guarantees`
 - `sound_out` FX
 - Multi-channel audio output routing beyond 6 stereo track buses
+- Built-in WebSocket-to-UDP bridge for `osc_send` (hook exists, transport not bundled)
