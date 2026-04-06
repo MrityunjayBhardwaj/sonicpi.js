@@ -557,6 +557,23 @@ export class Editor {
         '.cm-completionIcon': {
           opacity: '0.6',
         },
+        // Autocomplete info/detail tooltip (description panel)
+        '.cm-tooltip.cm-completionInfo': {
+          background: '#1c2128',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '6px',
+          color: '#8b949e',
+          padding: '6px 10px',
+          fontSize: '0.7rem',
+          fontFamily: "'Fira Code', 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace",
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+        },
+        // Generic tooltip fallback
+        '.cm-tooltip': {
+          background: '#1c2128',
+          border: '1px solid rgba(255,255,255,0.1)',
+          color: '#c9d1d9',
+        },
       } as Record<string, unknown>)
       if (theme) extensions.push(theme)
     } catch { /* theme failed — use default */ }
