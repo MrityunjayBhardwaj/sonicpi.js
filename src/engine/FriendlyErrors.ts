@@ -116,7 +116,7 @@ function editDistance(a: string, b: string): number {
 /** Pattern matchers for common runtime errors. */
 const ERROR_PATTERNS: Array<{
   test: (msg: string) => boolean
-  transform: (msg: string, err: Error) => { title: string; message: string }
+  transform: (msg: string, err: Error) => { title: string; message: string; line?: number }
 }> = [
   // Unknown synth
   {
@@ -389,12 +389,16 @@ const ERROR_PATTERNS: Array<{
       // Extract all "Parse error at line N: ..." entries
       const errors = msg.split(';').map(s => s.trim()).filter(Boolean)
       const formatted = errors.map(e => `  ${e}`).join('\n')
+      // Extract line number from first error (already source-level, no offset needed)
+      const lineMatch = msg.match(/parse error at line (\d+)/i)
+      const line = lineMatch ? parseInt(lineMatch[1], 10) : undefined
       return {
         title: 'Syntax error — your code could not be parsed',
         message: `${formatted}\n\nCheck for:\n` +
           `  - Missing "do" after live_loop :name\n` +
           `  - Unclosed do/end blocks\n` +
           `  - Mismatched quotes or parentheses`,
+        line,
       }
     },
   },
@@ -421,11 +425,11 @@ export function friendlyError(err: Error, lineOffset = 0): FriendlyError {
 
   for (const pattern of ERROR_PATTERNS) {
     if (pattern.test(msg)) {
-      const { title, message } = pattern.transform(msg, err)
+      const result = pattern.transform(msg, err)
       return {
-        title,
-        message,
-        line: extractLineFromStack(err, lineOffset),
+        title: result.title,
+        message: result.message,
+        line: result.line ?? extractLineFromStack(err, lineOffset),
         original: err,
       }
     }
