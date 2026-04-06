@@ -1,13 +1,17 @@
 # SonicPi.js
 
-**Browser-native live coding music environment powered by SuperCollider synthesis.**
+**Your Sonic Pi code, now portable.**
+
+<p align="center">
+  <img src="assets/hero.jpg" alt="Sonic Pi Web — live coding in the browser" width="100%">
+</p>
 
 <!-- badges -->
 [![CI](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions/workflows/deploy.yml/badge.svg)](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions)
 [![npm](https://img.shields.io/npm/v/@mjayb/sonicpijs)](https://www.npmjs.com/package/@mjayb/sonicpijs)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
-**[Try it at sonicpi.cc](https://sonicpi.cc)**
+**[Try it at sonicpi.cc](https://sonicpi.cc)** | Also checkout [Sonic Tau](https://sonic-pi.net/tau/)
 
 ---
 
