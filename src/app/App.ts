@@ -666,6 +666,7 @@ export class App {
       border-bottom: 1px solid rgba(255,255,255,0.06);
       background: #0d1117;
       flex-shrink: 0;
+      overflow: hidden;
     `
     rightPanel.appendChild(scopeContainer)
     this.scope = new Scope(scopeContainer)
@@ -1061,7 +1062,7 @@ export class App {
     const cueLogEl = this.root.querySelector('.spw-cuelog') as HTMLElement
 
     const scopeVisible = this.panelVisibility.scope !== false
-    if (scope) scope.style.display = scopeVisible ? '' : 'none'
+    if (scope) scope.style.display = scopeVisible ? 'flex' : 'none'
     if (splitter) splitter.style.display = scopeVisible ? '' : 'none'
     if (consoleEl) consoleEl.style.display = this.panelVisibility.log !== false ? '' : 'none'
     if (cueLogEl) cueLogEl.style.display = this.panelVisibility.cueLog !== false ? '' : 'none'
