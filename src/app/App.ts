@@ -703,6 +703,10 @@ export class App {
         onPrefsChange: (key, value) => this.applyPref(key, value),
         getPrefs: () => this.getPrefs(),
       },
+      getReportData: () => ({
+        code: this.editor.getValue(),
+        engineState: this.engine ? (this.playing ? 'playing' : 'stopped') : 'not initialized',
+      }),
     })
     // Move menu bar to the very top (before toolbar)
     const menuEl = this.root.lastElementChild!
