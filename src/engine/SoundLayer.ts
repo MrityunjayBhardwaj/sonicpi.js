@@ -247,6 +247,7 @@ export function normalizeSampleParams(
   const shouldScaleBpm = !('_argBpmScaling' in params && !params._argBpmScaling)
   let p = { ...params }
   p = calculateSustain(p)
+  p = expandSlideParam(p)
   p = stripNonScynthParams(p)
   p = injectSampleDefaults(p)
   p = validateAndClamp(p, warnFn)
@@ -296,8 +297,8 @@ export function normalizeFxParams(
   const shouldScaleBpm = !('_argBpmScaling' in params && !params._argBpmScaling)
   let p = { ...params }
   p = stripNonScynthParams(p)
-  p = injectFxTimeDefaults(fxName, p)
   p = resolveSymbolDefaults(p)
+  p = injectFxTimeDefaults(fxName, p)
   p = validateAndClamp(p, warnFn)
   if (shouldScaleBpm) p = scaleTimeParamsToBpm(p, bpm)
   return p

@@ -183,85 +183,7 @@ export function treeSitterTranspile(ruby: string): TreeSitterTranspileResult {
 }
 
 // ---------------------------------------------------------------------------
-// Bare code wrapper (shared with regex transpiler)
-// ---------------------------------------------------------------------------
 
-function wrapBareCode(code: string): string {
-  const lines = code.split('\n')
-  const hasLiveLoop = lines.some(l => /^\s*live_loop\s/.test(l))
-  const bareDSLPattern = /^\s*(play|sleep|sample)\s/
-  const bareBlockPattern = /^\s*(\d+\.times\s+do|.*\.each\s+do|with_fx\s)/
-  const hasBareCode = lines.some(l => bareDSLPattern.test(l) || bareBlockPattern.test(l))
-
-  if (!hasBareCode) return code
-
-  if (hasLiveLoop) {
-    const topLevel: string[] = []
-    const bareCode: string[] = []
-    const blocks: string[] = []
-    let inBlock = false
-    let blockDepth = 0
-
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (trimmed === '' || trimmed.startsWith('#')) {
-        if (inBlock) blocks.push(line)
-        else bareCode.push(line)
-        continue
-      }
-      if (/^\s*(live_loop|define|in_thread|with_fx|at|time_warp|density)\s/.test(line)) {
-        inBlock = true
-        blockDepth = 1
-        blocks.push(line)
-        continue
-      }
-      if (inBlock) {
-        blocks.push(line)
-        if (/\bdo\s*(\|.*\|)?\s*$/.test(trimmed)) blockDepth++
-        if (/^(if|unless|loop|while|until|for|begin|case)\s/.test(trimmed)) blockDepth++
-        if (trimmed === 'end') {
-          blockDepth--
-          if (blockDepth <= 0) inBlock = false
-        }
-        continue
-      }
-      if (/^\s*(use_bpm|use_synth|use_random_seed)\s/.test(line)) {
-        topLevel.push(line)
-        continue
-      }
-      bareCode.push(line)
-    }
-
-    const hasActualBare = bareCode.some(l => bareDSLPattern.test(l))
-    if (!hasActualBare) return code
-
-    return [
-      ...topLevel, '',
-      'live_loop :__run_once do',
-      ...bareCode.map(l => '  ' + l),
-      '  stop',
-      'end', '',
-      ...blocks,
-    ].join('\n')
-  }
-
-  const topLevel: string[] = []
-  const body: string[] = []
-  for (const line of lines) {
-    if (/^\s*(use_bpm|use_synth|use_random_seed)\s/.test(line)) {
-      topLevel.push(line)
-    } else {
-      body.push(line)
-    }
-  }
-  return [
-    ...topLevel, '',
-    'live_loop :__run_once do',
-    ...body.map(l => '  ' + l),
-    '  stop',
-    'end',
-  ].join('\n')
-}
 
 // ---------------------------------------------------------------------------
 // AST walk context
@@ -862,7 +784,7 @@ const BARE_DSL_CALLS = new Set([
   'play', 'sleep', 'sample', 'cue', 'sync',
   'puts', 'print', 'control', 'synth',
 ])
-const TOP_LEVEL_SETTINGS = new Set(['use_bpm', 'use_synth', 'use_random_seed', 'use_debug'])
+const TOP_LEVEL_SETTINGS = new Set(['use_bpm', 'use_synth', 'use_random_seed', 'use_debug', 'use_arg_bpm_scaling'])
 
 function transpileProgram(node: any, ctx: TranspileContext): string {
   const children = node.namedChildren

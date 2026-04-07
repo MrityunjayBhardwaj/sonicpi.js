@@ -39,6 +39,7 @@ export class ProgramBuilder {
   private _sampleDefaults: Record<string, number> = {}
   private _debug: boolean = true
   private _argBpmScaling: boolean = true
+  private _currentBpm: number = 60
 
   constructor(seed: number = 0, initialTicks?: Map<string, number>) {
     this.rng = new SeededRandom(seed)
@@ -128,6 +129,7 @@ export class ProgramBuilder {
   }
 
   use_bpm(bpm: number): this {
+    this._currentBpm = bpm
     this.steps.push({ tag: 'useBpm', bpm })
     return this
   }
@@ -176,6 +178,9 @@ export class ProgramBuilder {
     inner.currentSynth = this.currentSynth
     inner.densityFactor = this.densityFactor
     inner._argBpmScaling = this._argBpmScaling
+    inner._transpose = this._transpose
+    inner._synthDefaults = { ...this._synthDefaults }
+    inner._sampleDefaults = { ...this._sampleDefaults }
     fn(inner, fxRef)
     const fxOpts = !this._argBpmScaling ? { ...opts, _argBpmScaling: 0 } : opts
     this.steps.push({ tag: 'fx', name, opts: fxOpts, body: inner.build(), nodeRef: fxRef })
@@ -187,6 +192,9 @@ export class ProgramBuilder {
     inner.currentSynth = this.currentSynth
     inner.densityFactor = this.densityFactor
     inner._argBpmScaling = this._argBpmScaling
+    inner._transpose = this._transpose
+    inner._synthDefaults = { ...this._synthDefaults }
+    inner._sampleDefaults = { ...this._sampleDefaults }
     buildFn(inner)
     this.steps.push({ tag: 'thread', body: inner.build() })
     return this
@@ -200,6 +208,9 @@ export class ProgramBuilder {
       inner.currentSynth = this.currentSynth
       inner.densityFactor = this.densityFactor
       inner._argBpmScaling = this._argBpmScaling
+      inner._transpose = this._transpose
+      inner._synthDefaults = { ...this._synthDefaults }
+      inner._sampleDefaults = { ...this._sampleDefaults }
       if (offset > 0) inner.sleep(offset)
       buildFn(inner, val)
       this.steps.push({ tag: 'thread', body: inner.build() })
@@ -399,10 +410,14 @@ export class ProgramBuilder {
 
   // --- BPM block ---
 
-  /** Temporarily set BPM for a block. Sleeps inside are scaled. */
+  /** Temporarily set BPM for a block. Sleeps inside are scaled. Restores previous BPM after. */
   with_bpm(bpm: number, buildFn: (b: ProgramBuilder) => void): this {
+    const prev = this._currentBpm
+    this._currentBpm = bpm
     this.steps.push({ tag: 'useBpm', bpm })
     buildFn(this)
+    this._currentBpm = prev
+    this.steps.push({ tag: 'useBpm', bpm: prev })
     return this
   }
 

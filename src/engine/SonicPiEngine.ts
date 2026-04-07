@@ -24,7 +24,7 @@ import type { Program } from './Program'
 // ---------------------------------------------------------------------------
 
 /** 4-character base-36 suffix — enough entropy for unique in-session loop names. */
-const randomSuffix = (): string => randomSuffix()
+const randomSuffix = (): string => Math.random().toString(36).slice(2, 6)
 
 // ---------------------------------------------------------------------------
 // Engine interfaces

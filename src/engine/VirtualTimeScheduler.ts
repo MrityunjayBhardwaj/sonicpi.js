@@ -387,8 +387,8 @@ export class VirtualTimeScheduler {
 
   /** Resume the tick timer after a pause. */
   resumeTick(): void {
-    if (this.tickTimer !== null) return // already running
-    if (!this._running) return
+    if (this.tickTimer !== null) clearInterval(this.tickTimer)
+    if (!this._running) { this.tickTimer = null; return }
     this.tickTimer = setInterval(() => this.tick(), this.tickInterval)
   }
 
