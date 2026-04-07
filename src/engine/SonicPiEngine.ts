@@ -589,7 +589,15 @@ export class SonicPiEngine {
       }
 
       // ----- MIDI output (opts object carries keyword args from transpiler) -----
-      type MidiOpts = { channel?: number }
+      type MidiOpts = { channel?: number; sustain?: number; velocity?: number; vel?: number }
+      /** midi shorthand — sends note_on + auto note_off after sustain (default 1 beat) */
+      const midi = (note: number | string, opts: MidiOpts = {}) => {
+        const n = typeof note === 'string' ? noteToMidi(note) : note
+        const vel = opts.velocity ?? opts.vel ?? 100
+        const sus = opts.sustain ?? 1
+        this.midiBridge.noteOn(n, vel, opts.channel ?? 1)
+        setTimeout(() => this.midiBridge.noteOff(n, opts.channel ?? 1), sus * 1000)
+      }
       const midi_note_on = (note: number | string, velocity: number = 100, opts: MidiOpts = {}) => {
         const n = typeof note === 'string' ? noteToMidi(note) : note
         this.midiBridge.noteOn(n, velocity, opts.channel ?? 1)
@@ -621,6 +629,8 @@ export class SonicPiEngine {
       const get_note_off = (channel: number = 1) => this.midiBridge.getLastNoteOff(channel)
 
       // Top-level osc_send — fires the host-provided handler (no-op with warning if unset)
+      let oscDefaultHost = 'localhost'
+      let oscDefaultPort = 4560
       const topLevelOscSend = (host: string, port: number, path: string, ...args: unknown[]) => {
         if (this.oscHandler) {
           this.oscHandler(host, port, path, ...args)
@@ -628,6 +638,10 @@ export class SonicPiEngine {
           topLevelPuts(`[Warning] osc_send: no handler set — message to ${host}:${port}${path} dropped`)
         }
       }
+      /** Set default OSC target host and port for osc() shorthand. */
+      const use_osc = (host: string, port: number) => { oscDefaultHost = host; oscDefaultPort = port }
+      /** Send OSC message to the default target (set via use_osc). */
+      const osc = (path: string, ...args: unknown[]) => topLevelOscSend(oscDefaultHost, oscDefaultPort, path, ...args)
 
       // Top-level print alias (same as puts)
       const topLevelPrint = topLevelPuts
@@ -672,13 +686,15 @@ export class SonicPiEngine {
         // MIDI input
         'get_cc', 'get_pitch_bend', 'get_note_on', 'get_note_off',
         // MIDI output
-        'midi_note_on', 'midi_note_off', 'midi_cc',
+        'midi', 'midi_note_on', 'midi_note_off', 'midi_cc',
         'midi_pitch_bend', 'midi_channel_pressure', 'midi_poly_pressure',
         'midi_prog_change', 'midi_clock_tick',
         'midi_start', 'midi_stop', 'midi_continue',
         'midi_all_notes_off', 'midi_notes_off', 'midi_devices',
         // OSC
-        'osc_send',
+        'use_osc', 'osc', 'osc_send',
+        // Sample BPM
+        'use_sample_bpm',
       ]
       const dslValues = [
         topLevelBuilder,
@@ -706,13 +722,15 @@ export class SonicPiEngine {
         // MIDI input
         get_cc, get_pitch_bend, get_note_on, get_note_off,
         // MIDI output
-        midi_note_on, midi_note_off, midi_cc,
+        midi, midi_note_on, midi_note_off, midi_cc,
         midi_pitch_bend, midi_channel_pressure, midi_poly_pressure,
         midi_prog_change, midi_clock_tick,
         midi_start, midi_stop, midi_continue,
         midi_all_notes_off, midi_notes_off, midi_devices,
         // OSC
-        topLevelOscSend,
+        use_osc, osc, topLevelOscSend,
+        // Sample BPM
+        (name: string) => topLevelBuilder.use_sample_bpm(name),
       ]
 
       const codeWarnings = validateCode(transpiledCode)

@@ -112,7 +112,7 @@ function wrapBareCode(code: string): string {
       }
 
       // Top-level settings (only at depth 0)
-      if (/^\s*(use_bpm|use_synth|use_random_seed|use_arg_bpm_scaling)\s/.test(line)) {
+      if (/^\s*(use_bpm|use_synth|use_random_seed|use_arg_bpm_scaling|use_sample_bpm)\s/.test(line)) {
         topLevel.push(line)
         continue
       }
@@ -150,7 +150,7 @@ function wrapBareCode(code: string): string {
     else if (/^(if|unless|case|begin|loop|while|until|for)\s/.test(trimmed) && hoistDepth > 0) hoistDepth++
     if (trimmed === 'end' && hoistDepth > 0) hoistDepth--
 
-    if (hoistDepth === 0 && /^\s*(use_bpm|use_synth|use_random_seed|use_arg_bpm_scaling)\s/.test(line)) {
+    if (hoistDepth === 0 && /^\s*(use_bpm|use_synth|use_random_seed|use_arg_bpm_scaling|use_sample_bpm)\s/.test(line)) {
       topLevel.push(line)
     } else {
       body.push(line)

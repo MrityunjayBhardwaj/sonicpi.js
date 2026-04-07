@@ -134,6 +134,12 @@ export class ProgramBuilder {
     return this
   }
 
+  /** Set BPM to match a sample's natural tempo. */
+  use_sample_bpm(name: string, opts?: Record<string, unknown>): this {
+    const dur = this.sample_duration(name, opts)
+    return this.use_bpm(60.0 / dur)
+  }
+
   use_random_seed(seed: number): this {
     this.rng.reset(seed)
     return this

@@ -239,6 +239,8 @@ const BUILDER_METHODS = new Set([
   'chord_degree', 'degree', 'chord_names', 'scale_names',
   // OSC
   'osc_send',
+  // Sample BPM
+  'use_sample_bpm',
   // Budget
   '__checkBudget__',
 ])
@@ -274,7 +276,11 @@ const TOP_LEVEL_SCOPE = new Set([
   'ring', 'knit', 'range', 'line', 'spread',
   'chord', 'scale', 'chord_invert', 'note', 'note_range',
   // OSC
-  'osc_send',
+  'use_osc', 'osc', 'osc_send',
+  // MIDI shorthand
+  'midi',
+  // Sample BPM
+  'use_sample_bpm',
 ])
 
 /**
