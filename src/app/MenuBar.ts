@@ -118,9 +118,11 @@ export class MenuBar {
 
     // Version label — distribution-boundary observation (dharana §10).
     // Shows which build is running so bug reports can be triaged to a
-    // specific version. Click to copy the version string to clipboard.
+    // specific version. Click to copy the full version string to clipboard.
     const versionLabel = document.createElement('button')
+    versionLabel.type = 'button'
     versionLabel.textContent = `v${APP_VERSION}`
+    versionLabel.setAttribute('aria-label', `Application version ${APP_VERSION}, click to copy`)
     versionLabel.title = `SonicPi.js v${APP_VERSION} — click to copy`
     versionLabel.style.cssText = `
       background: none; border: none;
@@ -135,20 +137,26 @@ export class MenuBar {
     versionLabel.addEventListener('mouseleave', () => {
       versionLabel.style.color = '#6e7681'
     })
+    const VERSION_LABEL_DEFAULT = `v${APP_VERSION}`
+    const flashVersionLabel = (msg: string): void => {
+      versionLabel.textContent = msg
+      setTimeout(() => { versionLabel.textContent = VERSION_LABEL_DEFAULT }, 1200)
+    }
     versionLabel.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(`SonicPi.js v${APP_VERSION}`)
-        const original = versionLabel.textContent
-        versionLabel.textContent = 'copied!'
-        setTimeout(() => { versionLabel.textContent = original }, 1200)
+        flashVersionLabel('copied!')
       } catch {
-        // Clipboard API can fail in insecure contexts; ignore silently.
+        // Clipboard API can fail in insecure contexts (non-HTTPS, permission
+        // denied). Give the user visible feedback instead of failing silently.
+        flashVersionLabel('copy failed')
       }
     })
     this.container.appendChild(versionLabel)
 
     // Report Bug button
     const bugBtn = document.createElement('button')
+    bugBtn.type = 'button'
     bugBtn.textContent = 'Report Bug'
     bugBtn.style.cssText = `
       background: none; border: 1px solid rgba(232,82,124,0.3);

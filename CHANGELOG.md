@@ -2,11 +2,11 @@
 
 ## v1.5.0-beta.0
 
-**Prerelease.** This is the first public beta of v1.5.0. Installed via `npm install @mjayb/sonicpijs@beta`; the default `latest` tag still points to `v1.4.0`. Bug reports welcome on the [Sonic Pi community forum](https://in-thread.sonic-pi.net/) and [GitHub issues](https://github.com/MrityunjayBhardwaj/SonicPi.js/issues).
+**Prerelease.** This is the first public beta of v1.5.0. Installed via `npm install @mjayb/sonicpijs@beta`; the default `latest` tag still points to `v1.4.0`. Bug reports welcome on [GitHub issues](https://github.com/MrityunjayBhardwaj/SonicPi.js/issues) — the in-app **Report Bug** button pre-fills the version, browser, and current code.
 
 ### Engine audit — 33 bugs fixed
 
-Found during a multi-round audit against MagPi book chapters, official Sonic Pi wizard/sorcerer/magician examples, and community forum compositions. Full session log in memory.
+Found during a multi-round audit against MagPi book chapters, official Sonic Pi wizard/sorcerer/magician examples, and community forum compositions. Per-bug rationale in the engine audit PR (#155) and synth alias cleanup (#157).
 
 **Critical engine:**
 - `randomSuffix()` was `const f = (): string => f()` — infinite recursion on top-level `in_thread`/`at`
@@ -67,7 +67,7 @@ Found during a multi-round audit against MagPi book chapters, official Sonic Pi 
 
 ### UI
 
-- Version footer now displays `SonicPi.js v1.5.0-beta.0` so bug reports can be triaged to a specific build
+- Version label in the menu bar displays `v1.5.0-beta.0` (top-right, muted). Click to copy the full `SonicPi.js v1.5.0-beta.0` string to clipboard. Pre-filled into the Report Bug URL so every bug report is tagged to a specific build.
 
 ### Release engineering
 
@@ -76,7 +76,7 @@ Found during a multi-round audit against MagPi book chapters, official Sonic Pi 
 ### Known limitations (unchanged from v1.4.0)
 
 - Multi-output soundcard routing — architecturally impossible in Web Audio
-- External sample upload — feasible but not built (#TBD, post-beta)
+- External sample upload — feasible but not built (#159, post-beta)
 - OSC receive via WebSocket bridge — feasible but not built (#150)
 - `synth :sound_in` via `getUserMedia` — feasible but not built (#152)
 - `use_real_time` MIDI latency bypass — feasible but not built (#149)

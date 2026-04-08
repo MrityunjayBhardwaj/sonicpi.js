@@ -75,25 +75,33 @@ Composition pair (dharana §10): `package.json` and `src/app/version.ts` MUST ch
 
 ### 3. Verify locally
 ```bash
-npx tsc --noEmit        # zero errors
-npx vitest run          # all tests pass
+npx tsc --noEmit             # zero errors
+npx vitest run               # all tests pass, including version composition pair
+npm run build:single         # production single-file app build succeeds
+npm run build:lib            # library bundle (ESM + CJS) build succeeds
 npx tsx tools/capture.ts "play 60; sleep 0.5; sample :bd_haus"
-#                       ^ smoke test — inspect .captures/*.md for issues
+#                            ^ smoke test — inspect .captures/*.md for issues
 ```
+
+The vitest run includes `src/app/__tests__/version.test.ts` which enforces the `package.json` ↔ `src/app/version.ts` composition pair from dharana §10. If you bumped one file and forgot the other, this test fails immediately. Do not skip it, do not `--no-verify` around it.
+
+Both build commands must be run — `build:single` produces the sonicpi.cc deploy artifact, `build:lib` produces the npm package. A release that passes one but not the other ships a broken half-product.
 
 ### 4. Commit and push
 ```bash
 git add package.json src/app/version.ts CHANGELOG.md ROADMAP.md
-git commit -m "🚀 release: v1.X.Y-beta.N
+git commit -m "🚀 chore(release): v1.X.Y-beta.N
 
 $(cat <<'EOF'
-Problem: [short context]
-Fix: Bump version across package.json, UI footer, and changelog
-     in lockstep. Beta publishes with --tag beta to protect latest.
+Problem: [short context for why this release is being cut]
+Fix: Bump version across package.json, src/app/version.ts, CHANGELOG,
+     ROADMAP in lockstep. Beta publishes with --tag beta to protect latest.
 EOF
 )"
 git push -u origin chore/v1.X.Y-beta.N
 ```
+
+Gitmoji convention used in this repo: `🐛 fix:`, `📝 docs:`, `⬆️ chore:`, `♻️ refactor:`. Release commits use `🚀 chore(release):` to pair a rocket with the existing `chore:` convention.
 
 ### 5. Open PR, wait for CI
 ```bash

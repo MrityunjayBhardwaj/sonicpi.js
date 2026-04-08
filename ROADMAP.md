@@ -4,7 +4,7 @@
 
 ---
 
-## Released
+## Stable releases
 
 | Version | Highlights |
 |---------|------------|
@@ -13,7 +13,12 @@
 | **v1.2.0** | stop_loop, multi-line continuation, ternary operator |
 | **v1.3.0** | Tree-sitter sole transpiler, SoundLayer parity, 100% data parity (66 synths, 197 samples, 42 FX), param validation, scope rewrite (5 modes), runtime semantics, full UI overhaul |
 | **v1.4.0** | Help panel (311 entries), resizable panels, cue log wired, error handling overhaul (20 patterns, block validation, line highlighting, hot-swap rollback), Report Bug button, CI workflow, TypeScript 6 |
-| **v1.5.0-beta.0** | Engine audit: 33 bugs fixed across 9 commits. Tutorial/book/community parity: 56 real-world compositions verified in Chromium (MagPi Essentials chapters, 15 official Sonic Pi wizard/sorcerer/magician examples, 13 community forum compositions). New DSL: `use_sample_bpm`, `midi` shorthand, `use_osc`/`osc`, `with_fx reps:`, `with_synth_defaults`, `with_sample_defaults`, `use_density`, `use_debug` exposed. Sandbox fixes: `b`→`__b` rename, `get()` Proxy→function. Bridge fixes: `in_thread` inside `with_fx` inherits `outBus`, lazy-load race conditions, `freeBus` guard. |
+
+## Prereleases
+
+| Version | npm dist-tag | Highlights |
+|---------|--------------|------------|
+| **v1.5.0-beta.0** | `beta` | Engine audit: 33 bugs fixed. Tutorial/book/community parity: 56 real-world compositions verified in Chromium (MagPi Essentials chapters, 15 official Sonic Pi wizard/sorcerer/magician examples, 13 community forum compositions). New DSL: `use_sample_bpm`, `midi` shorthand, `use_osc`/`osc`, `with_fx reps:`, `with_synth_defaults`, `with_sample_defaults`, `use_density`, `use_debug` exposed. Sandbox fixes: `b`→`__b` rename, `get()` Proxy→function. Bridge fixes: `in_thread` inside `with_fx` inherits `outBus`, lazy-load race conditions, `freeBus` guard. Install: `npm install @mjayb/sonicpijs@beta`. |
 
 ---
 
