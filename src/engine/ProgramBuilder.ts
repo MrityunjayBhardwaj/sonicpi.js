@@ -39,6 +39,7 @@ export class ProgramBuilder {
   private _sampleDefaults: Record<string, number> = {}
   private _debug: boolean = true
   private _argBpmScaling: boolean = true
+  private _currentBpm: number = 60
 
   constructor(seed: number = 0, initialTicks?: Map<string, number>) {
     this.rng = new SeededRandom(seed)
@@ -128,8 +129,15 @@ export class ProgramBuilder {
   }
 
   use_bpm(bpm: number): this {
+    this._currentBpm = bpm
     this.steps.push({ tag: 'useBpm', bpm })
     return this
+  }
+
+  /** Set BPM to match a sample's natural tempo. */
+  use_sample_bpm(name: string, opts?: Record<string, unknown>): this {
+    const dur = this.sample_duration(name, opts)
+    return this.use_bpm(60.0 / dur)
   }
 
   use_random_seed(seed: number): this {
@@ -176,6 +184,9 @@ export class ProgramBuilder {
     inner.currentSynth = this.currentSynth
     inner.densityFactor = this.densityFactor
     inner._argBpmScaling = this._argBpmScaling
+    inner._transpose = this._transpose
+    inner._synthDefaults = { ...this._synthDefaults }
+    inner._sampleDefaults = { ...this._sampleDefaults }
     fn(inner, fxRef)
     const fxOpts = !this._argBpmScaling ? { ...opts, _argBpmScaling: 0 } : opts
     this.steps.push({ tag: 'fx', name, opts: fxOpts, body: inner.build(), nodeRef: fxRef })
@@ -187,6 +198,9 @@ export class ProgramBuilder {
     inner.currentSynth = this.currentSynth
     inner.densityFactor = this.densityFactor
     inner._argBpmScaling = this._argBpmScaling
+    inner._transpose = this._transpose
+    inner._synthDefaults = { ...this._synthDefaults }
+    inner._sampleDefaults = { ...this._sampleDefaults }
     buildFn(inner)
     this.steps.push({ tag: 'thread', body: inner.build() })
     return this
@@ -200,6 +214,9 @@ export class ProgramBuilder {
       inner.currentSynth = this.currentSynth
       inner.densityFactor = this.densityFactor
       inner._argBpmScaling = this._argBpmScaling
+      inner._transpose = this._transpose
+      inner._synthDefaults = { ...this._synthDefaults }
+      inner._sampleDefaults = { ...this._sampleDefaults }
       if (offset > 0) inner.sleep(offset)
       buildFn(inner, val)
       this.steps.push({ tag: 'thread', body: inner.build() })
@@ -397,12 +414,34 @@ export class ProgramBuilder {
     return this
   }
 
+  /** Temporarily set synth defaults for a block, then restore. */
+  with_synth_defaults(opts: Record<string, number>, buildFn: (b: ProgramBuilder) => void): this {
+    const prev = this._synthDefaults
+    this._synthDefaults = { ...opts }
+    buildFn(this)
+    this._synthDefaults = prev
+    return this
+  }
+
+  /** Temporarily set sample defaults for a block, then restore. */
+  with_sample_defaults(opts: Record<string, number>, buildFn: (b: ProgramBuilder) => void): this {
+    const prev = this._sampleDefaults
+    this._sampleDefaults = { ...opts }
+    buildFn(this)
+    this._sampleDefaults = prev
+    return this
+  }
+
   // --- BPM block ---
 
-  /** Temporarily set BPM for a block. Sleeps inside are scaled. */
+  /** Temporarily set BPM for a block. Sleeps inside are scaled. Restores previous BPM after. */
   with_bpm(bpm: number, buildFn: (b: ProgramBuilder) => void): this {
+    const prev = this._currentBpm
+    this._currentBpm = bpm
     this.steps.push({ tag: 'useBpm', bpm })
     buildFn(this)
+    this._currentBpm = prev
+    this.steps.push({ tag: 'useBpm', bpm: prev })
     return this
   }
 
@@ -418,6 +457,12 @@ export class ProgramBuilder {
   }
 
   // --- Debug ---
+
+  /** Permanently set density factor — divides sleep times. */
+  use_density(factor: number): this {
+    this.densityFactor = factor
+    return this
+  }
 
   /** Run block with density factor — divides sleep times. */
   with_density(factor: number, buildFn: (b: ProgramBuilder) => void): this {

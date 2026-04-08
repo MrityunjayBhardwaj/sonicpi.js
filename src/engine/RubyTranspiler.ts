@@ -51,12 +51,15 @@ function wrapBareCode(code: string): string {
   for (const l of lines) {
     const t = l.trim()
     // Count block openers — anything that has a matching `end`
-    if (/^(live_loop|define|in_thread|with_fx|at|time_warp)\s/.test(t)) bareCheckDepth++
+    if (/^(live_loop|define|in_thread|with_fx|at|time_warp|density)\s/.test(t)) bareCheckDepth++
     else if (/\bdo\s*(\|.*\|)?\s*$/.test(t) && bareCheckDepth > 0) bareCheckDepth++
     else if (/^(if|unless|case|begin|loop|while|until|for)\s/.test(t) && bareCheckDepth > 0) bareCheckDepth++
     if (t === 'end' && bareCheckDepth > 0) bareCheckDepth--
     if (bareCheckDepth === 0) {
-      if (/^\s*(play|sleep|sample)\s/.test(l) || /^\s*(\d+\.times\s+do|.*\.each\s+do)\s*/.test(l)) {
+      // Bare DSL calls that need to be wrapped in an implicit live_loop so
+      // the ProgramBuilder `__b` is in scope (use_synth_defaults, play_pattern_timed, etc.)
+      if (/^\s*(play|sleep|sample|synth|control|cue|sync|play_chord|play_pattern|play_pattern_timed|use_synth_defaults|use_sample_defaults|use_transpose)\s/.test(l) ||
+          /^\s*(\d+\.times\s+do|.*\.each\s+do)\s*/.test(l)) {
         hasBareCode = true
         break
       }
@@ -70,26 +73,36 @@ function wrapBareCode(code: string): string {
     const topLevel: string[] = [] // use_bpm, use_synth, etc.
     const bareCode: string[] = [] // play, sleep, sample
     const blocks: string[] = []   // live_loop blocks
-    let inBlock = false
+    let inBlock: false | 'dsl' | 'bare' = false
     let blockDepth = 0
 
     for (const line of lines) {
       const trimmed = line.trim()
       if (trimmed === '' || trimmed.startsWith('#')) {
-        if (inBlock) blocks.push(line)
+        if (inBlock === 'dsl') blocks.push(line)
         else bareCode.push(line)
         continue
       }
 
-      if (/^\s*(live_loop|define|in_thread|with_fx|at|time_warp|density)\s/.test(line)) {
-        inBlock = true
+      if (!inBlock && /^\s*(live_loop|define|in_thread|with_fx|at|time_warp|density)\s/.test(line)) {
+        inBlock = 'dsl'
         blockDepth = 1
         blocks.push(line)
         continue
       }
 
+      // loop do, N.times do, .each do at top level — track as bare block
+      // so use_synth/use_bpm inside them are NOT hoisted
+      if (!inBlock && (/^\s*loop\s+do\b/.test(line) || /\.(times|each)\s+do\b/.test(line))) {
+        inBlock = 'bare'
+        blockDepth = 1
+        bareCode.push(line)
+        continue
+      }
+
       if (inBlock) {
-        blocks.push(line)
+        const target = inBlock === 'dsl' ? blocks : bareCode
+        target.push(line)
         // Count all block-opening constructs for proper depth tracking
         if (/\bdo\s*(\|.*\|)?\s*$/.test(trimmed)) blockDepth++
         if (/^(if|unless|loop|while|until|for|begin|case)\s/.test(trimmed)) blockDepth++
@@ -101,8 +114,8 @@ function wrapBareCode(code: string): string {
         continue
       }
 
-      // Top-level settings
-      if (/^\s*(use_bpm|use_synth|use_random_seed|use_arg_bpm_scaling)\s/.test(line)) {
+      // Top-level settings (only at depth 0)
+      if (/^\s*(use_bpm|use_synth|use_random_seed|use_arg_bpm_scaling|use_sample_bpm)\s/.test(line)) {
         topLevel.push(line)
         continue
       }
@@ -111,7 +124,7 @@ function wrapBareCode(code: string): string {
       bareCode.push(line)
     }
 
-    const hasActualBare = bareCode.some(l => /^\s*(play|sleep|sample)\s/.test(l))
+    const hasActualBare = bareCode.some(l => /^\s*(play|sleep|sample|synth|control|cue|sync|play_chord|play_pattern|play_pattern_timed|use_synth_defaults|use_sample_defaults|use_transpose)\s/.test(l))
     if (!hasActualBare) return code
 
     return [
@@ -140,7 +153,7 @@ function wrapBareCode(code: string): string {
     else if (/^(if|unless|case|begin|loop|while|until|for)\s/.test(trimmed) && hoistDepth > 0) hoistDepth++
     if (trimmed === 'end' && hoistDepth > 0) hoistDepth--
 
-    if (hoistDepth === 0 && /^\s*(use_bpm|use_synth|use_random_seed|use_arg_bpm_scaling)\s/.test(line)) {
+    if (hoistDepth === 0 && /^\s*(use_bpm|use_synth|use_random_seed|use_arg_bpm_scaling|use_sample_bpm)\s/.test(line)) {
       topLevel.push(line)
     } else {
       body.push(line)

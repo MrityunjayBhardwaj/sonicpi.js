@@ -183,85 +183,7 @@ export function treeSitterTranspile(ruby: string): TreeSitterTranspileResult {
 }
 
 // ---------------------------------------------------------------------------
-// Bare code wrapper (shared with regex transpiler)
-// ---------------------------------------------------------------------------
 
-function wrapBareCode(code: string): string {
-  const lines = code.split('\n')
-  const hasLiveLoop = lines.some(l => /^\s*live_loop\s/.test(l))
-  const bareDSLPattern = /^\s*(play|sleep|sample)\s/
-  const bareBlockPattern = /^\s*(\d+\.times\s+do|.*\.each\s+do|with_fx\s)/
-  const hasBareCode = lines.some(l => bareDSLPattern.test(l) || bareBlockPattern.test(l))
-
-  if (!hasBareCode) return code
-
-  if (hasLiveLoop) {
-    const topLevel: string[] = []
-    const bareCode: string[] = []
-    const blocks: string[] = []
-    let inBlock = false
-    let blockDepth = 0
-
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (trimmed === '' || trimmed.startsWith('#')) {
-        if (inBlock) blocks.push(line)
-        else bareCode.push(line)
-        continue
-      }
-      if (/^\s*(live_loop|define|in_thread|with_fx|at|time_warp|density)\s/.test(line)) {
-        inBlock = true
-        blockDepth = 1
-        blocks.push(line)
-        continue
-      }
-      if (inBlock) {
-        blocks.push(line)
-        if (/\bdo\s*(\|.*\|)?\s*$/.test(trimmed)) blockDepth++
-        if (/^(if|unless|loop|while|until|for|begin|case)\s/.test(trimmed)) blockDepth++
-        if (trimmed === 'end') {
-          blockDepth--
-          if (blockDepth <= 0) inBlock = false
-        }
-        continue
-      }
-      if (/^\s*(use_bpm|use_synth|use_random_seed)\s/.test(line)) {
-        topLevel.push(line)
-        continue
-      }
-      bareCode.push(line)
-    }
-
-    const hasActualBare = bareCode.some(l => bareDSLPattern.test(l))
-    if (!hasActualBare) return code
-
-    return [
-      ...topLevel, '',
-      'live_loop :__run_once do',
-      ...bareCode.map(l => '  ' + l),
-      '  stop',
-      'end', '',
-      ...blocks,
-    ].join('\n')
-  }
-
-  const topLevel: string[] = []
-  const body: string[] = []
-  for (const line of lines) {
-    if (/^\s*(use_bpm|use_synth|use_random_seed)\s/.test(line)) {
-      topLevel.push(line)
-    } else {
-      body.push(line)
-    }
-  }
-  return [
-    ...topLevel, '',
-    'live_loop :__run_once do',
-    ...body.map(l => '  ' + l),
-    '  stop',
-    'end',
-  ].join('\n')
-}
 
 // ---------------------------------------------------------------------------
 // AST walk context
@@ -300,7 +222,8 @@ const BUILDER_METHODS = new Set([
   // Transpose
   'use_transpose', 'with_transpose',
   // Synth defaults / BPM / synth blocks
-  'use_synth_defaults', 'use_sample_defaults', 'with_bpm', 'with_synth',
+  'use_synth_defaults', 'use_sample_defaults', 'with_synth_defaults', 'with_sample_defaults',
+  'with_bpm', 'with_synth', 'use_density',
   // Debug
   'use_debug',
   // BPM scaling control
@@ -317,6 +240,8 @@ const BUILDER_METHODS = new Set([
   'chord_degree', 'degree', 'chord_names', 'scale_names',
   // OSC
   'osc_send',
+  // Sample BPM
+  'use_sample_bpm',
   // Budget
   '__checkBudget__',
 ])
@@ -352,7 +277,11 @@ const TOP_LEVEL_SCOPE = new Set([
   'ring', 'knit', 'range', 'line', 'spread',
   'chord', 'scale', 'chord_invert', 'note', 'note_range',
   // OSC
-  'osc_send',
+  'use_osc', 'osc', 'osc_send',
+  // MIDI shorthand
+  'midi',
+  // Sample BPM
+  'use_sample_bpm',
 ])
 
 /**
@@ -366,7 +295,7 @@ const UNIMPLEMENTED_DSL = new Set([
 /**
  * No-arg DSL functions that Ruby code calls without parentheses.
  * When a bare identifier matches one of these, emit it as a function call.
- * e.g., `tick` → `b.tick()`, `look` → `b.look()`, `stop` → `b.stop()`
+ * e.g., `tick` → `__b.tick()`, `look` → `__b.look()`, `stop` → `b.stop()`
  */
 const BARE_CALLABLE = new Set([
   'tick', 'look', 'stop', 'tick_reset_all',
@@ -497,9 +426,9 @@ function transpileNode(node: any, ctx: TranspileContext): string {
       const isStatement = parentType === 'body_statement' || parentType === 'program' ||
                           parentType === 'then' || parentType === 'block_body'
 
-      // Bare identifier that matches a user-defined function → call it with b
+      // Bare identifier that matches a user-defined function → call it with __b
       if (isStatement && ctx.definedFunctions.has(name)) {
-        return `${name}(b)`
+        return `${name}(__b)`
       }
 
       // Bare identifier that matches a known no-arg DSL function.
@@ -507,7 +436,7 @@ function transpileNode(node: any, ctx: TranspileContext): string {
       // This applies in any context (statement, argument, etc.)
       // because `tick`, `look`, `stop` are always function calls in Sonic Pi.
       if (BARE_CALLABLE.has(name)) {
-        const prefix = ctx.insideLoop ? 'b.' : ''
+        const prefix = ctx.insideLoop ? '__b.' : ''
         return `${prefix}${name}()`
       }
 
@@ -539,9 +468,9 @@ function transpileNode(node: any, ctx: TranspileContext): string {
       const lhsStr = transpileNode(lhs, ctx)
       const rhsStr = transpileNode(rhs, ctx)
 
-      // If RHS is b.play or b.sample, capture lastRef
-      if (ctx.insideLoop && /^b\.(play|sample)\(/.test(rhsStr)) {
-        return `${rhsStr}; ${lhsStr} = b.lastRef`
+      // If RHS is __b.play or __b.sample, capture lastRef
+      if (ctx.insideLoop && /^__b\.(play|sample)\(/.test(rhsStr)) {
+        return `${rhsStr}; ${lhsStr} = __b.lastRef`
       }
 
       // Bare assignment (no let/const/var) — the Sandbox's Proxy `set` trap
@@ -704,14 +633,14 @@ function transpileNode(node: any, ctx: TranspileContext): string {
       const bodyNode = node.namedChildren[1]
       const bodyCtx = { ...ctx }
       const bodyStr = bodyNode ? transpileNode(bodyNode, bodyCtx) : ''
-      return `while (${transpileNode(cond, ctx)}) {\n${ctx.indent}  b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
+      return `while (${transpileNode(cond, ctx)}) {\n${ctx.indent}  __b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
     }
 
     case 'until': {
       const cond = node.namedChildren[0]
       const bodyNode = node.namedChildren[1]
       const bodyStr = bodyNode ? transpileNode(bodyNode, ctx) : ''
-      return `while (!(${transpileNode(cond, ctx)})) {\n${ctx.indent}  b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
+      return `while (!(${transpileNode(cond, ctx)})) {\n${ctx.indent}  __b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
     }
 
     case 'for': {
@@ -719,7 +648,7 @@ function transpileNode(node: any, ctx: TranspileContext): string {
       const iterNode = node.namedChildren[1]
       const bodyNode = node.namedChildren[2]
       const bodyStr = bodyNode ? transpileNode(bodyNode, ctx) : ''
-      return `for (const ${transpileNode(varNode, ctx)} of ${transpileNode(iterNode, ctx)}) {\n${ctx.indent}  b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
+      return `for (const ${transpileNode(varNode, ctx)} of ${transpileNode(iterNode, ctx)}) {\n${ctx.indent}  __b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
     }
 
     case 'case': {
@@ -862,7 +791,7 @@ const BARE_DSL_CALLS = new Set([
   'play', 'sleep', 'sample', 'cue', 'sync',
   'puts', 'print', 'control', 'synth',
 ])
-const TOP_LEVEL_SETTINGS = new Set(['use_bpm', 'use_synth', 'use_random_seed', 'use_debug'])
+const TOP_LEVEL_SETTINGS = new Set(['use_bpm', 'use_synth', 'use_random_seed', 'use_debug', 'use_arg_bpm_scaling'])
 
 function transpileProgram(node: any, ctx: TranspileContext): string {
   const children = node.namedChildren
@@ -936,7 +865,7 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
   const parts: string[] = []
   if (topJS.length > 0) parts.push(topJS.join('\n'))
   if (bareJS.length > 0) {
-    parts.push(`live_loop("__run_once", (b) => {\n${bareJS.join('\n')}\n  b.stop()\n})`)
+    parts.push(`live_loop("__run_once", (__b) => {\n${bareJS.join('\n')}\n  __b.stop()\n})`)
   }
   if (blockJS.length > 0) parts.push(blockJS.join('\n'))
 
@@ -982,7 +911,7 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
     }
 
     // with_fx :name, opts do ... end
-    if (methodName === 'with_fx' || methodName === 'with_synth' || methodName === 'with_bpm' || methodName === 'with_transpose' || methodName === 'with_arg_bpm_scaling') {
+    if (methodName === 'with_fx' || methodName === 'with_synth' || methodName === 'with_bpm' || methodName === 'with_transpose' || methodName === 'with_arg_bpm_scaling' || methodName === 'with_synth_defaults' || methodName === 'with_sample_defaults' || methodName === 'with_random_seed' || methodName === 'with_octave' || methodName === 'with_density') {
       return transpileWithBlock(methodName, argsNode, blockNode, ctx)
     }
 
@@ -1025,13 +954,13 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
       const block = blockNode ?? node.namedChildren.find((c: any) => c.type === 'block')
       if (block) {
         const bodyStr = transpileBlockBody(block, ctx)
-        return `while (true) {\n${ctx.indent}  b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
+        return `while (true) {\n${ctx.indent}  __b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
       }
     }
 
     // stop
     if (methodName === 'stop') {
-      return 'b.stop()'
+      return '__b.stop()'
     }
 
     // stop_loop :name
@@ -1043,28 +972,28 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
     // use_synth :name
     if (methodName === 'use_synth') {
       const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-      const prefix = ctx.insideLoop ? 'b.' : ''
+      const prefix = ctx.insideLoop ? '__b.' : ''
       return `${prefix}use_synth(${args})`
     }
 
     // use_bpm N
     if (methodName === 'use_bpm') {
       const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-      const prefix = ctx.insideLoop ? 'b.' : ''
+      const prefix = ctx.insideLoop ? '__b.' : ''
       return `${prefix}use_bpm(${args})`
     }
 
     // use_random_seed N
     if (methodName === 'use_random_seed') {
       const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-      const prefix = ctx.insideLoop ? 'b.' : ''
+      const prefix = ctx.insideLoop ? '__b.' : ''
       return `${prefix}use_random_seed(${args})`
     }
 
     // use_synth_defaults / use_sample_defaults — all args become a single opts object
     if (methodName === 'use_synth_defaults' || methodName === 'use_sample_defaults') {
       const args = argsNode ? transpileArgListAsOpts(argsNode, ctx) : '{}'
-      const prefix = ctx.insideLoop ? 'b.' : ''
+      const prefix = ctx.insideLoop ? '__b.' : ''
       return `${prefix}${methodName}(${args})`
     }
 
@@ -1076,7 +1005,7 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
     // osc_send — emit to host-provided handler
     if (methodName === 'osc_send') {
       const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-      const prefix = ctx.insideLoop ? 'b.' : ''
+      const prefix = ctx.insideLoop ? '__b.' : ''
       return `${prefix}osc_send(${args})`
     }
 
@@ -1088,19 +1017,19 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
     // Bare synth name: `beep 60, release: 0.3`
     if (SYNTH_NAMES.has(methodName)) {
       const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-      return `b.play(${args}, { synth: "${methodName}" })`
+      return `__b.play(${args}, { synth: "${methodName}" })`
     }
 
     // User-defined function call
     if (ctx.definedFunctions.has(methodName)) {
       const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-      return `${methodName}(b${args ? ', ' + args : ''})`
+      return `${methodName}(__b${args ? ', ' + args : ''})`
     }
 
     // Methods ending with ? — rename to _q, with b. prefix (on ProgramBuilder)
     if (methodName.endsWith('?')) {
       const cleanName = methodName.slice(0, -1) + '_q'
-      const prefix = ctx.insideLoop ? 'b.' : ''
+      const prefix = ctx.insideLoop ? '__b.' : ''
       const args = argsNode ? transpileArgList(argsNode, ctx) : ''
       return `${prefix}${cleanName}(${args})`
     }
@@ -1109,7 +1038,7 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
 
     // Functions that exist on ProgramBuilder → b.method() inside loops
     if (BUILDER_METHODS.has(methodName)) {
-      const prefix = ctx.insideLoop ? 'b.' : ''
+      const prefix = ctx.insideLoop ? '__b.' : ''
       // Inject _srcLine for play/sample for friendly error source mapping
       const needsSrcLine = methodName === 'play' || methodName === 'sample'
       const nodeCtx = { ...ctx, srcLine: node.startPosition.row + 1 }
@@ -1155,7 +1084,7 @@ function transpileReceiverMethodCall(
     const params = blockNode.namedChildren.find((c: any) => c.type === 'block_parameters')
     const varName = params?.namedChildren[0]?.text ?? '_i'
     const bodyStr = transpileBlockBody(blockNode, ctx)
-    return `for (let ${varName} = 0; ${varName} < ${recStr}; ${varName}++) {\n${ctx.indent}  b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
+    return `for (let ${varName} = 0; ${varName} < ${recStr}; ${varName}++) {\n${ctx.indent}  __b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
   }
 
   // .each do |item| ... end
@@ -1163,7 +1092,7 @@ function transpileReceiverMethodCall(
     const params = blockNode.namedChildren.find((c: any) => c.type === 'block_parameters')
     const varName = params?.namedChildren[0]?.text ?? '_item'
     const bodyStr = transpileBlockBody(blockNode, ctx)
-    return `for (const ${varName} of ${recStr}) {\n${ctx.indent}  b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
+    return `for (const ${varName} of ${recStr}) {\n${ctx.indent}  __b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
   }
 
   // .map/.select/.reject/.collect do |item| ... end
@@ -1192,22 +1121,22 @@ function transpileReceiverMethodCall(
     }
   }
 
-  // .tick / .tick() → .at(b.tick())
+  // .tick / .tick() → .at(__b.tick())
   // Use optional chaining (?.) so undefined receivers (e.g. npat when no case matched) return undefined instead of crashing
   if (method === 'tick') {
     const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-    if (args) return `${recStr}?.at(b.tick(${args}))`
-    return `${recStr}?.at(b.tick())`
+    if (args) return `${recStr}?.at(__b.tick(${args}))`
+    return `${recStr}?.at(__b.tick())`
   }
 
-  // .look / .look() → .at(b.look())
+  // .look / .look() → .at(__b.look())
   if (method === 'look') {
-    return `${recStr}?.at(b.look())`
+    return `${recStr}?.at(__b.look())`
   }
 
   // .choose → b.choose(receiver) — works on both arrays and Rings
   if (method === 'choose') {
-    return `b.choose(${recStr})`
+    return `__b.choose(${recStr})`
   }
 
   // .reverse → .reverse()
@@ -1217,7 +1146,7 @@ function transpileReceiverMethodCall(
 
   // .shuffle → b.shuffle(receiver) — works on both arrays and Rings
   if (method === 'shuffle') {
-    return `b.shuffle(${recStr})`
+    return `__b.shuffle(${recStr})`
   }
 
   // .mirror → .mirror()
@@ -1247,21 +1176,21 @@ function transpileReceiverMethodCall(
     return `${recStr}.butlast()`
   }
 
-  // .take(n) → .slice(0, n)
+  // .take(n) — Ring has native take()
   if (method === 'take') {
     const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-    return `${recStr}.slice(0, ${args})`
+    return `${recStr}.take(${args})`
   }
 
   // .pick(n) → b.pick(receiver, n)
   if (method === 'pick') {
     const args = argsNode ? transpileArgList(argsNode, ctx) : ''
-    return `b.pick(${recStr}${args ? ', ' + args : ''})`
+    return `__b.pick(${recStr}${args ? ', ' + args : ''})`
   }
 
   // .ring → .ring (for arrays becoming rings)
   if (method === 'ring') {
-    return `b.ring(...${recStr})`
+    return `__b.ring(...${recStr})`
   }
 
   // .to_a → (identity, arrays are already arrays)
@@ -1327,7 +1256,7 @@ function transpileReceiverMethodCall(
 
   // .sample → b.choose (Ruby's Array#sample is random pick)
   if (method === 'sample' && !argsNode) {
-    return `b.choose(${recStr})`
+    return `__b.choose(${recStr})`
   }
 
   // Methods with ? suffix → rename to _q
@@ -1336,7 +1265,7 @@ function transpileReceiverMethodCall(
     const args = argsNode ? transpileArgList(argsNode, ctx) : ''
     // factor? is a DSL function
     if (method === 'factor?') {
-      return `b.factor_q(${args ? recStr + ', ' + args : recStr})`
+      return `__b.factor_q(${args ? recStr + ', ' + args : recStr})`
     }
     return `${recStr}.${cleanName}(${args})`
   }
@@ -1391,7 +1320,7 @@ function transpileLiveLoop(
   // NOT as b.sync() inside the body (which would re-sync every iteration).
   const optsArg = syncName ? `{sync: "${syncName}"}, ` : ''
 
-  return `live_loop("${name}", ${optsArg}(b) => {\n${bodyStr}\n${ctx.indent}})`
+  return `live_loop("${name}", ${optsArg}(__b) => {\n${bodyStr}\n${ctx.indent}})`
 }
 
 function transpileDefine(
@@ -1423,7 +1352,7 @@ function transpileDefine(
   const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
   const bodyStr = transpileBlockBody(blockNode, bodyCtx)
 
-  return `function ${name}(b${paramStr ? ', ' + paramStr : ''}) {\n${bodyStr}\n${ctx.indent}}`
+  return `function ${name}(__b${paramStr ? ', ' + paramStr : ''}) {\n${bodyStr}\n${ctx.indent}}`
 }
 
 function transpileWithBlock(
@@ -1455,7 +1384,7 @@ function transpileWithBlock(
     return `/* parse error: ${methodName} missing block */`
   }
 
-  const prefix = ctx.insideLoop ? 'b.' : ''
+  const prefix = ctx.insideLoop ? '__b.' : ''
 
   // Inside a loop, the block body is inside ProgramBuilder context (insideLoop: true).
   // At top level, with_fx just wraps live_loops — the body stays at top-level context.
@@ -1475,7 +1404,7 @@ function transpileWithBlock(
   let callbackParams: string
   if (ctx.insideLoop) {
     // Inside loop: callback receives ProgramBuilder + optional FX ref
-    callbackParams = fxParamName ? `(b, ${fxParamName})` : '(b)'
+    callbackParams = fxParamName ? `(__b, ${fxParamName})` : '(__b)'
   } else {
     // Top level: engine passes null, we use _ to discard it
     callbackParams = fxParamName ? `(${fxParamName})` : '()'
@@ -1494,7 +1423,7 @@ function transpileInThread(
     return `/* parse error: in_thread missing block */`
   }
 
-  const prefix = ctx.insideLoop ? 'b.' : ''
+  const prefix = ctx.insideLoop ? '__b.' : ''
   const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
   const bodyStr = transpileBlockBody(blockNode, bodyCtx)
 
@@ -1506,12 +1435,12 @@ function transpileInThread(
       if (key === 'name') {
         // Named thread — pass name
         const name = transpileNode(arg.namedChildren[1], ctx)
-        return `${prefix}in_thread({ name: ${name} }, (b) => {\n${bodyStr}\n${ctx.indent}})`
+        return `${prefix}in_thread({ name: ${name} }, (__b) => {\n${bodyStr}\n${ctx.indent}})`
       }
     }
   }
 
-  return `${prefix}in_thread((b) => {\n${bodyStr}\n${ctx.indent}})`
+  return `${prefix}in_thread((__b) => {\n${bodyStr}\n${ctx.indent}})`
 }
 
 function transpileAt(
@@ -1528,7 +1457,7 @@ function transpileAt(
 
   const timesArr = positional[0] ?? '[]'
   const valuesArr = positional[1] ?? 'null'
-  const prefix = ctx.insideLoop ? 'b.' : ''
+  const prefix = ctx.insideLoop ? '__b.' : ''
   const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
 
   // Get block parameters
@@ -1537,7 +1466,7 @@ function transpileAt(
   const bodyStr = transpileBlockBody(blockNode, bodyCtx)
 
   const paramStr = paramNames.length > 0 ? ', ' + paramNames.join(', ') : ''
-  return `${prefix}at(${timesArr}, ${valuesArr}, (b${paramStr}) => {\n${bodyStr}\n${ctx.indent}})`
+  return `${prefix}at(${timesArr}, ${valuesArr}, (__b${paramStr}) => {\n${bodyStr}\n${ctx.indent}})`
 }
 
 function transpileTimeWarp(
@@ -1552,10 +1481,10 @@ function transpileTimeWarp(
   const offset = argsNode?.namedChildren[0]
     ? transpileNode(argsNode.namedChildren[0], ctx)
     : '0'
-  const prefix = ctx.insideLoop ? 'b.' : ''
+  const prefix = ctx.insideLoop ? '__b.' : ''
   const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
   const bodyStr = transpileBlockBody(blockNode, bodyCtx)
-  return `${prefix}at([${offset}], null, (b) => {\n${bodyStr}\n${ctx.indent}})`
+  return `${prefix}at([${offset}], null, (__b) => {\n${bodyStr}\n${ctx.indent}})`
 }
 
 function transpileDensity(
@@ -1571,7 +1500,7 @@ function transpileDensity(
     ? transpileNode(argsNode.namedChildren[0], ctx)
     : '1'
   const bodyStr = transpileBlockBody(blockNode, ctx)
-  const bRef = ctx.insideLoop ? 'b' : '__densityB'
+  const bRef = ctx.insideLoop ? '__b' : '__densityB'
   const lines = ['{']
   if (!ctx.insideLoop) lines.push(`  const ${bRef} = { density: 1 }`)
   lines.push(`  const __prevDensity = ${bRef}.density`)
@@ -1583,7 +1512,7 @@ function transpileDensity(
 }
 
 function transpileSynthCommand(argsNode: any, ctx: TranspileContext): string {
-  if (!argsNode) return 'b.play()'
+  if (!argsNode) return '__b.play()'
   const args = argsNode.namedChildren
   // First arg is the synth name (symbol)
   const synthNameNode = args[0]
@@ -1611,9 +1540,9 @@ function transpileSynthCommand(argsNode: any, ctx: TranspileContext): string {
 
   const optsStr = `{ ${kwargs.join(', ')} }`
   if (positional.length > 0) {
-    return `b.play(${positional.join(', ')}, ${optsStr})`
+    return `__b.play(${positional.join(', ')}, ${optsStr})`
   }
-  return `b.play(${optsStr})`
+  return `__b.play(${optsStr})`
 }
 
 // ---------------------------------------------------------------------------

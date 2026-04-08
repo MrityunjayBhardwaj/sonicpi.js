@@ -27,6 +27,8 @@ Current known limitations and browser-specific behaviors for Sonic Pi Web.
 - **Recording**: Captures to WAV via MediaRecorder — quality depends on browser implementation
 - **Timing**: Virtual time scheduling provides beat-accurate sequencing, but audio output latency varies by browser/OS
 - **Custom samples**: Upload support is experimental — built-in samples (197 from desktop Sonic Pi) are loaded from CDN by default
+- **Variable name `b`**: Avoid assigning to a variable named `b` at top level — the transpiler uses `__b` for the internal ProgramBuilder reference, but any variable shadowing in bare code scopes can conflict with DSL infrastructure. Use longer names like `bass`, `beat`, etc.
+- **Ruby Array methods not supported**: `.zip(other)` and `.each_with_index` are not implemented. Use manual iteration with `.length.times do |i|` and index access `arr[i]` as a workaround. See #154.
 
 ## Performance
 

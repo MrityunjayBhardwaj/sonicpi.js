@@ -207,7 +207,7 @@ export function line(start: number, finish: number, stepsOrOpts: number | { step
   const steps = typeof stepsOrOpts === 'number' ? stepsOrOpts : (stepsOrOpts.steps ?? 4)
   const result: number[] = []
   for (let i = 0; i < steps; i++) {
-    result.push(start + (finish - start) * (i / (steps - 1)))
+    result.push(steps === 1 ? start : start + (finish - start) * (i / (steps - 1)))
   }
   return new Ring(result)
 }
