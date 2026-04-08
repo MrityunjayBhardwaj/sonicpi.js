@@ -4,7 +4,7 @@
 
 ---
 
-## Released
+## Stable releases
 
 | Version | Highlights |
 |---------|------------|
@@ -14,9 +14,28 @@
 | **v1.3.0** | Tree-sitter sole transpiler, SoundLayer parity, 100% data parity (66 synths, 197 samples, 42 FX), param validation, scope rewrite (5 modes), runtime semantics, full UI overhaul |
 | **v1.4.0** | Help panel (311 entries), resizable panels, cue log wired, error handling overhaul (20 patterns, block validation, line highlighting, hot-swap rollback), Report Bug button, CI workflow, TypeScript 6 |
 
+## Prereleases
+
+| Version | npm dist-tag | Highlights |
+|---------|--------------|------------|
+| **v1.5.0-beta.0** | `beta` | Engine audit: 33 bugs fixed. Tutorial/book/community parity: 56 real-world compositions verified in Chromium (MagPi Essentials chapters, 15 official Sonic Pi wizard/sorcerer/magician examples, 13 community forum compositions). New DSL: `use_sample_bpm`, `midi` shorthand, `use_osc`/`osc`, `with_fx reps:`, `with_synth_defaults`, `with_sample_defaults`, `use_density`, `use_debug` exposed. Sandbox fixes: `b`→`__b` rename, `get()` Proxy→function. Bridge fixes: `in_thread` inside `with_fx` inherits `outBus`, lazy-load race conditions, `freeBus` guard. Install: `npm install @mjayb/sonicpijs@beta`. |
+
 ---
 
-## v1.5.0 — Next
+## v1.5.0 — Beta Testing
+
+**Status:** Currently in beta (see Prereleases table above for the current version). Real-user testing via Sonic Pi community forum. Fix regressions until the bug discovery curve flattens, then promote via RC to stable. Full cycle criteria in [`RELEASE.md`](./RELEASE.md#release-cycle-transition-criteria).
+
+### Known gaps to address before stable
+- [ ] `.zip` and `.each_with_index` Array methods (#154)
+- [ ] Audit SYNTH_NAMES against CDN synthdefs (#156)
+- [ ] `synth :sound_in` / `:sound_in_stereo` — wire to `getUserMedia` (#152)
+- [ ] `use_real_time` — MIDI input latency bypass (#149)
+- [ ] MIDI input path format parity with Desktop SP (#151)
+- [ ] Sync/get pattern matching (wildcards) (#150)
+- [ ] Consolidate 3 bare-code wrapping systems (#125)
+- [ ] Rename `RubyTranspiler.ts` to `transpile.ts` (#135)
+- [ ] Rename `usedFallback` field (#138)
 
 ### Mobile / Touch
 - [ ] Responsive toolbar — collapse buttons into hamburger menu on narrow screens
@@ -35,10 +54,21 @@
 
 ---
 
-## Future
+## v1.6.0 — Post-Beta Feature Work
 
-- WebSocket-to-UDP bridge for `osc_send` (bundled, not just hook)
-- Ableton Link via WebRTC DataChannel
-- Collaborative live coding (CRDT sync via Yjs + WebRTC)
-- Code provenance — signed snapshots for LMS submission
-- Monorepo split (`@mjayb/sonicpijs` engine, `@mjayb/sonicpijs-app` UI)
+### External sample upload
+- [ ] Drag-and-drop `.wav`/`.flac`/`.mp3` → WASM memory → callable as `sample :my_upload`
+- [ ] Sample library panel with upload/delete
+- [ ] Persist uploaded samples across sessions (IndexedDB)
+
+### OSC receive
+- [ ] WebSocket-to-UDP bridge (bundled option, not just hook)
+- [ ] `sync "/osc/..."` path delivery via WebSocket
+
+### Collaboration
+- [ ] Ableton Link via WebRTC DataChannel
+- [ ] Collaborative live coding (CRDT sync via Yjs + WebRTC)
+- [ ] Code provenance — signed snapshots for LMS submission
+
+### Architecture
+- [ ] Monorepo split (`@mjayb/sonicpijs` engine, `@mjayb/sonicpijs-app` UI)

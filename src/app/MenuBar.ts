@@ -7,6 +7,7 @@
 
 import { type ScopeMode, ALL_SCOPE_MODES } from './Scope'
 import { SampleUploader } from './SampleUploader'
+import { APP_VERSION } from './version'
 
 function detectBrowser(ua: string): string {
   if (ua.includes('Firefox')) return 'Firefox'
@@ -58,6 +59,8 @@ export class MenuBar {
   readonly sampleUploader: SampleUploader
   private prefsCallbacks: PrefsCallbacks
   private getReportData: (() => { code: string; engineState: string }) | null
+  private versionFlashTimer: ReturnType<typeof setTimeout> | null = null
+  private outsideClickHandler: ((e: MouseEvent) => void) | null = null
 
   constructor(
     parent: HTMLElement,
@@ -110,13 +113,63 @@ export class MenuBar {
     this.addMenu('Samples', () => this.buildSamplesMenu())
     this.addMenu('Prefs', () => this.buildPrefsMenu())
 
-    // Spacer pushes Report Bug to the right
+    // Spacer pushes version label + Report Bug to the right
     const spacer = document.createElement('div')
     spacer.style.flex = '1'
     this.container.appendChild(spacer)
 
+    // Version label — distribution-boundary observation (dharana §10).
+    // Shows which build is running so bug reports can be triaged to a
+    // specific version. Click to copy the full version string to clipboard.
+    const versionLabel = document.createElement('button')
+    versionLabel.type = 'button'
+    const VERSION_LABEL_DEFAULT = `v${APP_VERSION}`
+    const VERSION_LABEL_FULL = `SonicPi.js v${APP_VERSION}`
+    versionLabel.textContent = VERSION_LABEL_DEFAULT
+    // Keep title (hover tooltip) and aria-label (screen reader) identical
+    // so sighted and assistive-tech users get the same information.
+    versionLabel.title = `${VERSION_LABEL_FULL} — click to copy`
+    versionLabel.setAttribute('aria-label', `${VERSION_LABEL_FULL} — click to copy`)
+    versionLabel.style.cssText = `
+      background: none; border: none;
+      color: #6e7681; font-family: inherit; font-size: 0.65rem;
+      padding: 0 0.6rem; cursor: pointer;
+      letter-spacing: 0.3px; align-self: center;
+      transition: color 0.15s;
+    `
+    versionLabel.addEventListener('mouseenter', () => {
+      versionLabel.style.color = '#c9d1d9'
+    })
+    versionLabel.addEventListener('mouseleave', () => {
+      versionLabel.style.color = '#6e7681'
+    })
+    const flashVersionLabel = (msg: string): void => {
+      // Clear any pending flash-reset so rapid clicks don't stomp each
+      // other, and so dispose() can cleanly cancel a pending reset.
+      if (this.versionFlashTimer !== null) {
+        clearTimeout(this.versionFlashTimer)
+      }
+      versionLabel.textContent = msg
+      this.versionFlashTimer = setTimeout(() => {
+        versionLabel.textContent = VERSION_LABEL_DEFAULT
+        this.versionFlashTimer = null
+      }, 1200)
+    }
+    versionLabel.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(VERSION_LABEL_FULL)
+        flashVersionLabel('copied!')
+      } catch {
+        // Clipboard API can fail in insecure contexts (non-HTTPS, permission
+        // denied). Give the user visible feedback instead of failing silently.
+        flashVersionLabel('copy failed')
+      }
+    })
+    this.container.appendChild(versionLabel)
+
     // Report Bug button
     const bugBtn = document.createElement('button')
+    bugBtn.type = 'button'
     bugBtn.textContent = 'Report Bug'
     bugBtn.style.cssText = `
       background: none; border: 1px solid rgba(232,82,124,0.3);
@@ -136,14 +189,17 @@ export class MenuBar {
     bugBtn.addEventListener('click', () => this.openBugReport())
     this.container.appendChild(bugBtn)
 
-    // Close dropdown on outside click
-    document.addEventListener('click', (e) => {
+    // Close dropdown on outside click. Store the handler so dispose()
+    // can remove it — otherwise the MenuBar leaks a document-level
+    // listener every time it's reconstructed (hot-swap, test teardown).
+    this.outsideClickHandler = (e: MouseEvent) => {
       if (this.activeDropdown &&
           !this.container.contains(e.target as Node) &&
           !this.activeDropdown.contains(e.target as Node)) {
         this.closeDropdown()
       }
-    })
+    }
+    document.addEventListener('click', this.outsideClickHandler)
 
     parent.appendChild(this.container)
   }
@@ -716,6 +772,7 @@ export class MenuBar {
     url.searchParams.set('labels', 'bug,reported-via-app,needs-triage')
 
     // Pre-fill fields via URL params (GitHub issue forms support this)
+    url.searchParams.set('version', APP_VERSION)
     if (data?.code) {
       url.searchParams.set('sonic-pi-code', data.code.substring(0, 2000))
     }
@@ -727,6 +784,14 @@ export class MenuBar {
 
   dispose(): void {
     this.closeDropdown()
+    if (this.versionFlashTimer !== null) {
+      clearTimeout(this.versionFlashTimer)
+      this.versionFlashTimer = null
+    }
+    if (this.outsideClickHandler !== null) {
+      document.removeEventListener('click', this.outsideClickHandler)
+      this.outsideClickHandler = null
+    }
     this.sampleUploader.dispose()
     this.container.remove()
   }

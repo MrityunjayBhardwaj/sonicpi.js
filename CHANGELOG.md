@@ -1,5 +1,84 @@
 # Changelog
 
+## v1.5.0-beta.0
+
+**Prerelease.** This is the first public beta of v1.5.0. Installed via `npm install @mjayb/sonicpijs@beta`; the default `latest` tag still points to `v1.4.0`. Bug reports welcome on [GitHub issues](https://github.com/MrityunjayBhardwaj/SonicPi.js/issues) — the in-app **Report Bug** button pre-fills the version, browser, and current code.
+
+### Engine audit — 33 bugs fixed
+
+Found during a multi-round audit against MagPi book chapters, official Sonic Pi wizard/sorcerer/magician examples, and community forum compositions. Per-bug rationale in the engine audit PR (#155) and synth alias cleanup (#157).
+
+**Critical engine:**
+- `randomSuffix()` was `const f = (): string => f()` — infinite recursion on top-level `in_thread`/`at`
+- `ProgramBuilder` children (`in_thread`/`with_fx`/`at`) not inheriting `_transpose`, `_synthDefaults`, `_sampleDefaults`
+- `wrapBareCode` didn't track `loop do`/`.times do`/`.each do` — `use_synth` hoisted out of loops
+- `normalizeSampleParams` missing `expandSlideParam` — `sample :x, slide:` silently ignored
+- `normalizeFxParams` resolved symbols AFTER injecting defaults (wrong order)
+- `with_bpm` didn't restore previous BPM
+- `resumeTick()` race condition on rapid pause/resume
+
+**Bridge / runtime:**
+- `in_thread` inside `with_fx` not inheriting `outBus` — thread audio bypassed FX entirely
+- Sample/SynthDef lazy-load race conditions (buffer leaks, duplicate loads)
+- `freeBus()` allowed duplicate frees — bus collision
+- `fetchSampleDuration` silently swallowed errors, breaking `beat_stretch`
+
+**DSL / tutorial parity:**
+- `use_sample_bpm` — wrapper around `use_bpm(60 / sample_duration(name))`
+- `midi` shorthand — `midi 60, sustain: 0.5` (note_on + auto note_off)
+- `use_osc` / `osc` shorthand — state variable for default host/port
+- `with_fx reps:` — FX body now loops N times within same FX instance
+- `with_synth_defaults` / `with_sample_defaults` — scoped variants
+- `use_density` — permanent density setter
+- `use_debug` — exposed in sandbox as no-op (was causing crashes)
+- `.take(n)` — transpiler was emitting `.slice()` but Ring uses `.take()`
+- `Ring.line(steps=1)` returned `[NaN]` (division by zero) — now returns `[start]`
+
+**Public API additions:**
+- Exported: `hzToMidi`, `chord_degree`, `degree`, `knit`, `range`, `line`
+
+**Sandbox fixes:**
+- `get()` was defined as a `new Proxy(...)` not a function — `get(:key)` crashed
+- `with_random_seed`, `with_octave`, `with_density`, `with_synth_defaults`, `with_sample_defaults` weren't in `transpileWithBlock` handler — blocks transpiled without callback wrapper
+- `TOP_LEVEL_SETTINGS` missing `use_arg_bpm_scaling`
+
+**Architectural fix — `b` shadowing:**
+- User variable `b` shadowed `ProgramBuilder` callback parameter via Proxy `set` trap. Renamed internal parameter from `b` to `__b` across all transpiler output sites (callback params, method prefixes, `__checkBudget`, `stop`, `lastRef`, `density`, `define` funcs, `at` callbacks). Documented in KNOWN_LIMITATIONS.
+
+**`wrapBareCode` regex expansion:**
+- Regex only matched `/^\s*(play|sleep|sample)\s/` — missed `play_chord`, `play_pattern_timed`, `use_synth_defaults`, `synth`, `control`, `cue`, `sync`, etc. Expanded to cover all bare DSL callables that need `__b` scope.
+
+**Synth aliases:**
+- Removed `dark_sea_horn` and `singer` from `SYNTH_NAMES` — no corresponding `.scsyndef` on the SuperSonic CDN (silent failure trap).
+
+### Verified compatibility
+
+56 real-world compositions run end-to-end in Chromium capture:
+- 18 E2E tests (covering 122 DSL functions)
+- 7 MagPi Essentials chapter examples
+- 15 official Sonic Pi examples (wizard/sorcerer/magician tiers from `etc/examples/`)
+- 13 community forum compositions from in-thread.sonic-pi.net
+- 3 edge cases
+
+### Test coverage
+
+- 703 unit tests pass
+- Zero TypeScript errors
+
+### UI
+
+- Version label in the menu bar displays `v1.5.0-beta.0` (top-right, muted). Click to copy the full `SonicPi.js v1.5.0-beta.0` string to clipboard. Pre-filled into the Report Bug URL so every bug report is tagged to a specific build.
+
+### Release engineering
+
+- This is the first release following the new release-cycle criteria: single version string across all surfaces, npm `--tag beta` to protect `latest`, UI footer as the load-bearing signal for the prerelease channel, explicit beta → RC → stable gate criteria documented in the release runbook.
+
+### Known limitations
+
+See [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md) for the current list. The limitations file is the single source of truth; it is intentionally NOT duplicated per-release in this changelog. Noteworthy feasible-but-not-built items tracked for post-beta work: external sample upload (#159), OSC receive via WebSocket bridge (#150), `synth :sound_in` via `getUserMedia` (#152), `use_real_time` MIDI latency bypass (#149), `.zip`/`.each_with_index` Array methods (#154).
+
+---
+
 ## v1.4.0
 
 ### UI/UX
