@@ -7,6 +7,7 @@
 
 import { type ScopeMode, ALL_SCOPE_MODES } from './Scope'
 import { SampleUploader } from './SampleUploader'
+import { APP_VERSION } from './version'
 
 function detectBrowser(ua: string): string {
   if (ua.includes('Firefox')) return 'Firefox'
@@ -110,10 +111,41 @@ export class MenuBar {
     this.addMenu('Samples', () => this.buildSamplesMenu())
     this.addMenu('Prefs', () => this.buildPrefsMenu())
 
-    // Spacer pushes Report Bug to the right
+    // Spacer pushes version label + Report Bug to the right
     const spacer = document.createElement('div')
     spacer.style.flex = '1'
     this.container.appendChild(spacer)
+
+    // Version label — distribution-boundary observation (dharana §10).
+    // Shows which build is running so bug reports can be triaged to a
+    // specific version. Click to copy the version string to clipboard.
+    const versionLabel = document.createElement('button')
+    versionLabel.textContent = `v${APP_VERSION}`
+    versionLabel.title = `SonicPi.js v${APP_VERSION} — click to copy`
+    versionLabel.style.cssText = `
+      background: none; border: none;
+      color: #6e7681; font-family: inherit; font-size: 0.65rem;
+      padding: 0 0.6rem; cursor: pointer;
+      letter-spacing: 0.3px; align-self: center;
+      transition: color 0.15s;
+    `
+    versionLabel.addEventListener('mouseenter', () => {
+      versionLabel.style.color = '#c9d1d9'
+    })
+    versionLabel.addEventListener('mouseleave', () => {
+      versionLabel.style.color = '#6e7681'
+    })
+    versionLabel.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(`SonicPi.js v${APP_VERSION}`)
+        const original = versionLabel.textContent
+        versionLabel.textContent = 'copied!'
+        setTimeout(() => { versionLabel.textContent = original }, 1200)
+      } catch {
+        // Clipboard API can fail in insecure contexts; ignore silently.
+      }
+    })
+    this.container.appendChild(versionLabel)
 
     // Report Bug button
     const bugBtn = document.createElement('button')
@@ -716,6 +748,7 @@ export class MenuBar {
     url.searchParams.set('labels', 'bug,reported-via-app,needs-triage')
 
     // Pre-fill fields via URL params (GitHub issue forms support this)
+    url.searchParams.set('version', APP_VERSION)
     if (data?.code) {
       url.searchParams.set('sonic-pi-code', data.code.substring(0, 2000))
     }
