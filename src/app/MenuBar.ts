@@ -59,6 +59,8 @@ export class MenuBar {
   readonly sampleUploader: SampleUploader
   private prefsCallbacks: PrefsCallbacks
   private getReportData: (() => { code: string; engineState: string }) | null
+  private versionFlashTimer: ReturnType<typeof setTimeout> | null = null
+  private outsideClickHandler: ((e: MouseEvent) => void) | null = null
 
   constructor(
     parent: HTMLElement,
@@ -121,9 +123,13 @@ export class MenuBar {
     // specific version. Click to copy the full version string to clipboard.
     const versionLabel = document.createElement('button')
     versionLabel.type = 'button'
-    versionLabel.textContent = `v${APP_VERSION}`
-    versionLabel.setAttribute('aria-label', `Application version ${APP_VERSION}, click to copy`)
-    versionLabel.title = `SonicPi.js v${APP_VERSION} — click to copy`
+    const VERSION_LABEL_DEFAULT = `v${APP_VERSION}`
+    const VERSION_LABEL_FULL = `SonicPi.js v${APP_VERSION}`
+    versionLabel.textContent = VERSION_LABEL_DEFAULT
+    // Keep title (hover tooltip) and aria-label (screen reader) identical
+    // so sighted and assistive-tech users get the same information.
+    versionLabel.title = `${VERSION_LABEL_FULL} — click to copy`
+    versionLabel.setAttribute('aria-label', `${VERSION_LABEL_FULL} — click to copy`)
     versionLabel.style.cssText = `
       background: none; border: none;
       color: #6e7681; font-family: inherit; font-size: 0.65rem;
@@ -137,14 +143,21 @@ export class MenuBar {
     versionLabel.addEventListener('mouseleave', () => {
       versionLabel.style.color = '#6e7681'
     })
-    const VERSION_LABEL_DEFAULT = `v${APP_VERSION}`
     const flashVersionLabel = (msg: string): void => {
+      // Clear any pending flash-reset so rapid clicks don't stomp each
+      // other, and so dispose() can cleanly cancel a pending reset.
+      if (this.versionFlashTimer !== null) {
+        clearTimeout(this.versionFlashTimer)
+      }
       versionLabel.textContent = msg
-      setTimeout(() => { versionLabel.textContent = VERSION_LABEL_DEFAULT }, 1200)
+      this.versionFlashTimer = setTimeout(() => {
+        versionLabel.textContent = VERSION_LABEL_DEFAULT
+        this.versionFlashTimer = null
+      }, 1200)
     }
     versionLabel.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText(`SonicPi.js v${APP_VERSION}`)
+        await navigator.clipboard.writeText(VERSION_LABEL_FULL)
         flashVersionLabel('copied!')
       } catch {
         // Clipboard API can fail in insecure contexts (non-HTTPS, permission
@@ -176,14 +189,17 @@ export class MenuBar {
     bugBtn.addEventListener('click', () => this.openBugReport())
     this.container.appendChild(bugBtn)
 
-    // Close dropdown on outside click
-    document.addEventListener('click', (e) => {
+    // Close dropdown on outside click. Store the handler so dispose()
+    // can remove it — otherwise the MenuBar leaks a document-level
+    // listener every time it's reconstructed (hot-swap, test teardown).
+    this.outsideClickHandler = (e: MouseEvent) => {
       if (this.activeDropdown &&
           !this.container.contains(e.target as Node) &&
           !this.activeDropdown.contains(e.target as Node)) {
         this.closeDropdown()
       }
-    })
+    }
+    document.addEventListener('click', this.outsideClickHandler)
 
     parent.appendChild(this.container)
   }
@@ -768,6 +784,14 @@ export class MenuBar {
 
   dispose(): void {
     this.closeDropdown()
+    if (this.versionFlashTimer !== null) {
+      clearTimeout(this.versionFlashTimer)
+      this.versionFlashTimer = null
+    }
+    if (this.outsideClickHandler !== null) {
+      document.removeEventListener('click', this.outsideClickHandler)
+      this.outsideClickHandler = null
+    }
     this.sampleUploader.dispose()
     this.container.remove()
   }

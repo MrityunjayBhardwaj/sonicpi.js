@@ -24,7 +24,7 @@
 
 ## v1.5.0 — Beta Testing
 
-**Status:** Ships as `1.5.0-beta.0`. Real-user testing via Sonic Pi community forum. Fix regressions for 1-2 weeks, then promote to stable.
+**Status:** Currently in beta (see Prereleases table above for the current version). Real-user testing via Sonic Pi community forum. Fix regressions until the bug discovery curve flattens, then promote via RC to stable. Full cycle criteria in [`RELEASE.md`](./RELEASE.md#release-cycle-transition-criteria).
 
 ### Known gaps to address before stable
 - [ ] `.zip` and `.each_with_index` Array methods (#154)

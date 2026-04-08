@@ -116,52 +116,111 @@ git checkout main
 git pull origin main
 ```
 
-### 7. Tag the release commit
+### 7. Update the ROADMAP Prereleases table
+In the same release PR (or a follow-up before step 8), add the new row to `ROADMAP.md`'s **Prereleases** table. Convention:
+
+- **Cutting a new beta (beta.N where N > 0):** replace the existing `beta.(N-1)` row in place. Only the current prerelease is shown in the table. Old beta entries are preserved in `CHANGELOG.md` — that's the permanent history.
+- **Cutting an RC from a beta:** replace the beta row with the RC row.
+- **Cutting stable from an RC:** remove the RC row from Prereleases, add the new stable to the **Stable releases** table.
+- **Cutting an entirely new prerelease line while a stable is current:** add a new row (multiple prereleases of the same version won't coexist, so this is rare).
+
+The Prereleases table is a "what's cookin' right now" view. The Stable releases table is the permanent history.
+
+### 8. Tag the release commit
 ```bash
 git tag -a v1.X.Y-beta.N -m "v1.X.Y-beta.N"
 git push origin v1.X.Y-beta.N
 ```
 
-### 8. Publish to npm with beta tag (CRITICAL)
+### 9. Extract per-release notes for the GitHub release
+`CHANGELOG.md` contains ALL versions back to v1.0.0. Using `gh release create --notes-file CHANGELOG.md` would dump the entire changelog into a single GitHub release — wrong. Extract just the current version's section into a temp file:
+
 ```bash
-npm run build:lib              # build the library bundle
-npm publish --tag beta         # <-- --tag beta IS NON-NEGOTIABLE
+# Extracts from '## v1.X.Y-beta.N' up to the next '## ' header (exclusive)
+awk '/^## v1\.X\.Y-beta\.N/{flag=1; next} /^## v/{flag=0} flag' CHANGELOG.md > /tmp/release-notes.md
+
+# Verify the extraction is non-empty and sane before using it
+cat /tmp/release-notes.md | head -5
+wc -l /tmp/release-notes.md
 ```
 
-If you forget `--tag beta`, the prerelease becomes `latest` and breaks every existing installer. Recovery:
-```bash
-npm dist-tag add @mjayb/sonicpijs@1.X.(Y-1) latest   # the previous stable
-npm dist-tag add @mjayb/sonicpijs@1.X.Y-beta.N beta
-```
+Replace `1.X.Y-beta.N` with the literal version. If awk doesn't match, the CHANGELOG header format drifted and you need to fix the regex.
 
-### 9. Verify what the registry actually serves (observation, not inference)
-```bash
-npm view @mjayb/sonicpijs dist-tags
-# Expected output:
-#   latest: 1.X.(Y-1)        <-- previous stable, unchanged
-#   beta:   1.X.Y-beta.N     <-- new prerelease
-```
-**If `latest` moved, STOP and fix before proceeding.**
-
-### 10. Verify sonicpi.cc deploy
-- Open sonicpi.cc in a fresh incognito window
-- Read the version label in the top-right of the menu bar
-- It MUST display `v1.X.Y-beta.N`
-- If the old version shows, the Vercel deploy failed or is cached — investigate before announcing
-
-### 11. Cut the GitHub release
+### 10. Cut the GitHub release (triggers automated npm publish)
 ```bash
 gh release create v1.X.Y-beta.N \
   --title "v1.X.Y-beta.N" \
-  --notes-file CHANGELOG.md \
-  --prerelease                 # <-- mark as prerelease
+  --notes-file /tmp/release-notes.md \
+  --prerelease                            # <-- mark as prerelease
 ```
 
-### 12. Announcement (deferred to a separate step — NOT in this runbook)
+**This fires `.github/workflows/publish.yml` automatically.** The workflow:
+1. Runs tsc + vitest + `build:lib`
+2. Runs `npm pack --dry-run` to surface what will be shipped
+3. Detects `github.event.release.prerelease` and runs `npm publish --access public --tag beta` (prereleases) OR `npm publish --access public` (stable)
+4. Sleeps 10s for npm registry propagation
+5. Verifies `npm view @mjayb/sonicpijs@beta version` matches the tagged version — fails the workflow if not
+
+**DO NOT manually run `npm publish`.** The CI workflow owns the publish boundary. Manual publishing conflicts with the automation (npm rejects republishing the same version) and bypasses the verification steps. If you need to publish from your local machine (disaster recovery only), see the "Recovery" section below.
+
+### 11. Watch the publish.yml workflow run
+```bash
+gh run watch  # or gh run list then gh run view <id>
+```
+
+Wait for all steps green. Pay special attention to the "Verify dist-tags match expectation" step — if it fails, the release is in a bad state (dist-tag points to the wrong version, or registry propagation was slow).
+
+### 12. Verify what npm actually serves (redundant but cheap)
+```bash
+npm view @mjayb/sonicpijs dist-tags
+# Expected output for a beta release:
+#   { latest: '1.X.(Y-1)', beta: '1.X.Y-beta.N' }
+#
+# Expected output for a stable release:
+#   { latest: '1.X.Y', beta: '1.X.Y-rc.M' }  # or whatever the last prerelease was
+```
+**If `latest` moved on a prerelease, STOP and fix.** Recovery: `npm dist-tag add @mjayb/sonicpijs@<previous-stable> latest`.
+
+### 13. Verify sonicpi.cc deploy
+- Open sonicpi.cc in a fresh **incognito** window (your normal browser may serve a cached build)
+- Read the version label in the top-right of the menu bar
+- It MUST display `v1.X.Y-beta.N`
+- If the old version shows:
+  1. Check `deploy.yml` workflow run on main — if failed, read the logs
+  2. Check Vercel project deployments page — may need to manually redeploy
+  3. Check Vercel edge cache — may need manual purge
+  4. If cache is the issue, wait 5-10 minutes; Vercel usually propagates within that window
+
+### 14. Announcement (deferred to a separate step — NOT in this runbook)
 - For betas: forum post at in-thread.sonic-pi.net + optional Sam Aaron courtesy message
 - For stable: forum post + README update + social
 
 Drafts for these live in `~/.anvideck/projects/sonicPiWeb/drafts/` (outside the repo).
+
+---
+
+## Recovery procedures
+
+### If CI publish failed mid-flight
+If `publish.yml` ran `npm publish` successfully but the dist-tag verification step failed (e.g., slow propagation), the package IS published but the verification didn't confirm it. Manually verify with `npm view @mjayb/sonicpijs dist-tags`. If correct, ignore the CI failure. If wrong, use dist-tag recovery below.
+
+### Prerelease accidentally became `latest`
+```bash
+npm dist-tag add @mjayb/sonicpijs@<previous-stable> latest
+npm dist-tag add @mjayb/sonicpijs@<new-prerelease> beta
+```
+Replace the placeholders with actual versions. This reassigns tags without republishing. Then file a post-mortem — this shouldn't happen with the current `publish.yml` but if it does, investigate the workflow logs.
+
+### CI workflow needs to be bypassed (disaster only)
+If `publish.yml` is broken and you need to publish manually from your local machine, use:
+```bash
+npm run build:lib
+npm publish --access public --tag beta    # for prereleases
+# OR
+npm publish --access public                # for stable
+npm view @mjayb/sonicpijs dist-tags        # verify
+```
+Then immediately fix `publish.yml` and commit the fix. This path should be used at most once per incident.
 
 ---
 
@@ -189,36 +248,42 @@ For critical fixes on a released stable line:
 
 ---
 
-## Checklist — paste this into the PR description
+## Checklist — paste this into the release PR description
 
 ```
 Release: v1.X.Y-beta.N
 
-Source-of-truth sync (dharana §10 composition pair):
+Source-of-truth sync (dharana §10 composition pair, enforced by
+src/app/__tests__/version.test.ts):
 - [ ] package.json version
 - [ ] src/app/version.ts APP_VERSION
-- [ ] CHANGELOG.md header
-- [ ] ROADMAP.md released table (if applicable)
+- [ ] CHANGELOG.md header with full per-release notes
+- [ ] ROADMAP.md Prereleases table row (replace existing prerelease row)
 
-Pre-merge verification:
+Pre-merge verification (runs locally AND in CI):
 - [ ] npx tsc --noEmit — zero errors
-- [ ] npx vitest run — all tests pass
+- [ ] npx vitest run — all tests pass, including version.test.ts
+- [ ] npm run build:single — app build succeeds
+- [ ] npm run build:lib — library build succeeds
 - [ ] npx tsx tools/capture.ts smoke test — clean
-- [ ] CI green
+- [ ] PR CI green
 
-Post-merge (after this PR is in main):
-- [ ] Tag pushed: v1.X.Y-beta.N
-- [ ] npm publish --tag beta
-- [ ] npm view dist-tags verified (latest unchanged, beta points to new version)
-- [ ] sonicpi.cc incognito check — footer shows new version
-- [ ] GitHub release created with --prerelease flag
-- [ ] Announcement (separate step)
+Post-merge (after this PR is squash-merged to main):
+- [ ] Tag pushed: git tag -a v1.X.Y-beta.N && git push --tags
+- [ ] Release notes extracted from CHANGELOG.md to /tmp/release-notes.md
+- [ ] gh release create --prerelease (triggers publish.yml automatically)
+- [ ] publish.yml workflow watched to completion, all steps green
+- [ ] Post-publish dist-tag check: npm view @mjayb/sonicpijs dist-tags
+      (latest unchanged, beta points to new version)
+- [ ] sonicpi.cc incognito check — menu bar footer shows new version
+- [ ] Announcement (separate step — drafts in ~/.anvideck/.../drafts/)
 ```
 
 ---
 
 ## Known gaps in this runbook (TODO)
 
-- [ ] Pre-publish guard script that refuses `npm publish` on prerelease versions without an explicit `--tag` flag (dharana §10 known silent failure mode)
-- [ ] Automated check that `package.json.version` and `src/app/version.ts`'s `APP_VERSION` match — currently enforced by release discipline
+- [ ] Script to extract per-version CHANGELOG sections automatically (currently awk one-liner)
+- [ ] Automated check that `v${package.json.version}` matches the git tag being pushed (currently manual)
 - [ ] Second Vercel deploy target for `beta.sonicpi.cc` — deferred until after v1.5.0 stable (dharana §10 Distribution Channels subsection)
+- [ ] Rollback automation for "prerelease accidentally became latest" — currently manual dist-tag reassignment

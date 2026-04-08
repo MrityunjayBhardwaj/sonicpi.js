@@ -73,14 +73,9 @@ Found during a multi-round audit against MagPi book chapters, official Sonic Pi 
 
 - This is the first release following the new release-cycle criteria: single version string across all surfaces, npm `--tag beta` to protect `latest`, UI footer as the load-bearing signal for the prerelease channel, explicit beta → RC → stable gate criteria documented in the release runbook.
 
-### Known limitations (unchanged from v1.4.0)
+### Known limitations
 
-- Multi-output soundcard routing — architecturally impossible in Web Audio
-- External sample upload — feasible but not built (#159, post-beta)
-- OSC receive via WebSocket bridge — feasible but not built (#150)
-- `synth :sound_in` via `getUserMedia` — feasible but not built (#152)
-- `use_real_time` MIDI latency bypass — feasible but not built (#149)
-- `.zip` / `.each_with_index` Array methods — post-beta (#154)
+See [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md) for the current list. The limitations file is the single source of truth; it is intentionally NOT duplicated per-release in this changelog. Noteworthy feasible-but-not-built items tracked for post-beta work: external sample upload (#159), OSC receive via WebSocket bridge (#150), `synth :sound_in` via `getUserMedia` (#152), `use_real_time` MIDI latency bypass (#149), `.zip`/`.each_with_index` Array methods (#154).
 
 ---
 

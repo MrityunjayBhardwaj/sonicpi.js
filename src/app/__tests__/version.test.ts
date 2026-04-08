@@ -22,8 +22,27 @@ import { describe, it, expect } from 'vitest'
 import { APP_VERSION } from '../version'
 import pkg from '../../../package.json'
 
+// Semver with optional prerelease suffix: 1.2.3, 1.2.3-beta.0,
+// 1.2.3-rc.1, 1.2.3-alpha.42. No build metadata (+...) — we don't use it.
+// Capture groups intentionally omitted; this is a validity check, not a
+// parser. If we ever need parsing, use a proper semver library.
+const SEMVER_RE =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(alpha|beta|rc)\.(0|[1-9]\d*))?$/
+
 describe('version composition pair (dharana §10)', () => {
   it('APP_VERSION must equal package.json version', () => {
     expect(APP_VERSION).toBe(pkg.version)
+  })
+
+  it('APP_VERSION must be a valid semver string', () => {
+    // Catches the "both files say 'banana'" failure mode that the
+    // equality test alone can't see. The regex enforces the cycle
+    // convention from dharana §10: only alpha/beta/rc prerelease
+    // suffixes, zero-indexed counters, no build metadata.
+    expect(APP_VERSION).toMatch(SEMVER_RE)
+  })
+
+  it('package.json version must be a valid semver string', () => {
+    expect(pkg.version).toMatch(SEMVER_RE)
   })
 })

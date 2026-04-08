@@ -1,5 +1,11 @@
 name: Publish to npm
 
+# Triggered by GitHub release creation. Routes prereleases to the `beta`
+# dist-tag and stable releases to `latest`. Without the prerelease branch,
+# publishing v1.5.0-beta.0 would silently promote it to `latest` and break
+# every existing installer of v1.4.0 — see dharana §10 (Release Engineering
+# Boundary) for the full rationale.
+
 on:
   release:
     types: [published]
@@ -19,13 +25,58 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Type check
+        run: npx tsc --noEmit
+
       - name: Run tests
         run: npm test
 
       - name: Build library
         run: npm run build:lib
 
+      - name: Inspect tarball (Level 3 observation — dharana §10)
+        # Print what will actually be published. If this shows files you
+        # didn't expect (secrets, dev artifacts, WAVs), the "files" field
+        # in package.json is wrong — STOP and fix before publishing.
+        run: npm pack --dry-run
+
       - name: Publish
-        run: npm publish --access public
+        # Prereleases go to the `beta` dist-tag. Stable releases use
+        # the default `latest` tag. This conditional is LOAD-BEARING —
+        # without it, prereleases would silently become `latest`.
+        run: |
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            echo "Publishing prerelease to 'beta' dist-tag"
+            npm publish --access public --tag beta
+          else
+            echo "Publishing stable release to 'latest' dist-tag"
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify dist-tags match expectation
+        # "Observe THEIR side" — don't trust that the publish command
+        # worked, verify what the registry actually serves. Dharana §10
+        # calls this the Level-3 check for the distribution boundary.
+        # Give npm a few seconds to propagate before querying.
+        run: |
+          sleep 10
+          echo "Current dist-tags on @mjayb/sonicpijs:"
+          npm view @mjayb/sonicpijs dist-tags
+
+          EXPECTED_VERSION="${{ github.event.release.tag_name }}"
+          EXPECTED_VERSION="${EXPECTED_VERSION#v}"
+
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            EXPECTED_TAG="beta"
+          else
+            EXPECTED_TAG="latest"
+          fi
+
+          ACTUAL=$(npm view "@mjayb/sonicpijs@$EXPECTED_TAG" version)
+          if [ "$ACTUAL" != "$EXPECTED_VERSION" ]; then
+            echo "::error::dist-tag '$EXPECTED_TAG' points to '$ACTUAL', expected '$EXPECTED_VERSION'"
+            exit 1
+          fi
+          echo "✓ dist-tag '$EXPECTED_TAG' correctly points to '$EXPECTED_VERSION'"
