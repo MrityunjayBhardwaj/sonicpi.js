@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.5.0-beta.2
+
+**Prerelease.** Two PRs since v1.5.0-beta.0 — transpiler stability work (#165) and four new features from the Desktop Sonic Pi tutorial (#166). Installed via `npm install @mjayb/sonicpijs@beta`.
+
+### New features
+
+- **`use_real_time`** (tutorial Ch 11.1) — disable the schedule-ahead buffer for the current thread. Use inside a MIDI-triggered `live_loop` to drop perceived latency to near-zero.
+- **MIDI input cue paths** (tutorial Ch 11) — `sync "/midi:*:1/note_on"` (Desktop format) and `sync "/midi/note_on"` (short format) both match a single incoming MIDI message. Either form from the tutorial now works unchanged.
+- **Wildcard sync / cue matching** (tutorial Ch 10.3) — `sync "/osc*/trigger"` and `sync "/foo/?ar/tick"` support `*` and `?` glob patterns. Exact-match is still the fast path when no glob characters are present.
+- **`synth :sound_in` / `synth :sound_in_stereo`** (tutorial Ch 13.1) — capture microphone input into the live composition. The browser prompts for mic permission on first use, then routes the mic through scsynth so you can gate, filter, FX, or record it like any other synth. Stereo input devices go through `sound_in_stereo`.
+
+### Transpiler consolidation (#165)
+
+- **`synth :NAME` idiom** — `synth :prophet, note: :c4, release: 0.5` now dispatches the named synth. Previously every such call silently fell back to `:beep` because the transpiler emitted `play(opts)` instead of `play(note, opts)`.
+- **Top-level `use_synth` ordering** — `use_synth :saw; play :c4; use_synth :tri; play :e4` now plays the right synth for each note. Previously the `use_synth` calls were hoisted together and only the last one took effect.
+- **Single transpiler path** — the legacy regex-based transpiler has been removed. TreeSitter is now the sole Ruby → JS path, eliminating a class of inconsistencies where one transpiler handled a construct and the other didn't.
+- Ruby array helpers: `.zip` and `.each_with_index` now transpile correctly.
+
+### Bug fixes
+
+- **`get[:key]` bracket form** — `if get[:flag] ... end` branches now read the stored value. Previously the bracket form silently returned `undefined` for every key, so any composition that gated loops on shared state (`set`/`get`) appeared inert — no error, no warning, just nothing happening. `get(:key)` function-call form was unaffected.
+- **`synth :sound_in` connect error** — every dispatch used to print `Mic input failed: Failed to execute 'connect' on 'AudioNode': Overload resolution failed` to the log. Fixed in initial review.
+- **`synth :sound_in` mic lifecycle** — three sharp edges fixed during review testing:
+  - **Stop** now releases the mic track so the browser's recording indicator clears and nothing keeps feeding scsynth's input channel.
+  - **Rapid re-dispatch** inside a `live_loop` (e.g., `synth :sound_in; sleep 0.1`) no longer re-acquires the microphone ten times per second. The mic connects once and stays connected.
+  - **Hot-swap** (edit code to remove `sound_in`, press Run again) cleanly releases the mic without needing an explicit Stop first.
+- **MIDI dual-fire drop** — the new `/midi:*:ch/type` + `/midi/type` dual dispatch was silently dropping every event because the scheduler's `fireCue` early-returned when called with a synthetic taskId. MIDI input now actually wakes sync waiters.
+
+### Verified compatibility
+
+The 56 real-world compositions from the beta.0 regression set still pass end-to-end. New automated E2E coverage (`tests/p2-credibility.spec.ts`) exercises the four new features in headed Chromium with mocked MIDI input and a mocked microphone stream.
+
+### Known gaps (follow-up)
+
+- `use_real_time` latency reduction is wired through the scheduler but hasn't been measured against real MIDI hardware — perceptual verification is still owed.
+- `synth :sound_in` has been verified to reach scsynth end-to-end and real mic passthrough works in manual testing, but an automated fidelity test (known tone in → known tone out with FFT verification) is still owed.
+
+Bug reports welcome on [GitHub issues](https://github.com/MrityunjayBhardwaj/SonicPi.js/issues). The in-app **Report Bug** button pre-fills the version, browser, and current code.
+
+---
+
 ## v1.5.0-beta.0
 
 **Prerelease.** This is the first public beta of v1.5.0. Installed via `npm install @mjayb/sonicpijs@beta`; the default `latest` tag still points to `v1.4.0`. Bug reports welcome on [GitHub issues](https://github.com/MrityunjayBhardwaj/SonicPi.js/issues) — the in-app **Report Bug** button pre-fills the version, browser, and current code.
