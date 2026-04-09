@@ -321,18 +321,24 @@ export class VirtualTimeScheduler {
   /**
    * Broadcast a cue event. Any tasks waiting via waitForSync
    * are woken and inherit the cuer's virtual time (SV5).
+   *
+   * `taskId` may identify a real scheduler task (normal DSL cue from inside
+   * a live_loop) OR a synthetic external source (e.g. `'__midi__'` from the
+   * MIDI bridge, `'__osc__'` from incoming OSC — #151). When the task does
+   * not exist, fall back to the current audio time so external sources still
+   * wake sync waiters instead of silently returning.
    */
   fireCue(name: string, taskId: string, args: unknown[] = []): void {
     const task = this.tasks.get(taskId)
-    if (!task) return
+    const cueVirtualTime = task?.virtualTime ?? this.getAudioTime()
 
-    this.cueMap.set(name, { time: task.virtualTime, args })
+    this.cueMap.set(name, { time: cueVirtualTime, args })
 
     // Emit cue event for UI (CueLog panel)
     this.emitEvent({
       type: 'cue',
       taskId,
-      virtualTime: task.virtualTime,
+      virtualTime: cueVirtualTime,
       audioTime: this.getAudioTime(),
       params: { name, args },
     })
@@ -347,7 +353,7 @@ export class VirtualTimeScheduler {
         const waiterTask = this.tasks.get(waiter.taskId)
         if (waiterTask) {
           // Inherit cue's virtual time (SV5)
-          waiterTask.virtualTime = task.virtualTime
+          waiterTask.virtualTime = cueVirtualTime
         }
         waiter.resolve(args)
       }
