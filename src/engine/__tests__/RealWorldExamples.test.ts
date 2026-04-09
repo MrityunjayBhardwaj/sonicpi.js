@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest'
-import { autoTranspile } from '../RubyTranspiler'
+import { autoTranspile } from '../TreeSitterTranspiler'
 import { initTreeSitter, isTreeSitterReady, treeSitterTranspile } from '../TreeSitterTranspiler'
 
 interface TestCase {

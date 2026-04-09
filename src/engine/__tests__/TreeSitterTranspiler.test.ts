@@ -131,6 +131,80 @@ end`)
       expect(result.code).toContain('b.play(60')
     })
 
+    // Regression for #163 — `synth :NAME, note: 60` used to transpile to
+    // `__b.play({ synth: "NAME", note: 60 })`, which ProgramBuilder.play
+    // treated as (noteVal=object, opts=undefined). Result: the options
+    // hash coerced to "[object Object]" as the note, and the synth fell
+    // through to currentSynth ("beep"). Every `synth :NAME` call silently
+    // dispatched as beep.
+    it('synth :NAME, note: N promotes note to first positional arg', () => {
+      const result = treeSitterTranspile(`synth :saw, note: 60, amp: 0.5`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('__b.play(60, { synth: "saw", amp: 0.5 })')
+      // Must NOT emit the bug form where the options object is the first arg.
+      expect(result.code).not.toMatch(/__b\.play\(\{/)
+    })
+
+    it('synth :NAME with no note defaults to MIDI 52', () => {
+      const result = treeSitterTranspile(`synth :saw`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('__b.play(52, { synth: "saw" })')
+    })
+
+    it('synth :NAME inside a loop uses the loop\'s __b', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  synth :prophet, note: 67, release: 0.3
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('__b.play(67, { synth: "prophet", release: 0.3 })')
+    })
+
+    // Regression for #164 — top-level `use_synth` was hoisted via
+    // TOP_LEVEL_SETTINGS above the bare-code wrapper, which collapsed all
+    // plays to the last hoisted use_synth value. It must now flow inline
+    // with the plays inside the __run_once live_loop so ordering is
+    // preserved.
+    it('top-level use_synth does NOT hoist above bare code', () => {
+      const result = treeSitterTranspile(`use_synth :saw
+play 60
+use_synth :prophet
+play 60`)
+      expect(result.ok).toBe(true)
+      // Both use_synth calls must appear inside the run_once wrapper,
+      // interleaved with the plays.
+      const code = result.code
+      const wrapperStart = code.indexOf('live_loop("__run_once"')
+      expect(wrapperStart).toBeGreaterThanOrEqual(0)
+      const before = code.slice(0, wrapperStart)
+      const inside = code.slice(wrapperStart)
+      expect(before).not.toContain('use_synth("saw")')
+      expect(before).not.toContain('use_synth("prophet")')
+      expect(inside).toContain('use_synth("saw")')
+      expect(inside).toContain('use_synth("prophet")')
+      // Order: saw before first play, prophet before second play.
+      const sawIdx = inside.indexOf('use_synth("saw")')
+      const firstPlayIdx = inside.indexOf('play(60', sawIdx)
+      const prophetIdx = inside.indexOf('use_synth("prophet")', firstPlayIdx)
+      const secondPlayIdx = inside.indexOf('play(60', prophetIdx)
+      expect(sawIdx).toBeLessThan(firstPlayIdx)
+      expect(firstPlayIdx).toBeLessThan(prophetIdx)
+      expect(prophetIdx).toBeLessThan(secondPlayIdx)
+    })
+
+    it('top-level use_bpm still hoists (commutative with position)', () => {
+      const result = treeSitterTranspile(`use_bpm 120
+play 60
+play 64`)
+      expect(result.ok).toBe(true)
+      const code = result.code
+      const wrapperStart = code.indexOf('live_loop("__run_once"')
+      expect(wrapperStart).toBeGreaterThanOrEqual(0)
+      const before = code.slice(0, wrapperStart)
+      // use_bpm is in TOP_LEVEL_SETTINGS so it hoists above the wrapper
+      expect(before).toContain('use_bpm(120)')
+    })
+
     it('use_bpm', () => {
       const result = treeSitterTranspile(`use_bpm 120
 live_loop :t do
@@ -283,6 +357,31 @@ end`)
       expect(result.ok).toBe(true)
       expect(result.code).toContain('for (const n of')
       expect(result.code).toContain('b.__checkBudget__()')
+    })
+
+    it('.each_with_index do |item, i| (#154)', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  [:c4, :e4, :g4].each_with_index do |n, i|
+    play n, amp: i * 0.3
+    sleep 0.25
+  end
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('for (let i = 0;')
+      expect(result.code).toContain('const n =')
+      expect(result.code).toContain('b.__checkBudget__()')
+    })
+
+    it('.zip(other) (#154)', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  notes = [60, 64, 67]
+  durations = [0.5, 0.25, 1]
+  pairs = notes.zip(durations)
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('.map(')
+      expect(result.code).toContain('?? null')
     })
 
     it('in_thread', () => {
