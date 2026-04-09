@@ -312,14 +312,19 @@ const BARE_CALLABLE_TOP_LEVEL = new Set([
 ])
 
 // Synth names that can be used as bare commands: `beep 60`
-// Complete synth list — all 66 user-facing synths from Desktop SP synthinfo.rb
+// 65 entries verified loadable from the `supersonic-scsynth-synthdefs` CDN
+// via exp-001 (artifacts/investigations/exp-001-synth-audit.md, #156).
+// `winwood_lead` is omitted — Desktop SP defines it (synthinfo.rb:3296) but
+// the CDN package does not ship `sonic-pi-winwood_lead.scsyndef` (HTTP 404).
+// `sine` and `mod_beep` also 404 on the CDN but are aliased at the SoundLayer
+// to `beep` and `mod_sine` respectively (see SoundLayer.ts SYNTH_NAME_ALIASES).
 const SYNTH_NAMES = new Set([
   'beep', 'sine', 'saw', 'pulse', 'subpulse', 'square', 'tri',
   'dsaw', 'dpulse', 'dtri', 'fm', 'mod_fm', 'mod_saw', 'mod_dsaw',
   'mod_sine', 'mod_beep', 'mod_tri', 'mod_pulse',
   'supersaw', 'hoover', 'prophet', 'zawa', 'dark_ambience', 'growl',
   'hollow', 'blade', 'piano', 'pluck', 'pretty_bell', 'dull_bell',
-  'tech_saws', 'winwood_lead', 'chipbass', 'chiplead', 'chipnoise',
+  'tech_saws', 'chipbass', 'chiplead', 'chipnoise',
   'tb303', 'bass_foundation', 'bass_highend',
   'organ_tonewheel', 'rhodey', 'rodeo', 'kalimba',
   'gabberkick',
@@ -791,7 +796,11 @@ const BARE_DSL_CALLS = new Set([
   'play', 'sleep', 'sample', 'cue', 'sync',
   'puts', 'print', 'control', 'synth',
 ])
-const TOP_LEVEL_SETTINGS = new Set(['use_bpm', 'use_synth', 'use_random_seed', 'use_debug', 'use_arg_bpm_scaling'])
+// Settings that are safe to hoist above the bare-code wrapper — they are typically
+// set once and not interleaved with plays. `use_synth` is deliberately NOT here:
+// it is flow-sensitive (users change it between plays), so hoisting it would
+// collapse all plays to the last use_synth value (#164).
+const TOP_LEVEL_SETTINGS = new Set(['use_bpm', 'use_random_seed', 'use_debug', 'use_arg_bpm_scaling'])
 
 function transpileProgram(node: any, ctx: TranspileContext): string {
   const children = node.namedChildren
@@ -1512,15 +1521,19 @@ function transpileDensity(
 }
 
 function transpileSynthCommand(argsNode: any, ctx: TranspileContext): string {
-  if (!argsNode) return '__b.play()'
+  // `synth :name` — no args means play the default synth at the default note.
+  if (!argsNode) return `__b.play(52, { synth: "beep" })`
   const args = argsNode.namedChildren
   // First arg is the synth name (symbol)
   const synthNameNode = args[0]
   const synthName = synthNameNode ? transpileNode(synthNameNode, ctx) : '"beep"'
 
-  // Separate positional and keyword args from the rest
+  // Separate positional and keyword args from the rest.
+  // `note:` kwarg must be promoted to a positional arg — ProgramBuilder.play(noteVal, opts)
+  // expects the note first, and an options-hash-as-noteVal coerces to "[object Object]" (see #163).
   const positional: string[] = []
   const kwargs: string[] = [`synth: ${synthName}`]
+  let noteExpr: string | null = null
 
   for (let i = 1; i < args.length; i++) {
     const arg = args[i]
@@ -1532,7 +1545,11 @@ function transpileSynthCommand(argsNode: any, ctx: TranspileContext): string {
         : key.type === 'simple_symbol'
         ? key.text.slice(1)
         : transpileNode(key, ctx)
-      kwargs.push(`${keyName}: ${transpileNode(val, ctx)}`)
+      if (keyName === 'note') {
+        noteExpr = transpileNode(val, ctx)
+      } else {
+        kwargs.push(`${keyName}: ${transpileNode(val, ctx)}`)
+      }
     } else {
       positional.push(transpileNode(arg, ctx))
     }
@@ -1540,9 +1557,13 @@ function transpileSynthCommand(argsNode: any, ctx: TranspileContext): string {
 
   const optsStr = `{ ${kwargs.join(', ')} }`
   if (positional.length > 0) {
+    // `synth :name, 60, amp: 0.5` — rare but valid form: first positional after name is the note.
     return `__b.play(${positional.join(', ')}, ${optsStr})`
   }
-  return `__b.play(${optsStr})`
+  // `synth :name, note: 60, ...` — normal form with explicit note.
+  // `synth :name, amp: 0.5`      — no note; fall back to MIDI 52 (matches Sonic Pi synthinfo default).
+  const note = noteExpr ?? '52'
+  return `__b.play(${note}, ${optsStr})`
 }
 
 // ---------------------------------------------------------------------------
