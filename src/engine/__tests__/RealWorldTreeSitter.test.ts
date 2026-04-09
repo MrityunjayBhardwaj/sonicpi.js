@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { autoTranspileDetailed } from '../RubyTranspiler'
+import { autoTranspileDetailed } from '../TreeSitterTranspiler'
 
 /**
  * Real-world Sonic Pi programs that must transpile via TreeSitter
@@ -11,11 +11,11 @@ describe('RealWorldTreeSitter', () => {
 
   function assertTreeSitterSuccess(code: string, label: string) {
     const result = autoTranspileDetailed(code)
-    if (result.usedFallback) {
-      console.log(`\n=== ${label} FALLBACK ===\n${result.fallbackReason}\n`)
+    if (result.hasError) {
+      console.log(`\n=== ${label} ERROR ===\n${result.errorMessage}\n`)
       console.log(`=== OUTPUT (first 1500 chars) ===\n${result.code?.slice(0, 1500)}\n`)
     }
-    expect(result.usedFallback, `${label}: expected no fallback but got: ${result.fallbackReason}`).toBe(false)
+    expect(result.hasError, `${label}: expected no fallback but got: ${result.errorMessage}`).toBe(false)
     expect(result.method, `${label}: expected tree-sitter method`).toBe('tree-sitter')
     expect(result.code, `${label}: expected truthy code`).toBeTruthy()
     expect(() => new Function(result.code), `${label}: produced invalid JS`).not.toThrow()

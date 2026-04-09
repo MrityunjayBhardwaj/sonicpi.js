@@ -359,6 +359,31 @@ end`)
       expect(result.code).toContain('b.__checkBudget__()')
     })
 
+    it('.each_with_index do |item, i| (#154)', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  [:c4, :e4, :g4].each_with_index do |n, i|
+    play n, amp: i * 0.3
+    sleep 0.25
+  end
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('for (let i = 0;')
+      expect(result.code).toContain('const n =')
+      expect(result.code).toContain('b.__checkBudget__()')
+    })
+
+    it('.zip(other) (#154)', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  notes = [60, 64, 67]
+  durations = [0.5, 0.25, 1]
+  pairs = notes.zip(durations)
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('.map(')
+      expect(result.code).toContain('?? null')
+    })
+
     it('in_thread', () => {
       const result = treeSitterTranspile(`live_loop :t do
   in_thread do

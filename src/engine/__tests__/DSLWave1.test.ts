@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { ProgramBuilder } from '../ProgramBuilder'
 import { hzToMidi, midiToFreq, noteToMidi } from '../NoteToFreq'
 import { chord_degree, degree, chord_names, scale_names } from '../ChordScale'
-import { autoTranspileDetailed } from '../RubyTranspiler'
+import { autoTranspileDetailed } from '../TreeSitterTranspiler'
 
 // ---------------------------------------------------------------------------
 // NoteToFreq additions

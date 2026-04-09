@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ProgramBuilder, InfiniteLoopError, DEFAULT_LOOP_BUDGET } from '../ProgramBuilder'
-import { autoTranspile, autoTranspileDetailed } from '../RubyTranspiler'
+import { autoTranspile, autoTranspileDetailed } from '../TreeSitterTranspiler'
 import { note_range } from '../ChordScale'
 import { range } from '../Ring'
 

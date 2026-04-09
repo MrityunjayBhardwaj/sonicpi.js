@@ -5,7 +5,7 @@ import { queryLoopProgram, type QueryEvent } from './interpreters/QueryInterpret
 import { SuperSonicBridge, type SuperSonicBridgeOptions } from './SuperSonicBridge'
 import { normalizeFxParams } from './SoundLayer'
 import { createIsolatedExecutor, validateCode, type ScopeHandle } from './Sandbox'
-import { autoTranspileDetailed } from './RubyTranspiler'
+import { autoTranspileDetailed } from './TreeSitterTranspiler'
 import { initTreeSitter } from './TreeSitterTranspiler'
 import { friendlyError, formatFriendlyError, type FriendlyError } from './FriendlyErrors'
 import { detectStratum, Stratum } from './Stratum'
@@ -218,9 +218,9 @@ export class SonicPiEngine {
         transpiledCode = cached
       } else {
         const result = autoTranspileDetailed(code)
-        if (result.usedFallback) {
+        if (result.hasError) {
           // Parse errors — don't execute, return error to UI
-          const errorMsg = result.fallbackReason || 'Unknown syntax error'
+          const errorMsg = result.errorMessage || 'Unknown syntax error'
           return { error: new SyntaxError(errorMsg) }
         }
         transpiledCode = result.code

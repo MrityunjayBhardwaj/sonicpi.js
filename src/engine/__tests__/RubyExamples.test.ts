@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { autoTranspile } from '../RubyTranspiler'
+import { autoTranspile } from '../TreeSitterTranspiler'
 import { VirtualTimeScheduler } from '../VirtualTimeScheduler'
 import { ProgramBuilder } from '../ProgramBuilder'
 import { runProgram } from '../interpreters/AudioInterpreter'

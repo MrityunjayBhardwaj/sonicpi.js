@@ -63,8 +63,8 @@ export { SoundEventStream } from './SoundEventStream'
 // Stratum detection
 export { detectStratum, Stratum } from './Stratum'
 
-// Transpilation — TreeSitter is the sole transpiler
-export { detectLanguage, autoTranspile, autoTranspileDetailed, type TranspileResult } from './RubyTranspiler'
+// Transpilation — TreeSitter is the sole transpiler (#125/#135: consolidated, RubyTranspiler.ts deleted)
+export { detectLanguage, autoTranspile, autoTranspileDetailed, type TranspileResult } from './TreeSitterTranspiler'
 export { initTreeSitter, isTreeSitterReady, treeSitterTranspile, type TreeSitterTranspileResult } from './TreeSitterTranspiler'
 
 // Sandbox — Proxy-based global blocking for user code execution

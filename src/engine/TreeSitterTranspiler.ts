@@ -792,9 +792,14 @@ function transpileNode(node: any, ctx: TranspileContext): string {
 // Program root handler — wraps bare DSL calls in an implicit live_loop
 // ---------------------------------------------------------------------------
 
+// Bare DSL calls that trigger wrapping in an implicit `live_loop :__run_once`.
+// These are calls that need a ProgramBuilder (`__b`) in scope.
+// This list replaces the regex detection in the old `wrapBareCode` preprocessor (#125).
 const BARE_DSL_CALLS = new Set([
   'play', 'sleep', 'sample', 'cue', 'sync',
-  'puts', 'print', 'control', 'synth',
+  'puts', 'print', 'control', 'synth', 'loop',
+  'play_chord', 'play_pattern', 'play_pattern_timed',
+  'use_synth_defaults', 'use_sample_defaults', 'use_transpose',
 ])
 // Settings that are safe to hoist above the bare-code wrapper — they are typically
 // set once and not interleaved with plays. `use_synth` is deliberately NOT here:
@@ -850,11 +855,33 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
 
     if (method && TOP_LEVEL_SETTINGS.has(method)) {
       topLevel.push(child)
+    // `comment` and `uncomment` are control-flow (like if-true/if-false), NOT
+    // structural blocks. They stay in bareCode so their content gets the __b.
+    // prefix when wrapped. Separating them would produce bare `play()` at top level.
     } else if (method && !isBareFxNode && (method === 'live_loop' || method === 'define' || method === 'with_fx' ||
-                          method === 'in_thread' || method === 'uncomment' || method === 'comment')) {
+                          method === 'in_thread')) {
       blocks.push(child)
     } else {
       bareCode.push(child)
+    }
+  }
+
+  // Pre-scan `define` blocks to collect function names BEFORE transpiling bareCode.
+  // Without this, bare calls to user-defined functions (e.g., `my_melody`) inside the
+  // __run_once wrapper would not be recognized and would emit without `(__b)` args.
+  for (const child of blocks) {
+    const m = (child.type === 'call' || child.type === 'method_call')
+      ? (child.childForFieldName('method')?.text ?? child.namedChildren[0]?.text)
+      : null
+    if (m === 'define') {
+      const argsNode = child.childForFieldName('arguments')
+      const nameNode = argsNode?.namedChildren?.[0]
+      if (nameNode) {
+        const funcName = nameNode.type === 'simple_symbol'
+          ? nameNode.text.slice(1)
+          : nameNode.type === 'string' ? nameNode.text.replace(/['"]/g, '') : nameNode.text
+        ctx.definedFunctions.add(funcName)
+      }
     }
   }
 
@@ -1104,6 +1131,16 @@ function transpileReceiverMethodCall(
     return `for (const ${varName} of ${recStr}) {\n${ctx.indent}  __b.__checkBudget__()\n${bodyStr}\n${ctx.indent}}`
   }
 
+  // .each_with_index do |item, i| ... end → for (let i = 0; ...) { const item = arr[i]; ... }
+  if (method === 'each_with_index' && blockNode) {
+    const params = blockNode.namedChildren.find((c: any) => c.type === 'block_parameters')
+    const itemVar = params?.namedChildren[0]?.text ?? '_item'
+    const idxVar = params?.namedChildren[1]?.text ?? '_i'
+    const bodyStr = transpileBlockBody(blockNode, ctx)
+    const arrTmp = `__ewi_${ctx.indent.length}`
+    return `{ const ${arrTmp} = ${recStr}; for (let ${idxVar} = 0; ${idxVar} < ${arrTmp}.length; ${idxVar}++) {\n${ctx.indent}  __b.__checkBudget__()\n${ctx.indent}  const ${itemVar} = ${arrTmp}[${idxVar}]\n${bodyStr}\n${ctx.indent}} }`
+  }
+
   // .map/.select/.reject/.collect do |item| ... end
   if ((method === 'map' || method === 'select' || method === 'reject' || method === 'collect') && blockNode) {
     const params = blockNode.namedChildren.find((c: any) => c.type === 'block_parameters')
@@ -1261,6 +1298,12 @@ function transpileReceiverMethodCall(
   // .sort → .sort()
   if (method === 'sort') {
     return `${recStr}.sort()`
+  }
+
+  // .zip(other, ...) → Ruby semantics: zip arrays element-wise, pad shorter with null
+  if (method === 'zip') {
+    const args = argsNode ? transpileArgList(argsNode, ctx) : ''
+    return `${recStr}.map((__v, __i) => [__v, ${args ? args.split(', ').map(a => `(${a})[__i] ?? null`).join(', ') : ''}])`
   }
 
   // .sample → b.choose (Ruby's Array#sample is random pick)
@@ -1817,4 +1860,83 @@ function transpileChildren(node: any, ctx: TranspileContext): string {
     .map((c: any) => transpileNode(c, ctx))
     .filter((s: string) => s.trim() !== '')
     .join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Language detection (moved from RubyTranspiler.ts — #125/#135)
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect whether code looks like Ruby (Sonic Pi) or JavaScript.
+ */
+export function detectLanguage(code: string): 'ruby' | 'js' {
+  const trimmed = code.trim()
+
+  // Strong Ruby indicators
+  if (/\bdo\s*(\|.*\|)?\s*$/.test(trimmed)) return 'ruby'
+  if (/\bend\s*$/.test(trimmed)) return 'ruby'
+  if (/:\w+/.test(trimmed) && !/['"`]/.test(trimmed.split(':')[0])) return 'ruby'
+  if (/\blive_loop\s+:/.test(trimmed)) return 'ruby'
+  if (/\bsample\s+:/.test(trimmed)) return 'ruby'
+  if (/\buse_synth\s+:/.test(trimmed)) return 'ruby'
+
+  // Strong JS indicators
+  if (/\basync\b/.test(trimmed)) return 'js'
+  if (/\bawait\b/.test(trimmed)) return 'js'
+  if (/\bb\./.test(trimmed)) return 'js'
+  if (/=>/.test(trimmed)) return 'js'
+  if (/\bconst\b|\blet\b|\bvar\b/.test(trimmed)) return 'js'
+
+  // Default to Ruby (Sonic Pi is the primary use case)
+  return 'ruby'
+}
+
+// ---------------------------------------------------------------------------
+// Public API — autoTranspile entry points (moved from RubyTranspiler.ts — #125/#135)
+// ---------------------------------------------------------------------------
+
+/** Result of autoTranspile — includes error metadata for callers (#138). */
+export interface TranspileResult {
+  code: string
+  hasError: boolean
+  errorMessage?: string
+  method?: 'tree-sitter'
+}
+
+/**
+ * Auto-detect language and transpile if needed.
+ * Returns the transpiled JS code string (backward compatible).
+ */
+export function autoTranspile(code: string): string {
+  return autoTranspileDetailed(code).code
+}
+
+/**
+ * Auto-detect language and transpile with detailed result.
+ * TreeSitter is the sole transpiler — WASM must be initialized before
+ * calling this (browser: SonicPiEngine.init(), tests: setupFiles).
+ *
+ * No `wrapBareCode` preprocessor — tree-sitter's `transpileProgram`
+ * handles bare code detection and wrapping directly from the AST (#125).
+ */
+export function autoTranspileDetailed(code: string): TranspileResult {
+  const lang = detectLanguage(code)
+  if (lang === 'js') return { code, hasError: false }
+
+  if (!isTreeSitterReady()) {
+    throw new Error('[SonicPi] TreeSitter parser not available — the audio engine may still be loading. Try clicking Run again.')
+  }
+
+  const tsResult = treeSitterTranspile(code)
+  if (tsResult.errors.length > 0) {
+    return { code: code, hasError: true, errorMessage: tsResult.errors.join('; '), method: 'tree-sitter' }
+  }
+
+  try {
+    new Function(tsResult.code)
+  } catch (e) {
+    return { code: tsResult.code, hasError: true, errorMessage: `TreeSitter produced invalid JS: ${e}`, method: 'tree-sitter' }
+  }
+
+  return { code: tsResult.code, hasError: false, method: 'tree-sitter' }
 }
