@@ -567,12 +567,28 @@ export class SonicPiEngine {
       }
 
       // ----- Global store (get/set) -----
-      // get[:key] returns the stored value (or nil). get is a Proxy so get[:key] works.
-      // set(:key, value) stores it. Shared across all loops.
+      // Shared across all loops. Supports both forms used in Sonic Pi:
+      //   get(:key)  → function call (transpiles to get("key"))
+      //   get[:key]  → bracket access (transpiles to get["key"])
+      // The bracket form needs a Proxy — a plain function has no "key" property,
+      // so `get["key"]` would return undefined. The Proxy routes property access
+      // through the store while leaving `get(...)` calls and standard function
+      // internals (name, length, call, apply, Symbol.toPrimitive, ...) alone.
       const set = (key: string | symbol, value: unknown): void => {
         this.globalStore.set(key, value)
       }
-      const get = (key: string | symbol): unknown => this.globalStore.get(key) ?? null
+      const storeGet = (key: string | symbol): unknown => this.globalStore.get(key) ?? null
+      const getFn = (key: string | symbol): unknown => storeGet(key)
+      const get = new Proxy(getFn, {
+        get(target, property, receiver) {
+          // Symbols and real function properties fall through to the target
+          // so Reflect / Function internals keep working.
+          if (typeof property === 'symbol' || property in target) {
+            return Reflect.get(target, property, receiver)
+          }
+          return storeGet(property)
+        },
+      })
 
       // ----- MIDI input readers -----
       const get_cc = (controller: number, channel: number = 1): number =>
