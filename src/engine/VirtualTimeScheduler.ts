@@ -1,6 +1,29 @@
 import { MinHeap } from './MinHeap'
 
 // ---------------------------------------------------------------------------
+// Cue glob matching (#150) — supports * and ? wildcards in sync targets
+// ---------------------------------------------------------------------------
+
+/**
+ * Match a sync pattern against a fired cue name.
+ * Exact match is the fast path; glob matching activates only when the
+ * pattern contains `*` or `?`.
+ *
+ * `*` matches any sequence of characters (including empty).
+ * `?` matches exactly one character.
+ *
+ * Used by fireCue to wake sync waiters whose patterns glob-match the cue.
+ */
+function cueGlobMatch(pattern: string, name: string): boolean {
+  if (pattern === name) return true
+  if (!pattern.includes('*') && !pattern.includes('?')) return false
+  // Convert glob to regex: escape special regex chars, then replace glob tokens
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp('^' + escaped.replace(/\*/g, '.*').replace(/\?/g, '.') + '$')
+  return re.test(name)
+}
+
+// ---------------------------------------------------------------------------
 // Scheduling constants
 // ---------------------------------------------------------------------------
 
@@ -298,34 +321,43 @@ export class VirtualTimeScheduler {
   /**
    * Broadcast a cue event. Any tasks waiting via waitForSync
    * are woken and inherit the cuer's virtual time (SV5).
+   *
+   * `taskId` may identify a real scheduler task (normal DSL cue from inside
+   * a live_loop) OR a synthetic external source (e.g. `'__midi__'` from the
+   * MIDI bridge, `'__osc__'` from incoming OSC — #151). When the task does
+   * not exist, fall back to the current audio time so external sources still
+   * wake sync waiters instead of silently returning.
    */
   fireCue(name: string, taskId: string, args: unknown[] = []): void {
     const task = this.tasks.get(taskId)
-    if (!task) return
+    const cueVirtualTime = task?.virtualTime ?? this.getAudioTime()
 
-    this.cueMap.set(name, { time: task.virtualTime, args })
+    this.cueMap.set(name, { time: cueVirtualTime, args })
 
     // Emit cue event for UI (CueLog panel)
     this.emitEvent({
       type: 'cue',
       taskId,
-      virtualTime: task.virtualTime,
+      virtualTime: cueVirtualTime,
       audioTime: this.getAudioTime(),
       params: { name, args },
     })
 
-    // Wake any tasks waiting for this cue
-    const waiters = this.syncWaiters.get(name)
-    if (waiters && waiters.length > 0) {
+    // Wake any tasks waiting for this cue.
+    // Supports exact match AND glob patterns (*, ?) in sync targets (#150).
+    // Example: `sync "/midi:*:*/note_on"` matches a cue named `/midi:*:1/note_on`.
+    for (const [pattern, waiters] of this.syncWaiters) {
+      if (waiters.length === 0) continue
+      if (!cueGlobMatch(pattern, name)) continue
       for (const waiter of waiters) {
         const waiterTask = this.tasks.get(waiter.taskId)
         if (waiterTask) {
           // Inherit cue's virtual time (SV5)
-          waiterTask.virtualTime = task.virtualTime
+          waiterTask.virtualTime = cueVirtualTime
         }
         waiter.resolve(args)
       }
-      this.syncWaiters.delete(name)
+      this.syncWaiters.delete(pattern)
     }
   }
 

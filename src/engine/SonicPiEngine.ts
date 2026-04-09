@@ -141,13 +141,19 @@ export class SonicPiEngine {
 
     await Promise.all([bridgeInit, treeSitterInit])
 
-    // Wire MIDI input events → scheduler cues so `sync '/midi/note_on'` works.
-    // The handler reads this.scheduler at fire-time (always the current scheduler).
+    // Wire MIDI input events → scheduler cues.
+    // Desktop SP format: `/midi:device_name:channel/event_type` (#151).
+    // We use `*` as the device name since WebMIDI device names don't match
+    // Desktop SP's naming convention. Also fire the short `/midi/event_type`
+    // for backward compatibility — both forms resolve via wildcard sync (#150).
     this.midiBridge.onMidiEvent((event) => {
       const sched = this.scheduler
       if (!sched) return
-      const cueName = `/midi/${event.type}`
-      sched.fireCue(cueName, '__midi__', [event])
+      const ch = event.channel ?? 1
+      // Desktop SP format: /midi:*:channel/type
+      sched.fireCue(`/midi:*:${ch}/${event.type}`, '__midi__', [event])
+      // Short format for backward compatibility
+      sched.fireCue(`/midi/${event.type}`, '__midi__', [event])
     })
 
     this.initialized = true
@@ -225,6 +231,21 @@ export class SonicPiEngine {
         }
         transpiledCode = result.code
         this.transpileCache.set(code, transpiledCode)
+      }
+
+      // Reconcile live audio (mic) streams against the new code (#152).
+      // On hot-swap, if the old code used `synth :sound_in` but the new one
+      // doesn't, the mic would otherwise stay connected and the browser's
+      // recording indicator would stay lit across the edit. Check the
+      // transpiled source for each sound_in variant; stop any stream whose
+      // name no longer appears.
+      if (this.bridge) {
+        const stillUsed = {
+          sound_in: /['"]sound_in['"]/.test(transpiledCode),
+          sound_in_stereo: /['"]sound_in_stereo['"]/.test(transpiledCode),
+        }
+        if (!stillUsed.sound_in) this.bridge.stopLiveAudio('sound_in')
+        if (!stillUsed.sound_in_stereo) this.bridge.stopLiveAudio('sound_in_stereo')
       }
 
       // Top-level DSL state
@@ -561,12 +582,28 @@ export class SonicPiEngine {
       }
 
       // ----- Global store (get/set) -----
-      // get[:key] returns the stored value (or nil). get is a Proxy so get[:key] works.
-      // set(:key, value) stores it. Shared across all loops.
+      // Shared across all loops. Supports both forms used in Sonic Pi:
+      //   get(:key)  → function call (transpiles to get("key"))
+      //   get[:key]  → bracket access (transpiles to get["key"])
+      // The bracket form needs a Proxy — a plain function has no "key" property,
+      // so `get["key"]` would return undefined. The Proxy routes property access
+      // through the store while leaving `get(...)` calls and standard function
+      // internals (name, length, call, apply, Symbol.toPrimitive, ...) alone.
       const set = (key: string | symbol, value: unknown): void => {
         this.globalStore.set(key, value)
       }
-      const get = (key: string | symbol): unknown => this.globalStore.get(key) ?? null
+      const storeGet = (key: string | symbol): unknown => this.globalStore.get(key) ?? null
+      const getFn = (key: string | symbol): unknown => storeGet(key)
+      const get = new Proxy(getFn, {
+        get(target, property, receiver) {
+          // Symbols and real function properties fall through to the target
+          // so Reflect / Function internals keep working.
+          if (typeof property === 'symbol' || property in target) {
+            return Reflect.get(target, property, receiver)
+          }
+          return storeGet(property)
+        },
+      })
 
       // ----- MIDI input readers -----
       const get_cc = (controller: number, channel: number = 1): number =>
@@ -695,6 +732,8 @@ export class SonicPiEngine {
         'use_sample_bpm',
         // Debug (no-op in browser — silences log output in Desktop SP)
         'use_debug',
+        // Latency — set schedule-ahead to 0 for responsive MIDI input (#149)
+        'use_real_time',
       ]
       const dslValues = [
         topLevelBuilder,
@@ -733,6 +772,8 @@ export class SonicPiEngine {
         (name: string) => topLevelBuilder.use_sample_bpm(name),
         // Debug (no-op in browser)
         (_val?: boolean) => { /* no-op — use_debug controls log verbosity in Desktop SP */ },
+        // Latency — no-op at top level; inside loops it's handled by ProgramBuilder + AudioInterpreter
+        () => { /* use_real_time: no-op at top level — only meaningful inside live_loops (#149) */ },
       ]
 
       const codeWarnings = validateCode(transpiledCode)
@@ -809,6 +850,9 @@ export class SonicPiEngine {
     // Free all scsynth nodes for clean silence
     if (this.bridge) {
       this.bridge.freeAllNodes()
+      // Release mic / line-in tracks so the browser's recording indicator
+      // clears and nothing keeps feeding scsynth's input channel (#152).
+      this.bridge.stopAllLiveAudio()
     }
     this.nodeRefMap.clear()
 
