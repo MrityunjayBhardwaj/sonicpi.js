@@ -18,6 +18,7 @@
 
 | Version | npm dist-tag | Highlights |
 |---------|--------------|------------|
+| **v1.5.0-beta.2** | `beta` | Transpiler consolidation (#165): `synth :NAME` idiom, top-level `use_synth` ordering, sole TreeSitter path (legacy regex transpiler removed), `.zip` / `.each_with_index` array helpers. P2 credibility features (#166): `use_real_time`, MIDI dual cue paths (`/midi:*:ch/type` + `/midi/type`), wildcard sync/cue (`*`, `?`), `synth :sound_in` / `:sound_in_stereo` via `getUserMedia`. Four review-caught engine bugs fixed: #167 sound_in routing (`.node.input` fallback), #168 external-source fireCue fallback, #169 mic lifecycle (Stop release + idempotent per-dispatch + hot-swap reconcile), #170 `get[:key]` Proxy wrap. New automated E2E coverage under `tests/p2-credibility.spec.ts`. Install: `npm install @mjayb/sonicpijs@beta`. |
 | **v1.5.0-beta.0** | `beta` | Engine audit: 33 bugs fixed. Tutorial/book/community parity: 56 real-world compositions verified in Chromium (MagPi Essentials chapters, 15 official Sonic Pi wizard/sorcerer/magician examples, 13 community forum compositions). New DSL: `use_sample_bpm`, `midi` shorthand, `use_osc`/`osc`, `with_fx reps:`, `with_synth_defaults`, `with_sample_defaults`, `use_density`, `use_debug` exposed. Sandbox fixes: `b`→`__b` rename, `get()` Proxy→function. Bridge fixes: `in_thread` inside `with_fx` inherits `outBus`, lazy-load race conditions, `freeBus` guard. Install: `npm install @mjayb/sonicpijs@beta`. |
 
 ---
@@ -27,15 +28,39 @@
 **Status:** Currently in beta (see Prereleases table above for the current version). Real-user testing via Sonic Pi community forum. Fix regressions until the bug discovery curve flattens, then promote via RC to stable. Full cycle criteria in [`RELEASE.md`](./RELEASE.md#release-cycle-transition-criteria).
 
 ### Known gaps to address before stable
-- [ ] `.zip` and `.each_with_index` Array methods (#154)
-- [ ] Audit SYNTH_NAMES against CDN synthdefs (#156)
-- [ ] `synth :sound_in` / `:sound_in_stereo` — wire to `getUserMedia` (#152)
-- [ ] `use_real_time` — MIDI input latency bypass (#149)
-- [ ] MIDI input path format parity with Desktop SP (#151)
-- [ ] Sync/get pattern matching (wildcards) (#150)
-- [ ] Consolidate 3 bare-code wrapping systems (#125)
-- [ ] Rename `RubyTranspiler.ts` to `transpile.ts` (#135)
-- [ ] Rename `usedFallback` field (#138)
+
+#### Level 3 audio verification follow-ups (beta.2 features)
+These features are wired and Level-2 verified (events, logs, WAV-free E2E tests) but still owe perceptual/fidelity verification against hardware:
+- [ ] **`use_real_time` latency measurement** — the keyword flips `schedAheadTime` to `0` for the current thread, but the resulting latency drop from the ~150ms default has only been verified via the code path, not against a real MIDI controller or a differential-onset WAV test. Follow-up: build `tools/level3-p2.ts` with a two-loop differential test (one loop `use_real_time`, one not, both firing on the same cue) and measure the onset delta in the captured WAV.
+- [ ] **`synth :sound_in` fidelity test** — the mic is confirmed to reach scsynth end-to-end (routing verified, lifecycle verified, manual hardware testing passes), but no automated test feeds a known tone through the mock getUserMedia and checks the output WAV for that tone's presence. Follow-up: extend the mock in `tests/p2-credibility.spec.ts` to generate a 617Hz sine, then add single-bin DFT onset detection to the captured audio.
+
+#### Sandbox polish
+- [ ] **#137 — Sandbox `Proxy.has()` returns true for all properties, allowing sandbox detection.** Low impact (no security bypass, just detectability via `'fetch' in scope === true` even though `fetch` returns `undefined`), intentional design for the `with(__scope__)` pattern to work. Fix is surgical: maintain an explicit blocklist of real globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `indexedDB`, `localStorage`, `document`, `window`, `parent`, `top`, `frames`, most of `navigator`) and return `false` from `has()` for those, while keeping `true` for DSL functions and user variables. See the analysis subsection below for the design landscape.
+
+  **How the world solves sandbox detectability in `with()`-based Proxies:**
+
+  1. **Browser-level isolation (iframe / Worker)** — CodePen, JSFiddle, Replit previews, Figma plugins, Observable notebooks. Cross-origin iframe per cell gives its own realm + its own globals. Isolation happens at the HTML level, not JS. **Tradeoff:** ~20ms+ of message-passing latency per call, unacceptable for our main-thread virtual-time scheduler that needs direct access to `AudioContext.currentTime`.
+
+  2. **Different JS engine (QuickJS / V8 isolates)** — Figma plugins ship QuickJS compiled to WASM. Deno uses V8 isolates. Complete isolation. **Tradeoff:** bundle size (~1MB gzipped for QuickJS), startup cost, no native V8 JIT for the user's hot loop.
+
+  3. **`ShadowRealm` (TC39 Stage 3)** — [proposal-shadowrealm](https://github.com/tc39/proposal-shadowrealm) adds `new ShadowRealm()` for a new realm without iframe overhead. Shipping in Node 22+, Chrome behind a flag, no Firefox/Safari yet. **Will eventually be the right answer** — when browsers ship it, `has()` becomes irrelevant because the realm has its own `globalThis`.
+
+  4. **SES / Hardened JavaScript** (the gold standard) — [endojs/endo](https://github.com/endojs/endo) (Agoric, MetaMask, Firefox PDF viewer). `Compartment` is a curated `with`-based sandbox with an honest `has()` trap: it returns `true` only for what's in the compartment's curated `globalThis` + explicitly exposed locals, `false` for everything else. Blocked globals simply aren't present in the compartment. Also freezes intrinsics to block prototype-pollution attacks. `endojs/endo/packages/ses/src/scope-handler.js` is the ~200 lines worth stealing.
+
+  5. **Compile-time rewrite (no Proxy)** — parse user code, rewrite bare identifiers to explicit `__scope__.x` references. CoffeeScript, Opal (Ruby→JS) do this. **Tradeoff:** any bug in the rewrite is a sandbox escape; SES chose Proxy over rewrite because Proxy has a smaller attack surface.
+
+  **Sonic Pi Web's peer niche:** among browser live-coding DSLs (Hydra, Strudel, Gibber, Flok, Ripple), **nobody sandboxes at all** — they all use `eval` + a scope object and trust the user. Sonic Pi Web is unusually disciplined for even attempting this. The current Proxy+`with()` pattern is already stronger than any peer.
+
+  **Recommended path (in order of cost):**
+  - **(a) Surgical `has()` fix — ~1–2 hours.** Hardcoded blocklist of real globals. Matches the issue body's proposal. Fixes detectability without touching the `with` pattern. **This is the right call for v1.5.x.**
+  - **(b) Steal from SES — ~1–2 days.** Adapt `scope-handler.js`'s globalLookup table. Inherits more hardening discipline without taking the full SES dep.
+  - **(c) Migrate to SES `Compartment` — ~1–2 weeks.** Full dep, probably overkill for our threat model (protecting against accidental self-foot-shots, not malicious DeFi actors).
+  - **(d) Wait for `ShadowRealm` — ~2 years.** The right answer long-term; not actionable now.
+
+  Scheduling: queue for v1.5.x post-beta.2, NOT a release blocker. Beta community testing may find issues in the current sandbox that drive a real fix prioritization.
+
+#### Other
+- [ ] Polish items from the v1.5.0 beta testing feedback loop (TBD based on community reports)
 
 ### Mobile / Touch
 - [ ] Responsive toolbar — collapse buttons into hamburger menu on narrow screens
@@ -55,11 +80,6 @@
 ---
 
 ## v1.6.0 — Post-Beta Feature Work
-
-### External sample upload
-- [ ] Drag-and-drop `.wav`/`.flac`/`.mp3` → WASM memory → callable as `sample :my_upload`
-- [ ] Sample library panel with upload/delete
-- [ ] Persist uploaded samples across sessions (IndexedDB)
 
 ### OSC receive
 - [ ] WebSocket-to-UDP bridge (bundled option, not just hook)
