@@ -39,7 +39,7 @@ const WELCOME_CODE = `# =====================================================
 #  Standing on the shoulders of giants:
 #    Sonic Pi & Sam Aaron  — sonic-pi.net
 #    SuperCollider          — supercollider.github.io
-#    Algorave community     — algorave.com
+#    Sonic Pi community     — in-thread.sonic-pi.net
 #
 # =====================================================
 #  BLADE RUNNER x TECHNO
@@ -228,7 +228,7 @@ const WELCOME_LOG = [
   '  Standing on the shoulders of giants:',
   '    Sonic Pi & Sam Aaron    sonic-pi.net',
   '    SuperCollider            supercollider.github.io',
-  '    Algorave community       algorave.com',
+  '    Sonic Pi community       in-thread.sonic-pi.net',
   '  -------------------------------------------------------',
   '',
   '  Shortcuts:',
