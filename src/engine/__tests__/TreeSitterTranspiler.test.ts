@@ -1315,5 +1315,38 @@ end`)
       expect(r.code).toContain('=== 2')
       expect(r.code).toContain('=== 3')
     })
+
+    // #190 — top-level `loop do` hoists to an auto-named live_loop so the
+    // scheduler owns its cadence (otherwise `while(true)` inside the
+    // __run_once wrapper traps the iteration and the program hangs).
+    it('top-level loop do wraps in live_loop("__loop_0", …)', () => {
+      const r = treeSitterTranspile(`loop do\n  play 60\n  sleep 0.25\nend`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('live_loop("__loop_0"')
+      expect(r.code).not.toContain('live_loop("__run_once"')
+      expect(r.code).toContain('__b.play(60')
+      expect(r.code).toContain('__b.sleep(0.25)')
+    })
+
+    it('multiple top-level loop do blocks get unique auto names', () => {
+      const r = treeSitterTranspile(`loop do\n  play 60\n  sleep 1\nend\nloop do\n  play 64\n  sleep 1\nend`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('live_loop("__loop_0"')
+      expect(r.code).toContain('live_loop("__loop_1"')
+    })
+
+    it('loop do inside live_loop stays as while(true) (nested, scheduler-driven)', () => {
+      const r = treeSitterTranspile(`live_loop :outer do\n  loop do\n    play 60\n    sleep 0.25\n  end\nend`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('while (true)')
+      expect(r.code).toContain('live_loop("outer"')
+    })
+
+    it('top-level loop do co-exists with bare play (play stays in __run_once)', () => {
+      const r = treeSitterTranspile(`play 48\nloop do\n  play 60\n  sleep 0.5\nend`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('live_loop("__run_once"')
+      expect(r.code).toContain('live_loop("__loop_0"')
+    })
   })
 })

@@ -807,10 +807,14 @@ function transpileNode(node: any, ctx: TranspileContext): string {
 // This list replaces the regex detection in the old `wrapBareCode` preprocessor (#125).
 const BARE_DSL_CALLS = new Set([
   'play', 'sleep', 'sample', 'cue', 'sync',
-  'puts', 'print', 'control', 'synth', 'loop',
+  'puts', 'print', 'control', 'synth',
   'play_chord', 'play_pattern', 'play_pattern_timed',
   'use_synth_defaults', 'use_sample_defaults', 'use_transpose',
 ])
+// Top-level `loop do … end` is NOT bare code — it is its own scheduler-owned
+// live_loop (auto-named below). Wrapping it in `__run_once` would trap the
+// run_once iteration inside `while(true)` and the loop would never yield
+// (SV16 — bare code runs once, not forever). Detected via `hasBareLoop` below.
 // Settings that are safe to hoist above the bare-code wrapper — they are typically
 // set once and not interleaved with plays. `use_synth` is deliberately NOT here:
 // it is flow-sensitive (users change it between plays), so hoisting it would
@@ -840,8 +844,18 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
     const text = c.text ?? ''
     return !/live_loop/.test(text)
   })
+  // Top-level `loop do … end` triggers the split so it can be hoisted to a
+  // named live_loop. Without this flag, a program that contains only
+  // `loop do … end` would bypass the split and emit bare `while(true)` at
+  // the program root — no scheduler, no sleep yielding, browser hang (#190).
+  const hasBareLoop = children.some((c: any) => {
+    if (c.type !== 'call' && c.type !== 'method_call') return false
+    const method = c.childForFieldName('method')?.text ?? c.namedChildren[0]?.text
+    if (method !== 'loop') return false
+    return c.namedChildren.some((x: any) => x.type === 'do_block' || x.type === 'block')
+  })
 
-  if (!hasBareCode && !hasBareFx) {
+  if (!hasBareCode && !hasBareFx && !hasBareLoop) {
     // No wrapping needed — transpile all children normally
     return transpileChildren(node, ctx)
   }
@@ -863,13 +877,19 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
     // Bare with_fx (no live_loop inside) should be treated as bare code, not a block
     const isBareFxNode = method === 'with_fx' && !/live_loop/.test(child.text ?? '')
 
+    // Bare top-level `loop do … end` — route to blocks and emit below as a
+    // dedicated auto-named live_loop (SV16 — do not let the loop become
+    // bare while(true) inside the __run_once wrapper).
+    const isBareLoopNode = method === 'loop' &&
+      child.namedChildren.some((c: any) => c.type === 'do_block' || c.type === 'block')
+
     if (method && TOP_LEVEL_SETTINGS.has(method)) {
       topLevel.push(child)
     // `comment` and `uncomment` are control-flow (like if-true/if-false), NOT
     // structural blocks. They stay in bareCode so their content gets the __b.
     // prefix when wrapped. Separating them would produce bare `play()` at top level.
     } else if (method && !isBareFxNode && (method === 'live_loop' || method === 'define' || method === 'with_fx' ||
-                          method === 'in_thread')) {
+                          method === 'in_thread' || isBareLoopNode)) {
       blocks.push(child)
     } else {
       bareCode.push(child)
@@ -905,8 +925,26 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
     .map(c => '  ' + transpileNode(c, bareCtx))
     .filter(s => s.trim())
 
-  // Transpile block-level constructs
-  const blockJS = blocks.map(c => transpileNode(c, ctx)).filter(Boolean)
+  // Transpile block-level constructs. Top-level bare `loop do … end` blocks
+  // are hoisted to auto-named live_loops so the scheduler owns their cadence
+  // (SV16 — bare code runs once, not forever; `loop do` is its own forever
+  // live_loop, not fall-through-to-`__run_once` bare code).
+  let topLoopCounter = 0
+  const blockJS = blocks.map(c => {
+    const m = (c.type === 'call' || c.type === 'method_call')
+      ? (c.childForFieldName('method')?.text ?? c.namedChildren[0]?.text)
+      : null
+    if (m === 'loop') {
+      const body = c.namedChildren.find((x: any) => x.type === 'do_block' || x.type === 'block')
+      if (body) {
+        const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
+        const bodyStr = transpileBlockBody(body, bodyCtx)
+        const name = `__loop_${topLoopCounter++}`
+        return `live_loop("${name}", (__b) => {\n${bodyStr}\n${ctx.indent}})`
+      }
+    }
+    return transpileNode(c, ctx)
+  }).filter(Boolean)
 
   const parts: string[] = []
   if (topJS.length > 0) parts.push(topJS.join('\n'))
