@@ -593,7 +593,14 @@ function transpileNode(node: any, ctx: TranspileContext): string {
     }
 
     case 'scope_resolution':
-      return node.text
+      return transpileScopeResolution(node, ctx)
+
+    // Ruby splat `*expr` → JS spread `...expr` (works in array literals
+    // and call arguments — same surface as Ruby's common usage).
+    case 'splat_argument': {
+      const child = node.namedChildren[0]
+      return child ? `...${transpileNode(child, ctx)}` : '...'
+    }
 
     // ---- Blocks ----
     case 'do_block':
@@ -769,21 +776,24 @@ function transpileNode(node: any, ctx: TranspileContext): string {
       return `/* PARSE ERROR: ${node.text.slice(0, 30)} */`
     }
 
-    // ---- Structural wrapper nodes — recurse into children ----
-    // These are CST nodes that exist for grouping but carry no semantic
-    // content for transpilation (e.g., `then`, `body_statement` variants).
-    // A partial fold over named nodes — handle semantically meaningful
-    // types explicitly above, recurse through structural wrappers here.
+    // ---- Default: structural wrapper OR unsupported feature ----
+    // Only nodes in STRUCTURAL_WRAPPERS silently pass through. Everything
+    // else flags via pushUnsupported so the user gets a report link instead
+    // of a cryptic JS parser error downstream. This closes the silent-leak
+    // path where an unknown node with namedChildren would recurse and emit
+    // malformed JS (e.g., `Math::PI` → `Math::PI` → "Unexpected token ':'").
     default: {
-      if (node.namedChildCount > 0) {
-        return transpileChildren(node, ctx)
+      if (STRUCTURAL_WRAPPERS.has(node.type)) {
+        return node.namedChildCount > 0 ? transpileChildren(node, ctx) : node.text
       }
-      // Leaf node we don't recognize — likely raw Ruby leaking through.
-      // Don't silently emit it as JS; flag it so the caller can fall back.
-      if (node.type !== 'empty_statement' && node.text.trim()) {
-        ctx.errors.push(`Unhandled node type '${node.type}' at line ${node.startPosition.row + 1}: ${node.text.slice(0, 40)}`)
+      if (node.text.trim()) {
+        pushUnsupported(
+          ctx, node,
+          node.type,
+          `Ruby construct \`${node.type}\` isn't supported yet`,
+        )
       }
-      return node.text
+      return 'undefined'
     }
   }
 }
@@ -1329,6 +1339,84 @@ function transpileReceiverMethodCall(
   if (fullNode.text.includes('(')) return `${recStr}.${method}()`
   return `${recStr}.${method}()`
 }
+
+// ---------------------------------------------------------------------------
+// scope_resolution (`Foo::Bar`) — Ruby namespace / constant access.
+// ---------------------------------------------------------------------------
+
+// Known-safe Ruby constants that map cleanly to JS. Anything not here
+// triggers an error via pushUnsupported() so the user gets a report link
+// instead of a cryptic JS parser error.
+const SCOPE_RESOLUTION_MAP: Record<string, string> = {
+  'Math::PI':        'Math.PI',
+  'Math::E':         'Math.E',
+  'Float::INFINITY': 'Infinity',
+  'Float::NAN':      'NaN',
+}
+
+function transpileScopeResolution(node: any, ctx: TranspileContext): string {
+  const text = node.text as string
+  if (text in SCOPE_RESOLUTION_MAP) return SCOPE_RESOLUTION_MAP[text]
+  pushUnsupported(
+    ctx, node,
+    'scope_resolution',
+    `Ruby namespace/constant access \`${text}\` isn't mapped yet`,
+  )
+  return 'undefined'
+}
+
+// ---------------------------------------------------------------------------
+// Structured unsupported-feature reporting.
+//
+// Emits a single line into ctx.errors with enough context for triage:
+// node type, line number, source snippet, and a clickable new-issue URL
+// pre-populated with feature + location. The sandbox surfaces this verbatim
+// in the editor error panel.
+// ---------------------------------------------------------------------------
+
+const REPORT_BUG_URL = 'https://github.com/MrityunjayBhardwaj/SonicPi.js/issues/new'
+
+function pushUnsupported(
+  ctx: TranspileContext,
+  node: any,
+  featureId: string,
+  humanMessage: string,
+): void {
+  const line = node.startPosition.row + 1
+  const snippet = (node.text as string).replace(/\s+/g, ' ').slice(0, 60)
+  const title = `Unsupported Ruby feature: ${featureId}`
+  const body = [
+    `The transpiler doesn't handle this yet.`,
+    ``,
+    `**Feature:** \`${featureId}\``,
+    `**Code:** \`${snippet}\``,
+    `**Line:** ${line}`,
+  ].join('\n')
+  const reportUrl = `${REPORT_BUG_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`
+  ctx.errors.push(
+    `Line ${line}: ${humanMessage}. Report: ${reportUrl}`,
+  )
+}
+
+// Nodes that are purely structural wrappers in the tree-sitter-ruby grammar
+// and carry no semantic content — safe to silently recurse through if an
+// explicit handler isn't found. Everything not listed here triggers the
+// unsupported-feature path instead of silent passthrough.
+const STRUCTURAL_WRAPPERS: Set<string> = new Set([
+  'program',
+  'expression_statement',
+  'parenthesized_statements',
+  'body_statement',
+  'block_body',
+  'then',
+  'else',
+  'elsif',
+  'argument_list',
+  'empty_statement',
+  // Pattern inside `case/when` — wraps a single value (literal, range, class,
+  // etc.) that `case` already compares against. Passes through to the child.
+  'pattern',
+])
 
 // ---------------------------------------------------------------------------
 // DSL-specific transpilers

@@ -1168,4 +1168,54 @@ end`)
       expect(result.code).toContain('?.at(__b.look())')
     })
   })
+
+  // Phase A — error hardening (#185): previously silent passthroughs now
+  // surface as structured errors with a report-bug URL.
+  describe('Error hardening — unsupported Ruby features', () => {
+    it('Math::PI transpiles to Math.PI (known safe mapping)', () => {
+      const r = treeSitterTranspile(`x = Math::PI`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('Math.PI')
+    })
+
+    it('Math::E transpiles to Math.E', () => {
+      const r = treeSitterTranspile(`x = Math::E`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('Math.E')
+    })
+
+    it('Float::INFINITY transpiles to Infinity', () => {
+      const r = treeSitterTranspile(`x = Float::INFINITY`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('Infinity')
+    })
+
+    it('unknown scope_resolution flags a structured error', () => {
+      const r = treeSitterTranspile(`x = MyNamespace::Something`)
+      expect(r.ok).toBe(false)
+      expect(r.errors.length).toBeGreaterThan(0)
+      expect(r.errors[0]).toContain('scope_resolution')
+      expect(r.errors[0]).toContain('MyNamespace::Something')
+      expect(r.errors[0]).toContain('github.com/MrityunjayBhardwaj/SonicPi.js/issues/new')
+    })
+
+    it('error includes line number and code snippet', () => {
+      const r = treeSitterTranspile(`use_bpm 120\nlive_loop :t do\n  x = MyNamespace::Missing\n  sleep 1\nend`)
+      expect(r.ok).toBe(false)
+      expect(r.errors[0]).toMatch(/Line 3:/)
+    })
+
+    it('splat_argument in array literal transpiles to JS spread', () => {
+      const r = treeSitterTranspile(`live_loop :t do\n  a = [*ring(1,2,3)]\n  sleep 1\nend`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('...')
+    })
+
+    it('case/when still works after pattern wrapper tightening', () => {
+      const r = treeSitterTranspile(`x = 1\ncase x\nwhen 1 then play 60\nwhen 2 then play 64\nend`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('=== 1')
+      expect(r.code).toContain('=== 2')
+    })
+  })
 })
