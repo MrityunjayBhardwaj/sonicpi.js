@@ -6,6 +6,7 @@
 import { HELP_DB } from './helpData'
 import { KNOWN_SYNTHS, KNOWN_SAMPLES, KNOWN_FX } from '../engine/FriendlyErrors'
 import { SYNTH_PARAMS, FX_PARAMS } from '../engine/SynthParams'
+import { theme } from './theme'
 
 // Minimal types for the CodeMirror API surface we use
 interface EditorState {
@@ -228,7 +229,7 @@ export class Editor {
     this.container = container
     this.container.style.cssText = `
       height: 100%; overflow: hidden;
-      background: #111921;
+      background: ${theme.bgDarker};
     `
     // Load saved font size
     try {
@@ -433,31 +434,25 @@ export class Editor {
       const tags = highlightMod.tags
       if (langMod.syntaxHighlighting && HighlightStyle && tags) {
         const t = tags
+        // Desktop Sonic Pi dark-theme palette (sonic-pi-net/sonic-pi
+        // app/gui/model/sonicpitheme.cpp L437-451 + L509-591):
+        //   dt_pink=deeppink(#FF1493) dt_gold=#FBDE2D dt_blue=#4c83ff
+        //   dt_green=#61CE3C dt_grey=#5e5e5e dt_white=#FFFFFF
         highlightStyle = langMod.syntaxHighlighting(
           HighlightStyle.define([
-            // Keywords: live_loop, do, end, with_fx, if, etc.
-            { tag: t.keyword, color: '#C792EA', fontWeight: '500' },
-            // Symbols: :bd_haus, :reverb, :minor (non-note symbols)
-            { tag: t.atom, color: '#F78C6C' },
-            // Numbers: 60, 0.5, 120
-            { tag: t.number, color: '#F78C6C' },
-            // Strings: "hello", 'world'
-            { tag: t.string, color: '#99C794' },
-            // Comments: # this is a comment
-            { tag: t.comment, color: '#546E7A', fontStyle: 'italic' },
-            // Variables: x, pattern, n
-            { tag: t.variableName, color: '#CDD3DE' },
-            // DSL builtins: play, sleep, sample, ring, spread, etc.
-            { tag: t.function(t.variableName), color: '#82AAFF' },
-            // Hash keys: amp:, release:, cutoff:
-            { tag: t.propertyName, color: '#FFCB6B' },
-            // Operators: +, -, *, ==, etc.
-            { tag: t.operator, color: '#89DDFF' },
-            // Brackets and pipes: |x|, (), []
-            { tag: t.bracket, color: '#89DDFF' },
-            { tag: t.paren, color: '#89DDFF' },
-            // Punctuation: commas, dots
-            { tag: t.punctuation, color: '#546E7A' },
+            { tag: t.keyword, color: '#FBDE2D', fontWeight: '500' },
+            { tag: t.atom, color: '#FF1493' },
+            { tag: t.number, color: '#4c83ff' },
+            { tag: t.string, color: '#61CE3C' },
+            { tag: t.regexp, color: '#61CE3C' },
+            { tag: t.comment, color: '#5e5e5e', fontStyle: 'italic' },
+            { tag: t.variableName, color: '#FFFFFF' },
+            { tag: t.function(t.variableName), color: '#FF1493' },
+            { tag: t.propertyName, color: '#FF1493' },
+            { tag: t.operator, color: '#FFFFFF' },
+            { tag: t.bracket, color: '#FFFFFF' },
+            { tag: t.paren, color: '#FFFFFF' },
+            { tag: t.punctuation, color: '#FFFFFF' },
           ])
         )
       }
@@ -520,24 +515,30 @@ export class Editor {
 
     // Dark theme
     try {
-      const theme = cm.EditorView.theme({
-        '&': { height: '100%', fontSize: `${this.currentFontSize}px`, background: '#111921' },
+      // Desktop Sonic Pi dark-theme syntax colors from sonicpitheme.cpp,
+      // but container bg unified with Console/CueLog (theme.bgDarker)
+      // so the editor and logs read as one continuous dark-blue surface.
+      const editorTheme = cm.EditorView.theme({
+        '&': { height: '100%', fontSize: `${this.currentFontSize}px`, background: theme.bgDarker },
         '.cm-scroller': {
           fontFamily: "'Fira Code', 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace",
           lineHeight: '1.65',
         },
-        '.cm-content': { color: '#CDD3DE', caretColor: '#E8527C', padding: '0.5rem 0' },
-        '.cm-gutters': { background: '#0d1218', color: '#6B7C8D', border: 'none', paddingRight: '8px', minWidth: '3.5em' },
+        '.cm-content': { color: '#FFFFFF', caretColor: '#FF1493', padding: '0.5rem 0' },
+        '.cm-gutters': { background: theme.bgDarker, color: '#5e5e5e', border: 'none', paddingRight: '8px', minWidth: '3.5em' },
         '.cm-lineNumbers .cm-gutterElement': { minWidth: '3em', textAlign: 'right', paddingRight: '8px' },
-        '.cm-activeLineGutter': { background: 'rgba(232,82,124,0.12)', color: '#CDD3DE' },
-        '.cm-activeLine': { background: 'rgba(255,255,255,0.02)' },
-        '&.cm-focused .cm-cursor': { borderLeftColor: '#E8527C', borderLeftWidth: '2px' },
+        '.cm-activeLineGutter': { background: theme.bgHighlight, color: '#ededed' },
+        '.cm-activeLine': { background: theme.bgHighlight },
+        '&.cm-focused .cm-cursor': { borderLeftColor: '#FF1493', borderLeftWidth: '2px' },
         '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-          background: 'rgba(232,82,124,0.15) !important',
+          background: 'rgba(255,20,147,0.35) !important',
         },
-        // Autocomplete dropdown styling
+        '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': {
+          color: '#FF1493',
+          backgroundColor: '#ededed',
+        },
         '.cm-tooltip.cm-tooltip-autocomplete': {
-          background: '#1c2128',
+          background: '#1e1e1e',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: '6px',
           boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
@@ -547,35 +548,33 @@ export class Editor {
           fontSize: '0.75rem',
         },
         '.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
-          color: '#c9d1d9',
+          color: '#ededed',
           padding: '2px 8px',
         },
         '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-          background: 'rgba(232,82,124,0.2)',
-          color: '#fff',
+          background: 'rgba(255,20,147,0.35)',
+          color: '#FFFFFF',
         },
         '.cm-completionIcon': {
           opacity: '0.6',
         },
-        // Autocomplete info/detail tooltip (description panel)
         '.cm-tooltip.cm-completionInfo': {
-          background: '#1c2128',
+          background: '#1e1e1e',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: '6px',
-          color: '#8b949e',
+          color: '#ededed',
           padding: '6px 10px',
           fontSize: '0.7rem',
           fontFamily: "'Fira Code', 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace",
           boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
         },
-        // Generic tooltip fallback
         '.cm-tooltip': {
-          background: '#1c2128',
+          background: '#1e1e1e',
           border: '1px solid rgba(255,255,255,0.1)',
-          color: '#c9d1d9',
+          color: '#ededed',
         },
       } as Record<string, unknown>)
-      if (theme) extensions.push(theme)
+      if (editorTheme) extensions.push(editorTheme)
     } catch { /* theme failed — use default */ }
 
     // Keybindings

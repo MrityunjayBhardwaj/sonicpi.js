@@ -8,6 +8,7 @@
 import { type ScopeMode, ALL_SCOPE_MODES } from './Scope'
 import { SampleUploader } from './SampleUploader'
 import { APP_VERSION } from './version'
+import { theme } from './theme'
 
 function detectBrowser(ua: string): string {
   if (ua.includes('Firefox')) return 'Firefox'
@@ -35,11 +36,11 @@ const SCOPE_LABELS: Record<ScopeMode, string> = {
 }
 
 const SCOPE_COLORS: Record<ScopeMode, string> = {
-  mono: '#E8527C',
-  stereo: '#5EBDAB',
-  lissajous: '#C792EA',
-  mirror: '#82AAFF',
-  spectrum: '#FF00FF',
+  mono: theme.accent,
+  stereo: theme.cyan,
+  lissajous: theme.purple,
+  mirror: theme.blue,
+  spectrum: theme.magenta,
 }
 
 export interface PrefsCallbacks {
@@ -59,7 +60,6 @@ export class MenuBar {
   readonly sampleUploader: SampleUploader
   private prefsCallbacks: PrefsCallbacks
   private getReportData: (() => { code: string; engineState: string }) | null
-  private versionFlashTimer: ReturnType<typeof setTimeout> | null = null
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null
 
   constructor(
@@ -91,10 +91,10 @@ export class MenuBar {
       align-items: stretch;
       padding: 0;
       height: 32px;
-      background: #0d1117;
-      border-bottom: 2px solid rgba(255,255,255,0.08);
+      background: ${theme.bgDark};
+      border-bottom: 2px solid ${theme.border};
       font-size: 0.72rem;
-      color: #8b949e;
+      color: ${theme.fgMuted};
       gap: 0;
       flex-shrink: 0;
       position: relative;
@@ -113,78 +113,58 @@ export class MenuBar {
     this.addMenu('Samples', () => this.buildSamplesMenu())
     this.addMenu('Prefs', () => this.buildPrefsMenu())
 
-    // Spacer pushes version label + Report Bug to the right
+    // Spacer pushes GitHub + Report Bug to the right
     const spacer = document.createElement('div')
     spacer.style.flex = '1'
     this.container.appendChild(spacer)
 
-    // Version label — distribution-boundary observation (dharana §10).
-    // Shows which build is running so bug reports can be triaged to a
-    // specific version. Click to copy the full version string to clipboard.
-    const versionLabel = document.createElement('button')
-    versionLabel.type = 'button'
-    const VERSION_LABEL_DEFAULT = `v${APP_VERSION}`
-    const VERSION_LABEL_FULL = `SonicPi.js v${APP_VERSION}`
-    versionLabel.textContent = VERSION_LABEL_DEFAULT
-    // Keep title (hover tooltip) and aria-label (screen reader) identical
-    // so sighted and assistive-tech users get the same information.
-    versionLabel.title = `${VERSION_LABEL_FULL} — click to copy`
-    versionLabel.setAttribute('aria-label', `${VERSION_LABEL_FULL} — click to copy`)
-    versionLabel.style.cssText = `
-      background: none; border: none;
-      color: #6e7681; font-family: inherit; font-size: 0.65rem;
-      padding: 0 0.6rem; cursor: pointer;
-      letter-spacing: 0.3px; align-self: center;
-      transition: color 0.15s;
+    // GitHub source link — takes the slot the version label used to occupy
+    const githubBtn = document.createElement('a')
+    githubBtn.href = 'https://github.com/MrityunjayBhardwaj/SonicPi.js'
+    githubBtn.target = '_blank'
+    githubBtn.rel = 'noopener noreferrer'
+    githubBtn.title = 'View source on GitHub'
+    githubBtn.setAttribute('aria-label', 'View source on GitHub')
+    githubBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>'
+    githubBtn.style.cssText = `
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px;
+      color: ${theme.fgMuted};
+      text-decoration: none;
+      border-radius: 4px;
+      margin-right: 0.5rem;
+      align-self: center;
+      transition: color 0.15s, background 0.15s;
+      background: transparent;
     `
-    versionLabel.addEventListener('mouseenter', () => {
-      versionLabel.style.color = '#c9d1d9'
+    githubBtn.addEventListener('mouseenter', () => {
+      githubBtn.style.color = theme.fg
+      githubBtn.style.background = theme.border
     })
-    versionLabel.addEventListener('mouseleave', () => {
-      versionLabel.style.color = '#6e7681'
+    githubBtn.addEventListener('mouseleave', () => {
+      githubBtn.style.color = theme.fgMuted
+      githubBtn.style.background = 'transparent'
     })
-    const flashVersionLabel = (msg: string): void => {
-      // Clear any pending flash-reset so rapid clicks don't stomp each
-      // other, and so dispose() can cleanly cancel a pending reset.
-      if (this.versionFlashTimer !== null) {
-        clearTimeout(this.versionFlashTimer)
-      }
-      versionLabel.textContent = msg
-      this.versionFlashTimer = setTimeout(() => {
-        versionLabel.textContent = VERSION_LABEL_DEFAULT
-        this.versionFlashTimer = null
-      }, 1200)
-    }
-    versionLabel.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(VERSION_LABEL_FULL)
-        flashVersionLabel('copied!')
-      } catch {
-        // Clipboard API can fail in insecure contexts (non-HTTPS, permission
-        // denied). Give the user visible feedback instead of failing silently.
-        flashVersionLabel('copy failed')
-      }
-    })
-    this.container.appendChild(versionLabel)
+    this.container.appendChild(githubBtn)
 
     // Report Bug button
     const bugBtn = document.createElement('button')
     bugBtn.type = 'button'
     bugBtn.textContent = 'Report Bug'
     bugBtn.style.cssText = `
-      background: none; border: 1px solid rgba(232,82,124,0.3);
-      color: #E8527C; font-family: inherit; font-size: 0.65rem;
+      background: none; border: 1px solid ${theme.accentHover};
+      color: ${theme.accent}; font-family: inherit; font-size: 0.65rem;
       padding: 0.15rem 0.6rem; cursor: pointer; border-radius: 4px;
       height: 22px; letter-spacing: 0.5px; transition: all 0.15s;
       margin-right: 0.5rem; align-self: center;
     `
     bugBtn.addEventListener('mouseenter', () => {
-      bugBtn.style.background = 'rgba(232,82,124,0.1)'
-      bugBtn.style.borderColor = '#E8527C'
+      bugBtn.style.background = theme.accentFaint
+      bugBtn.style.borderColor = theme.accent
     })
     bugBtn.addEventListener('mouseleave', () => {
       bugBtn.style.background = 'none'
-      bugBtn.style.borderColor = 'rgba(232,82,124,0.3)'
+      bugBtn.style.borderColor = theme.accentHover
     })
     bugBtn.addEventListener('click', () => this.openBugReport())
     this.container.appendChild(bugBtn)
@@ -208,7 +188,7 @@ export class MenuBar {
     const btn = document.createElement('button')
     btn.textContent = label
     btn.style.cssText = `
-      background: none; border: none; color: #8b949e;
+      background: none; border: none; color: ${theme.fgMuted};
       font-family: inherit; font-size: 0.72rem;
       padding: 0 1rem; cursor: pointer;
       border-bottom: 2px solid transparent;
@@ -220,15 +200,15 @@ export class MenuBar {
       font-weight: 500;
     `
     btn.addEventListener('mouseenter', () => {
-      btn.style.color = '#c9d1d9'
+      btn.style.color = theme.fg
       if (this.activeDropdown?.dataset.menu !== label) {
-        btn.style.borderBottomColor = 'rgba(232,82,124,0.3)'
+        btn.style.borderBottomColor = theme.accentHover
       }
     })
     btn.addEventListener('mouseleave', () => {
       if (this.activeDropdown?.dataset.menu !== label) {
         btn.style.borderBottomColor = 'transparent'
-        btn.style.color = '#8b949e'
+        btn.style.color = theme.fgMuted
       }
     })
     btn.addEventListener('click', (e) => {
@@ -245,8 +225,8 @@ export class MenuBar {
       dropdown.style.top = `${rect.bottom + 2}px`
       document.body.appendChild(dropdown)
       this.activeDropdown = dropdown
-      btn.style.borderBottomColor = '#E8527C'
-      btn.style.color = '#c9d1d9'
+      btn.style.borderBottomColor = theme.accent
+      btn.style.color = theme.fg
     })
     this.container.appendChild(btn)
   }
@@ -258,7 +238,7 @@ export class MenuBar {
       // Reset all tab button styles
       for (const btn of this.container.querySelectorAll('button')) {
         (btn as HTMLElement).style.borderBottomColor = 'transparent';
-        (btn as HTMLElement).style.color = '#8b949e'
+        (btn as HTMLElement).style.color = theme.fgMuted
       }
     }
   }
@@ -267,12 +247,12 @@ export class MenuBar {
     const dropdown = document.createElement('div')
     dropdown.style.cssText = `
       position: fixed;
-      background: #1c2128;
-      border: 1px solid rgba(255,255,255,0.1);
+      background: ${theme.bgAlt};
+      border: 1px solid ${theme.borderHover};
       border-radius: 6px;
       padding: 0.4rem 0;
       min-width: 180px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 24px ${theme.shadow};
       z-index: 1000;
       font-family: inherit;
     `
@@ -295,9 +275,9 @@ export class MenuBar {
       for (const [key, check] of checkboxes) {
         const isOn = vis[key] !== false
         check.textContent = isOn ? '✓' : ''
-        check.style.color = isOn ? '#fff' : 'transparent'
-        check.style.background = isOn ? '#5EBDAB' : 'none'
-        check.style.borderColor = isOn ? '#5EBDAB' : 'rgba(255,255,255,0.2)'
+        check.style.color = isOn ? theme.fg : 'transparent'
+        check.style.background = isOn ? theme.cyan : 'none'
+        check.style.borderColor = isOn ? theme.cyan : theme.borderStrong
       }
     }
 
@@ -311,13 +291,13 @@ export class MenuBar {
         padding: 0.3rem 0.8rem;
         cursor: pointer;
         font-size: 0.7rem;
-        color: #c9d1d9;
+        color: ${theme.fg};
         gap: 0.5rem;
         transition: background 0.1s;
         user-select: none;
       `
       item.addEventListener('mouseenter', () => {
-        item.style.background = 'rgba(255,255,255,0.06)'
+        item.style.background = theme.border
       })
       item.addEventListener('mouseleave', () => {
         item.style.background = 'none'
@@ -326,15 +306,15 @@ export class MenuBar {
       const check = document.createElement('span')
       check.style.cssText = `
         width: 14px; height: 14px;
-        border: 1px solid ${isOn ? '#5EBDAB' : 'rgba(255,255,255,0.2)'};
+        border: 1px solid ${isOn ? theme.cyan : theme.borderStrong};
         border-radius: 3px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 0.6rem;
         flex-shrink: 0;
-        background: ${isOn ? '#5EBDAB' : 'none'};
-        color: ${isOn ? '#fff' : 'transparent'};
+        background: ${isOn ? theme.cyan : 'none'};
+        color: ${isOn ? theme.fg : 'transparent'};
         transition: all 0.15s;
       `
       check.textContent = isOn ? '✓' : ''
@@ -363,7 +343,7 @@ export class MenuBar {
     const sep = document.createElement('div')
     sep.style.cssText = `
       height: 1px;
-      background: rgba(255,255,255,0.08);
+      background: ${theme.border};
       margin: 0.3rem 0.6rem;
     `
     dropdown.appendChild(sep)
@@ -374,7 +354,7 @@ export class MenuBar {
     const sep2 = document.createElement('div')
     sep2.style.cssText = `
       height: 1px;
-      background: rgba(255,255,255,0.08);
+      background: ${theme.border};
       margin: 0.3rem 0.6rem;
     `
     dropdown.appendChild(sep2)
@@ -389,13 +369,13 @@ export class MenuBar {
         padding: 0.3rem 0.8rem;
         cursor: pointer;
         font-size: 0.7rem;
-        color: #c9d1d9;
+        color: ${theme.fg};
         gap: 0.5rem;
         transition: background 0.1s;
         user-select: none;
       `
       item.addEventListener('mouseenter', () => {
-        item.style.background = 'rgba(255,255,255,0.06)'
+        item.style.background = theme.border
       })
       item.addEventListener('mouseleave', () => {
         item.style.background = 'none'
@@ -404,15 +384,15 @@ export class MenuBar {
       const check = document.createElement('span')
       check.style.cssText = `
         width: 14px; height: 14px;
-        border: 1px solid ${isOn ? '#82AAFF' : 'rgba(255,255,255,0.2)'};
+        border: 1px solid ${isOn ? theme.blue : theme.borderStrong};
         border-radius: 3px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 0.6rem;
         flex-shrink: 0;
-        background: ${isOn ? '#82AAFF' : 'none'};
-        color: ${isOn ? '#fff' : 'transparent'};
+        background: ${isOn ? theme.blue : 'none'};
+        color: ${isOn ? theme.fg : 'transparent'};
         transition: all 0.15s;
       `
       check.textContent = isOn ? '\u2713' : ''
@@ -428,9 +408,9 @@ export class MenuBar {
         this.onToggleHelp?.()
         const nowOn = this.isHelpVisible?.() ?? false
         check.textContent = nowOn ? '\u2713' : ''
-        check.style.color = nowOn ? '#fff' : 'transparent'
-        check.style.background = nowOn ? '#82AAFF' : 'none'
-        check.style.borderColor = nowOn ? '#82AAFF' : 'rgba(255,255,255,0.2)'
+        check.style.color = nowOn ? theme.fg : 'transparent'
+        check.style.background = nowOn ? theme.blue : 'none'
+        check.style.borderColor = nowOn ? theme.blue : theme.borderStrong
       })
 
       dropdown.appendChild(item)
@@ -443,12 +423,12 @@ export class MenuBar {
     const dropdown = document.createElement('div')
     dropdown.style.cssText = `
       position: fixed;
-      background: #1c2128;
-      border: 1px solid rgba(255,255,255,0.1);
+      background: ${theme.bgAlt};
+      border: 1px solid ${theme.borderHover};
       border-radius: 6px;
       padding: 0.4rem 0;
       min-width: 180px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 24px ${theme.shadow};
       z-index: 1000;
       font-family: inherit;
     `
@@ -459,7 +439,7 @@ export class MenuBar {
     header.style.cssText = `
       padding: 0.3rem 0.8rem 0.2rem;
       font-size: 0.55rem;
-      color: #484f58;
+      color: ${theme.fgFaint};
       text-transform: uppercase;
       letter-spacing: 1px;
     `
@@ -473,9 +453,9 @@ export class MenuBar {
       for (const [mode, check] of checkboxes) {
         const isOn = active.has(mode)
         check.textContent = isOn ? '✓' : ''
-        check.style.color = isOn ? '#fff' : 'transparent'
+        check.style.color = isOn ? theme.fg : 'transparent'
         check.style.background = isOn ? SCOPE_COLORS[mode] : 'none'
-        check.style.borderColor = isOn ? SCOPE_COLORS[mode] : 'rgba(255,255,255,0.2)'
+        check.style.borderColor = isOn ? SCOPE_COLORS[mode] : theme.borderStrong
       }
     }
 
@@ -487,13 +467,13 @@ export class MenuBar {
         padding: 0.3rem 0.8rem;
         cursor: pointer;
         font-size: 0.7rem;
-        color: #c9d1d9;
+        color: ${theme.fg};
         gap: 0.5rem;
         transition: background 0.1s;
         user-select: none;
       `
       item.addEventListener('mouseenter', () => {
-        item.style.background = 'rgba(255,255,255,0.06)'
+        item.style.background = theme.border
       })
       item.addEventListener('mouseleave', () => {
         item.style.background = 'none'
@@ -505,7 +485,7 @@ export class MenuBar {
       const isOn = active.has(mode)
       check.style.cssText = `
         width: 14px; height: 14px;
-        border: 1px solid ${isOn ? SCOPE_COLORS[mode] : 'rgba(255,255,255,0.2)'};
+        border: 1px solid ${isOn ? SCOPE_COLORS[mode] : theme.borderStrong};
         border-radius: 3px;
         display: flex;
         align-items: center;
@@ -513,7 +493,7 @@ export class MenuBar {
         font-size: 0.6rem;
         flex-shrink: 0;
         background: ${isOn ? SCOPE_COLORS[mode] : 'none'};
-        color: ${isOn ? '#fff' : 'transparent'};
+        color: ${isOn ? theme.fg : 'transparent'};
         transition: all 0.15s;
       `
       check.textContent = isOn ? '✓' : ''
@@ -551,12 +531,12 @@ export class MenuBar {
     const dropdown = document.createElement('div')
     dropdown.style.cssText = `
       position: fixed;
-      background: #1c2128;
-      border: 1px solid rgba(255,255,255,0.1);
+      background: ${theme.bgAlt};
+      border: 1px solid ${theme.borderHover};
       border-radius: 6px;
       padding: 0.4rem 0.6rem;
       min-width: 220px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 24px ${theme.shadow};
       z-index: 1000;
       font-family: inherit;
     `
@@ -567,7 +547,7 @@ export class MenuBar {
     header.style.cssText = `
       padding: 0.2rem 0.2rem 0.3rem;
       font-size: 0.55rem;
-      color: #484f58;
+      color: ${theme.fgFaint};
       text-transform: uppercase;
       letter-spacing: 1px;
     `
@@ -578,7 +558,7 @@ export class MenuBar {
     hint.textContent = 'Upload audio files to use as sample :user_<name>'
     hint.style.cssText = `
       font-size: 0.6rem;
-      color: #484f58;
+      color: ${theme.fgFaint};
       padding: 0 0.2rem 0.3rem;
     `
     dropdown.appendChild(hint)
@@ -594,14 +574,14 @@ export class MenuBar {
     const dropdown = document.createElement('div')
     dropdown.style.cssText = `
       position: fixed;
-      background: #1c2128;
-      border: 1px solid rgba(255,255,255,0.1);
+      background: ${theme.bgAlt};
+      border: 1px solid ${theme.borderHover};
       border-radius: 6px;
       padding: 0.4rem 0;
       width: 300px;
       max-height: 80vh;
       overflow-y: auto;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 24px ${theme.shadow};
       z-index: 1000;
       font-family: inherit;
     `
@@ -617,7 +597,7 @@ export class MenuBar {
       header.style.cssText = `
         padding: 0.4rem 0.8rem 0.2rem;
         font-size: 0.55rem;
-        color: #484f58;
+        color: ${theme.fgFaint};
         text-transform: uppercase;
         letter-spacing: 1px;
       `
@@ -631,7 +611,7 @@ export class MenuBar {
         align-items: center;
         padding: 0.25rem 0.8rem;
         font-size: 0.68rem;
-        color: #c9d1d9;
+        color: ${theme.fg};
         gap: 0.4rem;
       `
       const lbl = document.createElement('span')
@@ -641,7 +621,7 @@ export class MenuBar {
       const valLabel = document.createElement('span')
       const currentVal = typeof prefs[key] === 'number' ? prefs[key] as number : defaultVal
       valLabel.textContent = `${currentVal}${unit ?? ''}`
-      valLabel.style.cssText = 'font-size: 0.6rem; color: #8b949e; min-width: 32px; text-align: right;'
+      valLabel.style.cssText = 'font-size: 0.6rem; color: ${theme.fgMuted}; min-width: 32px; text-align: right;'
 
       const input = document.createElement('input')
       input.type = 'range'
@@ -649,7 +629,7 @@ export class MenuBar {
       input.max = String(max)
       input.step = String(step)
       input.value = String(currentVal)
-      input.style.cssText = 'width: 120px; height: 3px; accent-color: #E8527C; cursor: pointer;'
+      input.style.cssText = 'width: 120px; height: 3px; accent-color: ${theme.accent}; cursor: pointer;'
 
       input.addEventListener('input', () => {
         const v = parseFloat(input.value)
@@ -671,12 +651,12 @@ export class MenuBar {
         padding: 0.25rem 0.8rem;
         cursor: pointer;
         font-size: 0.68rem;
-        color: #c9d1d9;
+        color: ${theme.fg};
         gap: 0.5rem;
         transition: background 0.1s;
         user-select: none;
       `
-      row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,255,255,0.06)' })
+      row.addEventListener('mouseenter', () => { row.style.background = theme.border })
       row.addEventListener('mouseleave', () => { row.style.background = 'none' })
 
       const isOn = typeof prefs[key] === 'boolean' ? prefs[key] as boolean : defaultVal
@@ -684,15 +664,15 @@ export class MenuBar {
       const check = document.createElement('span')
       check.style.cssText = `
         width: 14px; height: 14px;
-        border: 1px solid ${isOn ? '#E8527C' : 'rgba(255,255,255,0.2)'};
+        border: 1px solid ${isOn ? theme.accent : theme.borderStrong};
         border-radius: 3px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 0.6rem;
         flex-shrink: 0;
-        background: ${isOn ? '#E8527C' : 'none'};
-        color: ${isOn ? '#fff' : 'transparent'};
+        background: ${isOn ? theme.accent : 'none'};
+        color: ${isOn ? theme.fg : 'transparent'};
         transition: all 0.15s;
       `
       check.textContent = isOn ? '\u2713' : ''
@@ -704,9 +684,9 @@ export class MenuBar {
         e.stopPropagation()
         const nowOn = check.textContent !== '\u2713'
         check.textContent = nowOn ? '\u2713' : ''
-        check.style.color = nowOn ? '#fff' : 'transparent'
-        check.style.background = nowOn ? '#E8527C' : 'none'
-        check.style.borderColor = nowOn ? '#E8527C' : 'rgba(255,255,255,0.2)'
+        check.style.color = nowOn ? theme.fg : 'transparent'
+        check.style.background = nowOn ? theme.accent : 'none'
+        check.style.borderColor = nowOn ? theme.accent : theme.borderStrong
         onChange(key, nowOn)
       })
 
@@ -722,7 +702,7 @@ export class MenuBar {
         align-items: center;
         padding: 0.25rem 0.8rem;
         font-size: 0.68rem;
-        color: #8b949e;
+        color: ${theme.fgMuted};
         gap: 0.4rem;
       `
       const lbl = document.createElement('span')
@@ -730,7 +710,7 @@ export class MenuBar {
       lbl.style.cssText = 'flex: 1;'
       const val = document.createElement('span')
       val.textContent = value
-      val.style.cssText = 'font-size: 0.6rem; color: #484f58;'
+      val.style.cssText = 'font-size: 0.6rem; color: ${theme.fgFaint};'
       row.appendChild(lbl)
       row.appendChild(val)
       dropdown.appendChild(row)
@@ -784,10 +764,6 @@ export class MenuBar {
 
   dispose(): void {
     this.closeDropdown()
-    if (this.versionFlashTimer !== null) {
-      clearTimeout(this.versionFlashTimer)
-      this.versionFlashTimer = null
-    }
     if (this.outsideClickHandler !== null) {
       document.removeEventListener('click', this.outsideClickHandler)
       this.outsideClickHandler = null
