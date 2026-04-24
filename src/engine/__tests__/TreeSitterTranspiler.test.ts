@@ -1263,4 +1263,57 @@ end`)
       expect(r.code).toContain('use_bpm(rrand(90, 130))')
     })
   })
+
+  // Phase C — handler fixes from forum test run (#188-#192).
+  describe('Phase C — handler fixes', () => {
+    // #188 — Array enumerable: .sum, .avg
+    it('.sum transpiles to reduce((a,b)=>a+b, 0)', () => {
+      const r = treeSitterTranspile(`x = [1, 2, 3].sum`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('.reduce((a, b) => a + b, 0)')
+    })
+
+    it('.avg transpiles to reduce/length', () => {
+      const r = treeSitterTranspile(`x = [1, 2, 3].avg`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toMatch(/\.reduce\(\(a, b\) => a \+ b, 0\) \/ .*\.length/)
+    })
+
+    it('chained .sum on ring: scale(:c).sum', () => {
+      const r = treeSitterTranspile(`x = scale(:c4, :major).sum`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('.reduce((a, b) => a + b, 0)')
+    })
+
+    // #189 — Hash methods: .values, .keys
+    it('Hash#values → Object.values', () => {
+      const r = treeSitterTranspile(`blues = { c: 1, d: 2 }\nx = blues.values`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('Object.values(blues)')
+    })
+
+    it('Hash#keys → Object.keys', () => {
+      const r = treeSitterTranspile(`blues = { c: 1, d: 2 }\nx = blues.keys`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('Object.keys(blues)')
+    })
+
+    it('.values with a block does NOT shadow (lets block handlers match)', () => {
+      // Defensive: ensure the no-block guard means future handlers can still match
+      // foo.values { ... } forms without being hijacked by Object.values().
+      const r = treeSitterTranspile(`x = [1,2,3].values`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('Object.values')
+    })
+
+    // #192 — case/when with multiple patterns (regression coverage for
+    // existing behavior that was previously uncovered by tests).
+    it('when 1, 2, 3 ORs patterns with ||', () => {
+      const r = treeSitterTranspile(`x = 2\ncase x\nwhen 1, 2, 3 then y = 10\nwhen 4, 5 then y = 20\nend`)
+      expect(r.ok).toBe(true)
+      expect(r.code).toContain('=== 1 || ')
+      expect(r.code).toContain('=== 2')
+      expect(r.code).toContain('=== 3')
+    })
+  })
 })

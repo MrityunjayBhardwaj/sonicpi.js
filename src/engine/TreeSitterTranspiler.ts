@@ -1288,6 +1288,27 @@ function transpileReceiverMethodCall(
   if (method === 'min') return `Math.min(...${recStr})`
   if (method === 'max') return `Math.max(...${recStr})`
 
+  // .sum — Ruby Array#sum. reduce((a,b)=>a+b, 0) works for numbers; Ring values
+  // propagate through the same spread Ruby uses (Array/Ring indexable).
+  if (method === 'sum' && !blockNode) {
+    return `${recStr}.reduce((a, b) => a + b, 0)`
+  }
+
+  // .avg — Sonic Pi Ring extension (arithmetic mean).
+  if (method === 'avg' && !blockNode) {
+    return `(${recStr}.reduce((a, b) => a + b, 0) / ${recStr}.length)`
+  }
+
+  // .values / .keys — Ruby Hash methods. Plain JS objects use Object.values/keys.
+  // Rings don't define these, and Object.values(ring) would return the ring's
+  // internal indexed values — avoid by only handling the no-args, no-block form.
+  if (method === 'values' && !blockNode && !argsNode) {
+    return `Object.values(${recStr})`
+  }
+  if (method === 'keys' && !blockNode && !argsNode) {
+    return `Object.keys(${recStr})`
+  }
+
   // .first → [0]
   if (method === 'first') {
     return `${recStr}[0]`
