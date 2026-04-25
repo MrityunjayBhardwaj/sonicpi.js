@@ -396,6 +396,36 @@ end`)
       expect(result.code).toContain('b.in_thread(')
     })
 
+    // Issue #205: `loop do` inside in_thread used to emit `while(true) { __b.play; __b.sleep }`
+    // whose sleep reset ProgramBuilder's budget guard → infinite Step[] push at build time
+    // → tab OOM. Fix hoists the inner loop to a sibling auto-named live_loop.
+    it('hoists loop do inside in_thread to sibling live_loop (no build-time while(true))', () => {
+      const result = treeSitterTranspile(`in_thread do
+  loop do
+    sample :bd_ada
+    sleep 1
+  end
+end`)
+      expect(result.ok).toBe(true)
+      // Must hoist — no build-time while(true) lurking in the in_thread body
+      expect(result.code).not.toContain('while (true)')
+      expect(result.code).toContain('live_loop("__inthread_loop_0"')
+    })
+
+    it('keeps setup statements before loop in in_thread; hoists the loop', () => {
+      const result = treeSitterTranspile(`in_thread do
+  use_synth :saw
+  loop do
+    play 60
+    sleep 1
+  end
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).not.toContain('while (true)')
+      expect(result.code).toContain('in_thread(')
+      expect(result.code).toContain('live_loop("__inthread_loop_0"')
+    })
+
     it('define with block params', () => {
       const result = treeSitterTranspile(`define :bass_hit do
   sample :bd_haus, amp: 2

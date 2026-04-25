@@ -165,6 +165,7 @@ export function treeSitterTranspile(ruby: string): TreeSitterTranspileResult {
     insideLoop: false,
     definedFunctions: new Set(),
     indent: '',
+    inthreadLoopCounter: { n: 0 },
   }
 
   const js = transpileNode(tree.rootNode, ctx)
@@ -197,6 +198,8 @@ interface TranspileContext {
   indent: string
   /** Current node's source line (1-based) for _srcLine injection */
   srcLine?: number
+  /** Hoisted-loop counter for `loop do` inside `in_thread` (issue #205). */
+  inthreadLoopCounter?: { n: number }
 }
 
 // ---------------------------------------------------------------------------
@@ -1651,23 +1654,105 @@ function transpileInThread(
   }
 
   const prefix = ctx.insideLoop ? '__b.' : ''
-  const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
-  const bodyStr = transpileBlockBody(blockNode, bodyCtx)
 
-  // Check for name: option
+  // Resolve `name:` option (used both for the in_thread wrapper and as a base
+  // for hoisted-loop names so hot-swap is stable across re-evaluation).
+  let nameExpr: string | null = null
   const args = argsNode?.namedChildren ?? []
   for (const arg of args) {
     if (arg.type === 'pair') {
       const key = arg.namedChildren[0]?.text?.replace(/:$/, '')
       if (key === 'name') {
-        // Named thread — pass name
-        const name = transpileNode(arg.namedChildren[1], ctx)
-        return `${prefix}in_thread({ name: ${name} }, (__b) => {\n${bodyStr}\n${ctx.indent}})`
+        nameExpr = transpileNode(arg.namedChildren[1], ctx)
       }
     }
   }
 
-  return `${prefix}in_thread((__b) => {\n${bodyStr}\n${ctx.indent}})`
+  // SV16 / issue #205: `loop do` inside an in_thread body must be hoisted to
+  // a sibling auto-named live_loop. Building it inline emits `while(true) {
+  // __b.play; __b.sleep; }` whose sleep resets the budget guard on every
+  // iteration → infinite Step[] push at build time → tab OOM. The top-level
+  // hoist (lines ~888-901, 936-955) handles this for bare top-level loops;
+  // we do the equivalent here for in_thread bodies.
+  // The do_block wraps its statements in a body_statement child — drill in.
+  const rawChildren = blockNode.namedChildren ?? []
+  const bodyChildren = rawChildren.length === 1 && rawChildren[0]?.type === 'body_statement'
+    ? (rawChildren[0].namedChildren ?? [])
+    : rawChildren
+  const setupChildren: any[] = []
+  const loopChildren: any[] = []
+  let sawLoop = false
+  let droppedAfterLoop = false
+  for (const child of bodyChildren) {
+    const m = (child.type === 'call' || child.type === 'method_call')
+      ? (child.childForFieldName('method')?.text ?? child.namedChildren[0]?.text)
+      : null
+    const isLoop = m === 'loop' &&
+      child.namedChildren.some((c: any) => c.type === 'do_block' || c.type === 'block')
+    if (isLoop) {
+      loopChildren.push(child)
+      sawLoop = true
+    } else if (sawLoop) {
+      // Statements after a `loop do` are unreachable in Sonic Pi — `loop` runs forever.
+      droppedAfterLoop = true
+    } else {
+      setupChildren.push(child)
+    }
+  }
+
+  if (loopChildren.length === 0) {
+    // No nested loop → original codepath.
+    const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
+    const bodyStr = transpileBlockBody(blockNode, bodyCtx)
+    if (nameExpr !== null) {
+      return `${prefix}in_thread({ name: ${nameExpr} }, (__b) => {\n${bodyStr}\n${ctx.indent}})`
+    }
+    return `${prefix}in_thread((__b) => {\n${bodyStr}\n${ctx.indent}})`
+  }
+
+  if (droppedAfterLoop) {
+    const line = blockNode.startPosition?.row != null ? blockNode.startPosition.row + 1 : '?'
+    ctx.errors.push(`Warning at line ${line}: statements after \`loop do\` inside in_thread are unreachable and were dropped.`)
+  }
+
+  // Build pieces: setup-only in_thread (if any setup), then sibling live_loops
+  // for each hoisted loop. We can only emit sibling top-level live_loop calls
+  // when we are at the program root (ctx.insideLoop === false). When the
+  // in_thread is itself nested, we cannot top-level-hoist; in that case we
+  // fall back to a single live_loop per hoisted loop using __b.live_loop.
+  const counter = ctx.inthreadLoopCounter ?? { n: 0 }
+  const baseName = nameExpr !== null ? nameExpr : null
+  const parts: string[] = []
+
+  if (setupChildren.length > 0) {
+    const setupCtx: TranspileContext = { ...ctx, insideLoop: true }
+    const setupStr = setupChildren
+      .map(c => '  ' + transpileNode(c, setupCtx))
+      .filter(s => s.trim())
+      .join('\n')
+    if (nameExpr !== null) {
+      parts.push(`${prefix}in_thread({ name: ${nameExpr} }, (__b) => {\n${setupStr}\n${ctx.indent}})`)
+    } else {
+      parts.push(`${prefix}in_thread((__b) => {\n${setupStr}\n${ctx.indent}})`)
+    }
+  }
+
+  for (const loopNode of loopChildren) {
+    const body = loopNode.namedChildren.find((c: any) => c.type === 'do_block' || c.type === 'block')
+    const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
+    const bodyStr = transpileBlockBody(body, bodyCtx)
+    const idx = counter.n++
+    const autoName = baseName !== null
+      ? `(${baseName}) + "__loop_${idx}"`
+      : `"__inthread_loop_${idx}"`
+    // At program root, emit as bare live_loop so the engine registers it
+    // as a top-level scheduler-owned loop. Inside another deferred context,
+    // route through __b.live_loop.
+    const liveLoopPrefix = ctx.insideLoop ? '__b.' : ''
+    parts.push(`${liveLoopPrefix}live_loop(${autoName}, (__b) => {\n${bodyStr}\n${ctx.indent}})`)
+  }
+
+  return parts.join('\n')
 }
 
 function transpileAt(
