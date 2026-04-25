@@ -8,6 +8,7 @@
 
 import type { Program } from '../Program'
 import { normalizePlayParams, normalizeControlParams, normalizeFxParams, resolveSynthName } from '../SoundLayer'
+import { noteToMidi } from '../NoteToFreq'
 
 /** Visual duration used for note events in the sound event stream (seconds). */
 const NOTE_EVENT_VISUAL_DURATION = 0.25
@@ -385,13 +386,13 @@ export async function runProgram(
         switch (step.kind) {
           case 'noteOn': {
             const [note, vel, ch] = a as [number | string, number, number]
-            const n = typeof note === 'string' ? noteFromString(note) : note
+            const n = typeof note === 'string' ? noteToMidi(note) : note
             mb.noteOn(n, vel, ch)
             break
           }
           case 'noteOff': {
             const [note, ch, sustainBeats] = a as [number | string, number, number]
-            const n = typeof note === 'string' ? noteFromString(note) : note
+            const n = typeof note === 'string' ? noteToMidi(note) : note
             if (sustainBeats > 0) {
               // BPM-aware delay tracked by MidiBridge so engine.stop() can
               // cancel-and-fire-now to prevent hung notes on the device (#200).
@@ -421,14 +422,3 @@ export async function runProgram(
   ctx.bridge?.flushMessages()
 }
 
-/** Tiny note-name → MIDI helper for midiOut steps (avoids importing whole module). */
-function noteFromString(s: string): number {
-  // Accept "c4", "c#4", "db4" etc. Falls back to 60 (middle C).
-  const m = /^([a-g])([#bs]?)(-?\d+)?$/i.exec(s)
-  if (!m) return 60
-  const semis: Record<string, number> = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 }
-  const base = semis[m[1].toLowerCase()] ?? 0
-  const acc = m[2] === '#' || m[2] === 's' ? 1 : m[2] === 'b' ? -1 : 0
-  const oct = m[3] ? parseInt(m[3], 10) : 4
-  return (oct + 1) * 12 + base + acc
-}
