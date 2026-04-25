@@ -422,4 +422,52 @@ end
 
     engine.dispose()
   })
+
+  // Issue #202 (G4) — SoundLayer clamp warnings used to fire every loop
+  // iteration. The fix wraps printHandler with a Set-based dedup that
+  // matches `[...] clamped to N (min|max)` lines and emits each unique
+  // message at most once per evaluate(). Re-evaluating clears the dedup.
+  //
+  // Verified at the printHandler boundary directly — exercising the FX
+  // chain end-to-end requires a live SuperSonic bridge (browser only).
+  it('dedups clamp-warning messages; resets on re-evaluate', async () => {
+    const engine = new SonicPiEngine()
+    await engine.init()
+
+    const messages: string[] = []
+    engine.setPrintHandler((m) => messages.push(m))
+
+    // Reach into the wrapped printHandler that the engine plumbed via
+    // setPrintHandler. SoundLayer's warnFn callbacks call this same wrapped
+    // handler with messages of the shape we dedup on.
+    type Internal = { printHandler: ((m: string) => void) | null }
+    const wrapped = (engine as unknown as Internal).printHandler!
+    expect(wrapped).toBeTypeOf('function')
+
+    // First evaluation — fire the same clamp message 10 times. Should
+    // surface exactly once. Other (non-clamp) messages always pass through.
+    await engine.evaluate(`# noop`)
+    for (let i = 0; i < 10; i++) {
+      wrapped('[Warning] play :gverb — room: 233 clamped to 1 (max)')
+    }
+    wrapped('[Warning] something else')
+    wrapped('[Warning] play :gverb — room: 233 clamped to 1 (max)')
+    wrapped('[Warning] play :gverb — mix: 5 clamped to 1 (max)') // distinct line — passes
+    const clampMatches = messages.filter((m) => /room: 233 clamped to 1 \(max\)/.test(m))
+    const otherMessages = messages.filter((m) => /something else/.test(m))
+    const distinctClamp = messages.filter((m) => /mix: 5 clamped to 1 \(max\)/.test(m))
+    expect(clampMatches.length).toBe(1)
+    expect(otherMessages.length).toBe(1)
+    expect(distinctClamp.length).toBe(1)
+
+    // Re-evaluate clears the dedup so the same clamp re-surfaces once.
+    messages.length = 0
+    await engine.evaluate(`# noop again`)
+    wrapped('[Warning] play :gverb — room: 233 clamped to 1 (max)')
+    wrapped('[Warning] play :gverb — room: 233 clamped to 1 (max)')
+    const reMatches = messages.filter((m) => /room: 233 clamped to 1 \(max\)/.test(m))
+    expect(reMatches.length).toBe(1)
+
+    engine.dispose()
+  })
 })

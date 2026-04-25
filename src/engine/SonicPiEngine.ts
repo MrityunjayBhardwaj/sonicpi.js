@@ -8,6 +8,17 @@ import { DSL_NAMES } from './DslNames'
 import { createIsolatedExecutor, validateCode, type ScopeHandle } from './Sandbox'
 import { autoTranspileDetailed } from './TreeSitterTranspiler'
 import { initTreeSitter } from './TreeSitterTranspiler'
+
+/**
+ * Matches SoundLayer.validateAndClamp output:
+ *   `[Warning] play :synth — key: val clamped to N (min)`
+ *   `[Warning] with_fx :name — key: val clamped to N (max)`
+ *   `[Warning] sample :name — key: val clamped to N (min|max)`
+ *   `[Warning] control — key: val clamped to N (min|max)`
+ * Anything matching this is a deterministic clamp message and we only need
+ * to surface each unique line once per evaluation (issue #202, G4).
+ */
+const CLAMP_WARN_RE = /clamped to .+ \((min|max)\)$/
 import { friendlyError, formatFriendlyError, type FriendlyError } from './FriendlyErrors'
 import { detectStratum, Stratum } from './Stratum'
 import { SoundEventStream } from './SoundEventStream'
@@ -53,6 +64,16 @@ export class SonicPiEngine {
   private runtimeErrorHandler: ((err: Error) => void) | null = null
   private printHandler: ((msg: string) => void) | null = null
   private cueHandler: ((name: string, time: number) => void) | null = null
+  /**
+   * Per-evaluation dedup set for clamp/range warnings (issue #202, G4).
+   * SoundLayer's validateAndClamp emits one warning per out-of-range param,
+   * which fires every loop iteration → log floods. We dedup by exact message
+   * so the user sees each unique clamp once per evaluation.
+   * Cleared on each evaluate() call (re-running the user's code resets the
+   * "what have we already told them" memory — they may have changed the
+   * offending value, or want to be told again because they re-pressed Run).
+   */
+  private warnDedup = new Set<string>()
   private currentCode = ''
   private currentStratum: Stratum = Stratum.S1
   private bridgeOptions: SuperSonicBridgeOptions
@@ -197,6 +218,10 @@ export class SonicPiEngine {
     try {
       this.currentCode = code
       this.currentStratum = detectStratum(code)
+      // Reset clamp-warning dedup so re-pressing Run re-surfaces clamp messages
+      // (the user may have changed the offending value, and they shouldn't be
+      // forever-silenced because we already showed the warning once).
+      this.warnDedup.clear()
 
       const isReEvaluate = this.scheduler !== null && this.playing
 
@@ -938,10 +963,24 @@ export class SonicPiEngine {
 
   /** Register a handler for `puts` / `print` output from user code. */
   setPrintHandler(handler: (msg: string) => void): void {
-    this.printHandler = handler
+    // Wrap with clamp-warning dedup (issue #202, G4). SoundLayer's
+    // validateAndClamp emits one message per out-of-range param per call,
+    // and `play`/`sample`/`with_fx` flow through it on every loop iteration.
+    // Without dedup the user gets the same `[Warning] play :gverb — room: 233
+    // clamped to 1 (max)` message every beat. Dedup keys on the full message
+    // string so distinct clamp triggers (different param, different value,
+    // different synth) each surface once.
+    const wrapped = (msg: string) => {
+      if (CLAMP_WARN_RE.test(msg)) {
+        if (this.warnDedup.has(msg)) return
+        this.warnDedup.add(msg)
+      }
+      handler(msg)
+    }
+    this.printHandler = wrapped
     // Forward to the bridge so SoundLayer clamp warnings for samples surface
     // through the same UI channel as play/FX warnings (SV19 — accept with signal).
-    if (this.bridge) this.bridge.warnHandler = handler
+    if (this.bridge) this.bridge.warnHandler = wrapped
   }
 
   /** Register a handler for cue events (for the CueLog panel). */
