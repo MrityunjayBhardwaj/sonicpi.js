@@ -50,6 +50,14 @@ export interface AudioContext {
   oscHandler?: (host: string, port: number, path: string, ...args: unknown[]) => void
   /** MIDI bridge for deferred midi-out steps (issue #195). */
   midiBridge?: MidiBridge
+  /**
+   * Volume-change callback (issue #201). Deferred `set_volume` steps fire at
+   * scheduled time and need to update the engine's closure-local
+   * `currentVolume` so the next iteration's `current_volume` returns the
+   * new value. The engine wires this to its setVolumeShared closure;
+   * unset means: just push the bridge change (legacy path).
+   */
+  onVolumeChange?: (vol: number) => void
 }
 
 /**
@@ -365,8 +373,15 @@ export async function runProgram(
         // Master-volume change at the scheduled time (#197). Ducking patterns
         // were broken because both calls fired at beat 0; now the second call
         // happens after the intermediate sleep.
+        // Route through onVolumeChange (#201) so the engine's closure-local
+        // currentVolume — read by current_volume — is also updated. Without
+        // this, `set_volume 0.3; sleep 4; puts current_volume` printed 1.0.
         const vol = Math.max(0, Math.min(5, step.vol))
-        ctx.bridge?.setMasterVolume(vol / 5)
+        if (ctx.onVolumeChange) {
+          ctx.onVolumeChange(vol)
+        } else {
+          ctx.bridge?.setMasterVolume(vol / 5)
+        }
         break
       }
 

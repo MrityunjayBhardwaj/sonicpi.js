@@ -302,12 +302,19 @@ export class SonicPiEngine {
       const pendingLoops = new Map<string, () => Promise<void>>()
       const pendingDefaults = new Map<string, { bpm: number; synth: string }>()
 
-      // Top-level set_volume! — Desktop SP range is 0-5, maps to mixer pre_amp
+      // Top-level set_volume! — Desktop SP range is 0-5, maps to mixer pre_amp.
+      // currentVolume is captured by closures (set_volume + current_volume_fn +
+      // setVolumeShared). Deferred set_volume steps fire setVolumeShared at
+      // scheduled time so current_volume reflects the new value (#201).
       let currentVolume = 1
       const set_volume = (vol: number) => {
         currentVolume = Math.max(0, Math.min(5, vol))
         this.bridge?.setMasterVolume(currentVolume / 5) // normalize 0-5 → 0-1
       }
+      // Used by AudioInterpreter's setVolume step — same body as set_volume,
+      // but exposed as a stable reference so the interpreter can update the
+      // shared currentVolume closure variable.
+      const setVolumeShared = (vol: number) => set_volume(vol)
 
       // Top-level current_* introspection functions
       const current_synth_fn = () => defaultSynth
@@ -515,6 +522,7 @@ export class SonicPiEngine {
             globalStore: this.globalStore,
             oscHandler: this.oscHandler ?? undefined,
             midiBridge: this.midiBridge,
+            onVolumeChange: setVolumeShared,
           })
 
           // Auto-cue the loop name after each iteration.

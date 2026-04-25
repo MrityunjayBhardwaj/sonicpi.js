@@ -423,6 +423,52 @@ end
     engine.dispose()
   })
 
+  // Issue #201 (G3) — Deferred set_volume must update the closure-local
+  // `currentVolume` the engine reads via current_volume_fn. Pre-fix the
+  // setVolume step called bridge.setMasterVolume directly, so the engine's
+  // currentVolume stayed at its initial 1.
+  //
+  // The verification trick: `puts` inside a live_loop fires at BUILD time,
+  // baking its arg into a print step. So iteration N+1's build reads the
+  // currentVolume that iteration N's deferred set_volume left behind.
+  it('deferred set_volume mutates engine currentVolume — visible to next iteration', async () => {
+    const engine = new SonicPiEngine()
+    await engine.init()
+
+    const messages: string[] = []
+    engine.setPrintHandler((m) => messages.push(m))
+
+    // Single evaluate so both calls share the same closure scope.
+    // Note: `current_volume` in our DSL is a JS function reference, not a
+    // bare identifier (no auto-invocation). Use `current_volume()` for the
+    // assertion target — separate gap from the deferred-step plumbing.
+    await engine.evaluate(`
+      live_loop :duck do
+        puts "vol=#{current_volume()}"
+        set_volume 0.3
+        sleep 1
+      end
+    `)
+    engine.play()
+
+    type Sched = { tick: (t: number) => void }
+    const scheduler = (engine as unknown as { scheduler: Sched }).scheduler
+    // Drive several iterations. Iter 1 build: prints "vol=1" (initial),
+    // pushes setVolume(0.3) step. Iter 1 run: setVolume fires →
+    // currentVolume = 0.3. Iter 2 build: prints "vol=0.3". Pre-fix every
+    // iteration printed "vol=1" because the closure was never mutated.
+    for (let i = 0; i < 5; i++) {
+      scheduler.tick(2)
+      await new Promise((r) => setTimeout(r, 5))
+    }
+
+    const volLines = messages.filter((m) => /vol=/.test(m))
+    expect(volLines.length).toBeGreaterThan(1)
+    expect(volLines.some((m) => m.includes('vol=0.3'))).toBe(true)
+
+    engine.dispose()
+  })
+
   // Issue #202 (G4) — SoundLayer clamp warnings used to fire every loop
   // iteration. The fix wraps printHandler with a Set-based dedup that
   // matches `[...] clamped to N (min|max)` lines and emits each unique
