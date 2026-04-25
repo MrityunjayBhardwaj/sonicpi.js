@@ -393,10 +393,10 @@ export async function runProgram(
             const [note, ch, sustainBeats] = a as [number | string, number, number]
             const n = typeof note === 'string' ? noteFromString(note) : note
             if (sustainBeats > 0) {
-              // BPM-aware delay (replaces the wall-clock setTimeout from the
-              // pre-fix `midi(...)` shorthand).
+              // BPM-aware delay tracked by MidiBridge so engine.stop() can
+              // cancel-and-fire-now to prevent hung notes on the device (#200).
               const seconds = sustainBeats * 60 / currentBpm
-              setTimeout(() => mb.noteOff(n, ch), seconds * 1000)
+              mb.scheduleNoteOff(n, ch, seconds)
             } else {
               mb.noteOff(n, ch)
             }

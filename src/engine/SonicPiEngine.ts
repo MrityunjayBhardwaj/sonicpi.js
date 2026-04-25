@@ -707,13 +707,18 @@ export class SonicPiEngine {
 
       // ----- MIDI output (opts object carries keyword args from transpiler) -----
       type MidiOpts = { channel?: number; sustain?: number; velocity?: number; vel?: number }
-      /** midi shorthand — sends note_on + auto note_off after sustain (default 1 beat) */
+      /** midi shorthand — sends note_on + auto note_off after sustain (default 1 beat).
+          The auto note-off goes through midiBridge.scheduleNoteOff so that
+          engine.stop() can cancel-and-fire-now to avoid hung notes (#200). */
       const midi = (note: number | string, opts: MidiOpts = {}) => {
         const n = typeof note === 'string' ? noteToMidi(note) : note
         const vel = opts.velocity ?? opts.vel ?? 100
         const sus = opts.sustain ?? 1
-        this.midiBridge.noteOn(n, vel, opts.channel ?? 1)
-        setTimeout(() => this.midiBridge.noteOff(n, opts.channel ?? 1), sus * 1000)
+        const ch = opts.channel ?? 1
+        this.midiBridge.noteOn(n, vel, ch)
+        // Tracked timer — engine.stop() cancels-and-fires-now to prevent
+        // hung notes on external devices (#200).
+        this.midiBridge.scheduleNoteOff(n, ch, sus)
       }
       const midi_note_on = (note: number | string, velocity: number = 100, opts: MidiOpts = {}) => {
         const n = typeof note === 'string' ? noteToMidi(note) : note
@@ -913,6 +918,13 @@ export class SonicPiEngine {
 
     this.playing = false
     this.scheduler?.stop()
+
+    // Cancel pending MIDI auto note-offs and fire them NOW so external
+    // devices don't hang. Without this, a `midi 60, sustain: 4` followed by
+    // Stop leaves the device sounding the note until the timer eventually
+    // fires (#200). After stop, the timer is also gone so a fresh run won't
+    // collide with stale note-offs.
+    this.midiBridge.cancelPendingNoteOffs()
 
     // Free all scsynth nodes for clean silence
     if (this.bridge) {
