@@ -100,9 +100,16 @@ export function createIsolatedExecutor(
     },
     set(target, prop, value) {
       if (typeof prop === 'string') {
-        // Inside a scope: write to per-loop local storage
+        // Inside a scope: write to per-loop local storage…
         const currentScopeName = scopeStack[scopeStack.length - 1] ?? null
-        if (currentScopeName !== null) {
+        if (currentScopeName !== null && currentScopeName !== '__run_once') {
+          // …EXCEPT for __run_once. That synthetic loop wraps bare top-level
+          // user code (`m = [...]; c = choose(m)`) which Sonic Pi semantics
+          // expect to be visible to other live_loops. Treating __run_once
+          // assignments as top-level routes them to the shared scope so the
+          // canonical pattern works (#206):
+          //   m = [:c4, :e4, :g4]
+          //   loop do; play choose(m); sleep 1; end
           let locals = scopeLocals.get(currentScopeName)
           if (!locals) {
             locals = new Map()
@@ -112,7 +119,7 @@ export function createIsolatedExecutor(
           return true
         }
       }
-      // Outside any scope: write to shared scope (top-level code)
+      // Outside any scope (or inside __run_once): write to shared scope.
       target[prop as string] = value
       return true
     },
