@@ -884,6 +884,10 @@ export class SonicPiEngine {
         <T>(arr: T[] | Ring<T>, n: number) => topLevelBuilder.stretch(arr, n),
         (...values: number[]) => topLevelBuilder.bools(...values),
         <T>(...values: T[]) => topLevelBuilder.ramp(...values),
+        // Pattern helpers (#211 Tier A) — deferred steps via topLevelBuilder
+        (notes: (number | string)[], opts?: Record<string, unknown>) => { topLevelBuilder.play_pattern(notes, opts); },
+        (notes: number | string | Ring<number> | number[], opts?: Record<string, unknown>) => { topLevelBuilder.play_chord(notes, opts); },
+        (notes: (number | string)[], times: number | number[], opts?: Record<string, unknown>) => { topLevelBuilder.play_pattern_timed(notes, times, opts); },
       ]
 
       const codeWarnings = validateCode(transpiledCode)

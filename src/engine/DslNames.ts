@@ -60,6 +60,8 @@ export const DSL_NAMES = [
   'tick', 'look', 'tick_set', 'tick_reset', 'tick_reset_all',
   // Tier A — ring helpers (#211)
   'pick', 'shuffle', 'stretch', 'bools', 'ramp',
+  // Tier A — pattern helpers (#211)
+  'play_pattern', 'play_chord', 'play_pattern_timed',
 ] as const
 
 export type DslName = typeof DSL_NAMES[number]

@@ -238,6 +238,38 @@ describe('Ring helpers (#211 Tier A)', () => {
   })
 })
 
+describe('Pattern helpers (#211 Tier A)', () => {
+  it('play_pattern emits N play steps with sleep(1) between', () => {
+    const b = new ProgramBuilder()
+    b.play_pattern([60, 64, 67])
+    const steps = b.build()
+    expect(steps.filter(s => s.tag === 'play').length).toBe(3)
+    expect(steps.filter(s => s.tag === 'sleep').length).toBe(3)
+  })
+
+  it('play_chord plays all notes simultaneously (no sleep between)', () => {
+    const b = new ProgramBuilder()
+    b.play_chord([60, 64, 67])
+    const steps = b.build()
+    expect(steps.filter(s => s.tag === 'play').length).toBe(3)
+    expect(steps.filter(s => s.tag === 'sleep').length).toBe(0)
+  })
+
+  it('play_pattern_timed cycles through times array', () => {
+    const b = new ProgramBuilder()
+    b.play_pattern_timed([60, 64, 67, 72], [0.25, 0.5])
+    const sleeps = b.build().filter(s => s.tag === 'sleep')
+    expect(sleeps.map(s => (s as { tag: 'sleep'; beats: number }).beats)).toEqual([0.25, 0.5, 0.25])
+  })
+
+  it('play_pattern_timed accepts scalar time', () => {
+    const b = new ProgramBuilder()
+    b.play_pattern_timed([60, 64, 67], 0.5)
+    const sleeps = b.build().filter(s => s.tag === 'sleep')
+    expect(sleeps.map(s => (s as { tag: 'sleep'; beats: number }).beats)).toEqual([0.5, 0.5])
+  })
+})
+
 describe('spread (Euclidean rhythm)', () => {
   it('spread(3, 8) matches known Euclidean pattern', () => {
     const pattern = spread(3, 8).toArray()
