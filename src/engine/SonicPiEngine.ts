@@ -872,6 +872,12 @@ export class SonicPiEngine {
         (_val?: boolean) => { /* no-op — use_debug controls log verbosity in Desktop SP */ },
         // Latency — no-op at top level; inside loops it's handled by ProgramBuilder + AudioInterpreter
         () => { /* use_real_time: no-op at top level — only meaningful inside live_loops (#149) */ },
+        // Global tick context (#211 Tier A)
+        (name?: string, opts?: { step?: number }) => topLevelBuilder.tick(name ?? '__default', opts),
+        (name?: string, offset?: number) => topLevelBuilder.look(name ?? '__default', offset ?? 0),
+        (nameOrValue: string | number, value?: number) => topLevelBuilder.tick_set(nameOrValue, value),
+        (name?: string) => topLevelBuilder.tick_reset(name ?? '__default'),
+        () => topLevelBuilder.tick_reset_all(),
       ]
 
       const codeWarnings = validateCode(transpiledCode)

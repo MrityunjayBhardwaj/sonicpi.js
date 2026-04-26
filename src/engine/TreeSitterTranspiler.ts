@@ -220,8 +220,8 @@ const BUILDER_METHODS = new Set([
   // Random (resolved eagerly)
   'rrand', 'rrand_i', 'rand', 'rand_i', 'choose', 'dice', 'one_in', 'rdist', 'rand_look',
   'shuffle', 'pick',
-  // Tick
-  'tick', 'look', 'tick_reset', 'tick_reset_all',
+  // Tick (#211)
+  'tick', 'look', 'tick_reset', 'tick_reset_all', 'tick_set',
   // Transpose
   'use_transpose', 'with_transpose',
   // Synth defaults / BPM / synth blocks

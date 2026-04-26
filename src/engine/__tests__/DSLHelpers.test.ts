@@ -4,6 +4,7 @@ import { Ring, ring } from '../Ring'
 import { spread } from '../EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq, noteInfo } from '../NoteToFreq'
 import { MidiBridge } from '../MidiBridge'
+import { ProgramBuilder } from '../ProgramBuilder'
 
 describe('SeededRandom', () => {
   it('is deterministic with same seed', () => {
@@ -106,6 +107,67 @@ describe('Ring', () => {
   it('is iterable', () => {
     const r = ring(1, 2, 3)
     expect([...r]).toEqual([1, 2, 3])
+  })
+})
+
+describe('Global tick context (#211 Tier A)', () => {
+  it('default tick advances from 0', () => {
+    const b = new ProgramBuilder()
+    expect(b.tick()).toBe(0)
+    expect(b.tick()).toBe(1)
+    expect(b.tick()).toBe(2)
+  })
+
+  it('named ticks are independent', () => {
+    const b = new ProgramBuilder()
+    expect(b.tick('a')).toBe(0)
+    expect(b.tick('b')).toBe(0)
+    expect(b.tick('a')).toBe(1)
+    expect(b.tick('b')).toBe(1)
+  })
+
+  it('look reads without advancing', () => {
+    const b = new ProgramBuilder()
+    b.tick('foo'); b.tick('foo')
+    expect(b.look('foo')).toBe(1)
+    expect(b.look('foo')).toBe(1) // unchanged
+    expect(b.tick('foo')).toBe(2)
+  })
+
+  it('tick_set jumps the counter', () => {
+    const b = new ProgramBuilder()
+    b.tick_set('foo', 10)
+    expect(b.tick('foo')).toBe(11)
+    b.tick_set(99) // bare-number form sets default
+    expect(b.tick()).toBe(100)
+  })
+
+  it('tick_reset clears named counter', () => {
+    const b = new ProgramBuilder()
+    b.tick('foo'); b.tick('foo'); b.tick('foo')
+    b.tick_reset('foo')
+    expect(b.tick('foo')).toBe(0)
+  })
+
+  it('tick_reset_all clears every counter', () => {
+    const b = new ProgramBuilder()
+    b.tick('a'); b.tick('b'); b.tick()
+    b.tick_reset_all()
+    expect(b.tick('a')).toBe(0)
+    expect(b.tick('b')).toBe(0)
+    expect(b.tick()).toBe(0)
+  })
+
+  it('look on uninitialized counter returns 0', () => {
+    const b = new ProgramBuilder()
+    expect(b.look('never_ticked')).toBe(0)
+  })
+
+  it('look offset adds without advancing', () => {
+    const b = new ProgramBuilder()
+    b.tick('foo'); b.tick('foo') // counter at 1
+    expect(b.look('foo', 5)).toBe(6)
+    expect(b.look('foo')).toBe(1) // still 1
   })
 })
 

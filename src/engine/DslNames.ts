@@ -56,6 +56,8 @@ export const DSL_NAMES = [
   'use_debug',
   // Latency — set schedule-ahead to 0 for responsive MIDI input (#149)
   'use_real_time',
+  // Tier A — global tick context (#211)
+  'tick', 'look', 'tick_set', 'tick_reset', 'tick_reset_all',
 ] as const
 
 export type DslName = typeof DSL_NAMES[number]

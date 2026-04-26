@@ -84,6 +84,12 @@ const PURE_OR_INTENTIONAL_BUILD_TIME = new Map<string, string>([
   ['degree',           'Pure.'],
   ['chord_names',      'Pure catalog lookup.'],
   ['scale_names',      'Pure catalog lookup.'],
+  // Tick context — build-time per-builder counter; tick is per-iteration deterministic.
+  ['tick',             'Build-time named-tick counter. ProgramBuilder.tick — same surface as desktop SP.'],
+  ['look',             'Build-time named-tick read without advancing.'],
+  ['tick_set',         'Build-time named-tick assignment.'],
+  ['tick_reset',       'Build-time named-tick reset.'],
+  ['tick_reset_all',   'Build-time reset of all named-tick counters.'],
   // Random — desktop Sonic Pi resolves these at build-time deterministically (seeded)
   ['rrand',            'Desktop SP convention: resolved at build-time against the live_loop seed.'],
   ['rrand_i',          'Desktop SP convention: build-time seeded.'],

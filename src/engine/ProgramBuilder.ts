@@ -495,6 +495,15 @@ export class ProgramBuilder {
     this.ticks.clear()
   }
 
+  /** Set a named tick counter to a specific value. Subsequent `tick(name)` returns value+step. */
+  tick_set(nameOrValue: string | number, value?: number): void {
+    if (typeof nameOrValue === 'number') {
+      this.ticks.set('__default', nameOrValue)
+    } else {
+      this.ticks.set(nameOrValue, value ?? 0)
+    }
+  }
+
   // --- Transpose ---
 
   /** Set transpose offset (semitones) for all subsequent play calls. */
