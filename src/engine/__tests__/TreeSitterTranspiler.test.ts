@@ -1114,6 +1114,24 @@ end`)
       expect(steps[0].tag).toBe('sample')
     })
 
+    it('synth + control captures play node ref and emits control step (#211)', () => {
+      const { steps, error } = executeTranspiled(`live_loop :t do
+  s = synth :saw, note: 60, release: 4
+  sleep 0.1
+  control s, cutoff: 80, amp: 0.5
+  sleep 1
+end`)
+      expect(error).toBeUndefined()
+      const playStep = steps.find((s: any) => s.tag === 'play')
+      const controlStep = steps.find((s: any) => s.tag === 'control')
+      expect(playStep).toBeDefined()
+      expect(controlStep).toBeDefined()
+      // control's nodeRef is a number — the captured __b.lastRef from the synth call.
+      expect(typeof controlStep!.nodeRef).toBe('number')
+      expect(controlStep!.params.cutoff).toBe(80)
+      expect(controlStep!.params.amp).toBe(0.5)
+    })
+
     it('with_fx block param captures FX node ref for control', () => {
       const { steps, error } = executeTranspiled(`live_loop :t do
   with_fx :reverb, room: 0.8 do |r|
