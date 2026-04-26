@@ -899,6 +899,11 @@ export class SonicPiEngine {
         // ReferenceError. (#211)
         () => { /* define stub — transpiler handles the real path */ },
         () => { /* ndefine stub — transpiler handles the real path */ },
+        // time_warp — the transpiler turns `time_warp 0.5 do ... end` into
+        // `__b.at([0.5], null, ...)`. This runtime stub catches the rare regex
+        // fallback path; it forwards to topLevelAt's array-of-times shape. (#211)
+        (offset: number, fn: (b: ProgramBuilder) => void) =>
+          topLevelAt([offset], null, fn),
       ]
 
       const codeWarnings = validateCode(transpiledCode)

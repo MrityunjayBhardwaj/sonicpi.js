@@ -69,6 +69,9 @@ export const DSL_NAMES = [
   // these names are blocklist-safe entries so user code that introspects them
   // doesn't fall through to globalThis. (#211)
   'define', 'ndefine',
+  // Tier A — time_warp is transpiler-handled (transpileTimeWarp → __b.at(...)).
+  // Runtime stub is a fallback for the regex transpiler path. (#211)
+  'time_warp',
 ] as const
 
 export type DslName = typeof DSL_NAMES[number]

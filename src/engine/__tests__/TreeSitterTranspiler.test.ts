@@ -1114,6 +1114,20 @@ end`)
       expect(steps[0].tag).toBe('sample')
     })
 
+    it('time_warp offsets a block without advancing global virtual time (#211)', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  time_warp 0.25 do
+    play 60
+  end
+  play 64
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      // time_warp transpiles to __b.at([0.25], null, ...)
+      expect(result.code).toContain('__b.at([0.25]')
+      expect(result.code).toContain('null')
+    })
+
     it('synth + control captures play node ref and emits control step (#211)', () => {
       const { steps, error } = executeTranspiled(`live_loop :t do
   s = synth :saw, note: 60, release: 4
