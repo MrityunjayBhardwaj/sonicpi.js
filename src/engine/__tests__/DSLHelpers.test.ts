@@ -5,6 +5,7 @@ import { spread } from '../EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq, noteInfo } from '../NoteToFreq'
 import { MidiBridge } from '../MidiBridge'
 import { ProgramBuilder } from '../ProgramBuilder'
+import { assert, assert_equal, assert_similar, assert_not, assert_error, inc, dec, AssertionFailedError } from '../Asserts'
 
 describe('SeededRandom', () => {
   it('is deterministic with same seed', () => {
@@ -267,6 +268,55 @@ describe('Pattern helpers (#211 Tier A)', () => {
     b.play_pattern_timed([60, 64, 67], 0.5)
     const sleeps = b.build().filter(s => s.tag === 'sleep')
     expect(sleeps.map(s => (s as { tag: 'sleep'; beats: number }).beats)).toEqual([0.5, 0.5])
+  })
+})
+
+describe('Asserts + inc/dec (#211 Tier A)', () => {
+  it('assert passes on truthy', () => {
+    expect(assert(true)).toBe(true)
+    expect(assert(1)).toBe(true)
+    expect(assert('x')).toBe(true)
+  })
+
+  it('assert throws AssertionFailedError on falsy', () => {
+    expect(() => assert(false)).toThrow(AssertionFailedError)
+    expect(() => assert(0)).toThrow(AssertionFailedError)
+    expect(() => assert(null)).toThrow(/assert failed/)
+  })
+
+  it('assert uses custom message', () => {
+    expect(() => assert(false, 'expected truthy')).toThrow(/expected truthy/)
+  })
+
+  it('assert_equal handles primitives + deep objects', () => {
+    expect(assert_equal(1, 1)).toBe(true)
+    expect(assert_equal('a', 'a')).toBe(true)
+    expect(assert_equal({ x: 1 }, { x: 1 })).toBe(true)
+    expect(() => assert_equal(1, 2)).toThrow(AssertionFailedError)
+    expect(() => assert_equal({ x: 1 }, { x: 2 })).toThrow(AssertionFailedError)
+  })
+
+  it('assert_similar tolerates float epsilon', () => {
+    expect(assert_similar(0.1 + 0.2, 0.3)).toBe(true)
+    expect(() => assert_similar(1, 1.5)).toThrow(AssertionFailedError)
+  })
+
+  it('assert_not is the inverse of assert', () => {
+    expect(assert_not(false)).toBe(true)
+    expect(assert_not(0)).toBe(true)
+    expect(() => assert_not(true)).toThrow(AssertionFailedError)
+  })
+
+  it('assert_error passes when block throws', () => {
+    expect(assert_error(() => { throw new Error('boom') })).toBe(true)
+    expect(() => assert_error(() => 42)).toThrow(/did not raise/)
+  })
+
+  it('inc and dec are pure math', () => {
+    expect(inc(5)).toBe(6)
+    expect(dec(5)).toBe(4)
+    expect(inc(0)).toBe(1)
+    expect(dec(0)).toBe(-1)
   })
 })
 

@@ -96,6 +96,15 @@ const PURE_OR_INTENTIONAL_BUILD_TIME = new Map<string, string>([
   ['stretch',          'Pure: repeat each element n times.'],
   ['bools',            'Pure: boolean ring constructor.'],
   ['ramp',             'Pure: non-cycling ring constructor (clamps to last value).'],
+  // Asserts + counter helpers — pure build-time (#211). Failures throw
+  // synchronously so the editor error overlay surfaces them.
+  ['assert',           'Pure: throws AssertionFailedError on falsy condition.'],
+  ['assert_equal',     'Pure: throws on inequality (deep for objects).'],
+  ['assert_similar',   'Pure: float epsilon comparison.'],
+  ['assert_not',       'Pure: throws on truthy condition.'],
+  ['assert_error',     'Pure: throws if block does NOT raise.'],
+  ['inc',              'Pure: x + 1.'],
+  ['dec',              'Pure: x - 1.'],
   // Random — desktop Sonic Pi resolves these at build-time deterministically (seeded)
   ['rrand',            'Desktop SP convention: resolved at build-time against the live_loop seed.'],
   ['rrand_i',          'Desktop SP convention: build-time seeded.'],

@@ -62,6 +62,9 @@ export const DSL_NAMES = [
   'pick', 'shuffle', 'stretch', 'bools', 'ramp',
   // Tier A — pattern helpers (#211)
   'play_pattern', 'play_chord', 'play_pattern_timed',
+  // Tier A — asserts + counter helpers (#211)
+  'assert', 'assert_equal', 'assert_similar', 'assert_not', 'assert_error',
+  'inc', 'dec',
 ] as const
 
 export type DslName = typeof DSL_NAMES[number]

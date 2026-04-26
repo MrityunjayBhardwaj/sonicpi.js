@@ -23,6 +23,7 @@ import { friendlyError, formatFriendlyError, type FriendlyError } from './Friend
 import { detectStratum, Stratum } from './Stratum'
 import { SoundEventStream } from './SoundEventStream'
 import { ring, knit, range, line, Ring } from './Ring'
+import { assert, assert_equal, assert_similar, assert_not, assert_error, inc, dec } from './Asserts'
 import { MidiBridge } from './MidiBridge'
 import { spread } from './EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq, hzToMidi, noteInfo } from './NoteToFreq'
@@ -888,6 +889,9 @@ export class SonicPiEngine {
         (notes: (number | string)[], opts?: Record<string, unknown>) => { topLevelBuilder.play_pattern(notes, opts); },
         (notes: number | string | Ring<number> | number[], opts?: Record<string, unknown>) => { topLevelBuilder.play_chord(notes, opts); },
         (notes: (number | string)[], times: number | number[], opts?: Record<string, unknown>) => { topLevelBuilder.play_pattern_timed(notes, times, opts); },
+        // Asserts + counter helpers (#211 Tier A) — pure build-time
+        assert, assert_equal, assert_similar, assert_not, assert_error,
+        inc, dec,
       ]
 
       const codeWarnings = validateCode(transpiledCode)
