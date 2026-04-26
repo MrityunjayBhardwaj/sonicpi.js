@@ -232,7 +232,7 @@ const BUILDER_METHODS = new Set([
   // BPM scaling control
   'use_arg_bpm_scaling', 'with_arg_bpm_scaling',
   // Utility
-  'factor_q', 'bools', 'play_pattern_timed', 'sample_duration',
+  'factor_q', 'bools', 'play_pattern_timed', 'sample_duration', 'stretch', 'ramp',
   'hz_to_midi', 'midi_to_hz', 'quantise', 'quantize', 'octs',
   'kill', 'play_chord', 'play_pattern',
   'with_octave', 'with_random_seed', 'with_density',

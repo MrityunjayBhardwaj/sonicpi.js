@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SeededRandom } from '../SeededRandom'
-import { Ring, ring } from '../Ring'
+import { Ring, ring, ramp, stretch, Ramp } from '../Ring'
 import { spread } from '../EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq, noteInfo } from '../NoteToFreq'
 import { MidiBridge } from '../MidiBridge'
@@ -168,6 +168,73 @@ describe('Global tick context (#211 Tier A)', () => {
     b.tick('foo'); b.tick('foo') // counter at 1
     expect(b.look('foo', 5)).toBe(6)
     expect(b.look('foo')).toBe(1) // still 1
+  })
+})
+
+describe('Ring helpers (#211 Tier A)', () => {
+  it('stretch repeats each element n times', () => {
+    const r = stretch([1, 2, 3], 2)
+    expect(r.toArray()).toEqual([1, 1, 2, 2, 3, 3])
+  })
+
+  it('stretch accepts a Ring as input', () => {
+    const r = stretch(ring(1, 2, 3), 3)
+    expect(r.toArray()).toEqual([1, 1, 1, 2, 2, 2, 3, 3, 3])
+  })
+
+  it('ramp clamps at boundaries', () => {
+    const r = ramp(60, 64, 67)
+    expect(r.at(0)).toBe(60)
+    expect(r.at(2)).toBe(67)
+    expect(r.at(5)).toBe(67) // clamps high
+    expect(r.at(-1)).toBe(60) // clamps low
+  })
+
+  it('ramp tick advances then sticks at last', () => {
+    const r = ramp(1, 2, 3)
+    expect(r.tick()).toBe(1)
+    expect(r.tick()).toBe(2)
+    expect(r.tick()).toBe(3)
+    expect(r.tick()).toBe(3) // stays
+    expect(r.tick()).toBe(3)
+  })
+
+  it('ramp is iterable + indexable via Proxy', () => {
+    const r = ramp(10, 20, 30)
+    expect([...r]).toEqual([10, 20, 30])
+    expect(r[1]).toBe(20)
+    expect(r instanceof Ramp).toBe(true)
+  })
+
+  it('ProgramBuilder.bools returns truth-value ring', () => {
+    const b = new ProgramBuilder()
+    expect(b.bools(1, 0, 1, 1, 0).toArray()).toEqual([true, false, true, true, false])
+  })
+
+  it('ProgramBuilder.pick is deterministic with seed', () => {
+    const b1 = new ProgramBuilder(42)
+    const b2 = new ProgramBuilder(42)
+    expect(b1.pick([10, 20, 30, 40], 3).toArray())
+      .toEqual(b2.pick([10, 20, 30, 40], 3).toArray())
+  })
+
+  it('ProgramBuilder.shuffle preserves length and elements', () => {
+    const b = new ProgramBuilder(42)
+    const out = b.shuffle([1, 2, 3, 4, 5]).toArray()
+    expect(out.length).toBe(5)
+    expect(new Set(out)).toEqual(new Set([1, 2, 3, 4, 5]))
+  })
+
+  it('ProgramBuilder.stretch matches standalone', () => {
+    const b = new ProgramBuilder()
+    expect(b.stretch([1, 2], 3).toArray()).toEqual([1, 1, 1, 2, 2, 2])
+  })
+
+  it('ProgramBuilder.ramp returns Ramp', () => {
+    const b = new ProgramBuilder()
+    const r = b.ramp(5, 10, 15)
+    expect(r instanceof Ramp).toBe(true)
+    expect(r.at(99)).toBe(15)
   })
 })
 

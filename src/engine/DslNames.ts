@@ -58,6 +58,8 @@ export const DSL_NAMES = [
   'use_real_time',
   // Tier A — global tick context (#211)
   'tick', 'look', 'tick_set', 'tick_reset', 'tick_reset_all',
+  // Tier A — ring helpers (#211)
+  'pick', 'shuffle', 'stretch', 'bools', 'ramp',
 ] as const
 
 export type DslName = typeof DSL_NAMES[number]

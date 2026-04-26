@@ -90,6 +90,12 @@ const PURE_OR_INTENTIONAL_BUILD_TIME = new Map<string, string>([
   ['tick_set',         'Build-time named-tick assignment.'],
   ['tick_reset',       'Build-time named-tick reset.'],
   ['tick_reset_all',   'Build-time reset of all named-tick counters.'],
+  // Ring helpers — pure data transforms (#211).
+  ['pick',             'Pure: random sample (build-time seeded against the live_loop seed).'],
+  ['shuffle',          'Pure: Fisher-Yates shuffle (build-time seeded).'],
+  ['stretch',          'Pure: repeat each element n times.'],
+  ['bools',            'Pure: boolean ring constructor.'],
+  ['ramp',             'Pure: non-cycling ring constructor (clamps to last value).'],
   // Random — desktop Sonic Pi resolves these at build-time deterministically (seeded)
   ['rrand',            'Desktop SP convention: resolved at build-time against the live_loop seed.'],
   ['rrand_i',          'Desktop SP convention: build-time seeded.'],

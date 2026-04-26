@@ -22,7 +22,7 @@ const CLAMP_WARN_RE = /clamped to .+ \((min|max)\)$/
 import { friendlyError, formatFriendlyError, type FriendlyError } from './FriendlyErrors'
 import { detectStratum, Stratum } from './Stratum'
 import { SoundEventStream } from './SoundEventStream'
-import { ring, knit, range, line } from './Ring'
+import { ring, knit, range, line, Ring } from './Ring'
 import { MidiBridge } from './MidiBridge'
 import { spread } from './EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq, hzToMidi, noteInfo } from './NoteToFreq'
@@ -878,6 +878,12 @@ export class SonicPiEngine {
         (nameOrValue: string | number, value?: number) => topLevelBuilder.tick_set(nameOrValue, value),
         (name?: string) => topLevelBuilder.tick_reset(name ?? '__default'),
         () => topLevelBuilder.tick_reset_all(),
+        // Ring helpers (#211 Tier A)
+        <T>(arr: T[] | Ring<T>, n: number = 1) => topLevelBuilder.pick(arr, n),
+        <T>(arr: T[] | Ring<T>) => topLevelBuilder.shuffle(arr),
+        <T>(arr: T[] | Ring<T>, n: number) => topLevelBuilder.stretch(arr, n),
+        (...values: number[]) => topLevelBuilder.bools(...values),
+        <T>(...values: T[]) => topLevelBuilder.ramp(...values),
       ]
 
       const codeWarnings = validateCode(transpiledCode)

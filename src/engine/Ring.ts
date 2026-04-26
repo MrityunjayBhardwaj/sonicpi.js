@@ -200,6 +200,60 @@ export function range(start: number, end: number, stepOrOpts: number | { step?: 
 }
 
 /**
+ * Non-cycling ring — clamps to last element on overflow instead of wrapping.
+ * `ramp(60, 64, 67).at(0) → 60`, `.at(2) → 67`, `.at(5) → 67`.
+ */
+export class Ramp<T> {
+  private items: T[]
+  private _tick = 0;
+
+  [key: number]: T
+
+  constructor(items: T[]) {
+    this.items = [...items]
+    return new Proxy(this, {
+      get(target, prop, receiver) {
+        if (typeof prop === 'string') {
+          const n = Number(prop)
+          if (!isNaN(n) && String(n) === prop) return target.at(n)
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+  }
+
+  get length(): number { return this.items.length }
+
+  at(index: number): T {
+    if (this.items.length === 0) return undefined as T
+    if (index <= 0) return this.items[0]
+    if (index >= this.items.length) return this.items[this.items.length - 1]
+    return this.items[index]
+  }
+
+  tick(): T { return this.at(this._tick++) }
+  look(): T { return this.at(this._tick) }
+  resetTick(): void { this._tick = 0 }
+  toArray(): T[] { return [...this.items] }
+  [Symbol.iterator](): Iterator<T> { return this.items[Symbol.iterator]() }
+}
+
+/** Create a non-cycling Ramp from values. */
+export function ramp<T>(...values: T[]): Ramp<T> {
+  return new Ramp(values)
+}
+
+/** Standalone stretch: `stretch([1,2,3], 2) → Ring([1,1,2,2,3,3])`. */
+export function stretch<T>(arr: T[] | Ring<T>, n: number): Ring<T> {
+  const items = arr instanceof Ring ? arr.toArray() : [...arr]
+  const result: T[] = []
+  for (const item of items) {
+    for (let i = 0; i < n; i++) result.push(item)
+  }
+  return new Ring(result)
+}
+
+/**
  * Line: generate a line of N values between start and end.
  * line(60, 72, 5) → Ring([60, 63, 66, 69, 72])
  */
