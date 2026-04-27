@@ -58,6 +58,37 @@ describe('SonicPiEngine', () => {
     engine.dispose()
   })
 
+  it('define persists across re-evaluations (#215)', async () => {
+    const engine = new SonicPiEngine()
+    await engine.init()
+
+    // First eval — define a fn and call it inside a loop.
+    const r1 = await engine.evaluate(`
+define :hello do
+  play 60
+end
+
+live_loop :run do
+  hello
+  sleep 1
+end
+`)
+    expect(r1.error).toBeUndefined()
+
+    // Second eval — buffer no longer contains the define, but the live_loop
+    // calling \`hello\` is still expected to work because the engine seeded
+    // the prior fn into the new scope. With #215 fix this should NOT error.
+    const r2 = await engine.evaluate(`
+live_loop :run do
+  hello
+  sleep 1
+end
+`)
+    expect(r2.error).toBeUndefined()
+
+    engine.dispose()
+  })
+
   it('components.streaming provides eventStream', async () => {
     const engine = new SonicPiEngine()
     await engine.init()

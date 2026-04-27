@@ -1000,9 +1000,9 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
       return transpileLiveLoop(node, argsNode, blockNode, ctx)
     }
 
-    // define :name do |args| ... end  (and ndefine — same surface, doesn't persist; #211)
+    // define :name do |args| ... end  (and ndefine — same surface, doesn't persist; #211/#215)
     if (methodName === 'define' || methodName === 'ndefine') {
-      return transpileDefine(node, argsNode, blockNode, ctx)
+      return transpileDefine(node, argsNode, blockNode, ctx, methodName)
     }
 
     // with_fx :name, opts do ... end
@@ -1554,7 +1554,7 @@ function transpileLiveLoop(
 }
 
 function transpileDefine(
-  node: any, argsNode: any, blockNode: any, ctx: TranspileContext
+  node: any, argsNode: any, blockNode: any, ctx: TranspileContext, methodName: string = 'define'
 ): string {
   const args = argsNode?.namedChildren ?? []
   let name = 'unnamed'
@@ -1569,8 +1569,8 @@ function transpileDefine(
 
   if (!blockNode) {
     const line = node.startPosition?.row != null ? node.startPosition.row + 1 : '?'
-    ctx.errors.push(`Parse error at line ${line}: define :${name} is missing 'do ... end' block`)
-    return `/* parse error: define :${name} missing block */`
+    ctx.errors.push(`Parse error at line ${line}: ${methodName} :${name} is missing 'do ... end' block`)
+    return `/* parse error: ${methodName} :${name} missing block */`
   }
 
   // Get block parameters (|a, b = default|)
@@ -1582,7 +1582,14 @@ function transpileDefine(
   const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
   const bodyStr = transpileBlockBody(blockNode, bodyCtx)
 
-  return `function ${name}(__b${paramStr ? ', ' + paramStr : ''}) {\n${bodyStr}\n${ctx.indent}}`
+  // For `define`, also call the runtime registrar so the engine persists the
+  // function across re-evals (#215). `ndefine` skips this — its semantic is
+  // per-eval only.
+  const decl = `function ${name}(__b${paramStr ? ', ' + paramStr : ''}) {\n${bodyStr}\n${ctx.indent}}`
+  if (methodName === 'define') {
+    return `${decl};\n${ctx.indent}define(${JSON.stringify(name)}, ${name})`
+  }
+  return decl
 }
 
 function transpileWithBlock(

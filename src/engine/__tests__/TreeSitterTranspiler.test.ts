@@ -901,6 +901,10 @@ end`,
         const sample_names = () => []
         const sample_groups = () => []
         const sample_loaded = () => false
+        // No-op define stub — the transpiler now emits `define(name, fn)` after
+        // the function decl (#215). This harness doesn't need persistence; it
+        // just needs the call to succeed.
+        const define = (_name: string, _fn: unknown) => {}
 
         // Execute the transpiled code in the scope
         const fn = new Function(
@@ -910,7 +914,7 @@ end`,
           'ring', 'spread', 'chord', 'scale', 'chord_invert', 'note', 'note_range',
           'noteToMidi', 'midiToFreq', 'noteToFreq',
           'sample_duration', 'sample_names', 'sample_groups', 'sample_loaded',
-          '__spAdd', '__spSub', '__spMul',
+          '__spAdd', '__spSub', '__spMul', 'define',
           result.code,
         )
         fn(
@@ -920,7 +924,7 @@ end`,
           ring, spread, chord, scale, chord_invert, note, note_range,
           noteToMidi, midiToFreq, noteToFreq,
           sample_duration, sample_names, sample_groups, sample_loaded,
-          __spAdd, __spSub, __spMul,
+          __spAdd, __spSub, __spMul, define,
         )
 
         if (!capturedBuilderFn) return { steps: [], error: 'No live_loop captured' }

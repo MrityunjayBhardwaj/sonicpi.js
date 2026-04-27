@@ -121,6 +121,10 @@ export class SonicPiEngine {
   readonly midiBridge = new MidiBridge()
   /** Global key-value store — shared across all loops via get/set */
   private globalStore = new Map<string | symbol, unknown>()
+  /** User-defined functions — `define`/`ndefine` register here. Seeded back into the
+   *  next eval's scopeBase so removing a `define` line from the buffer does not
+   *  break a still-running live_loop that calls it. (#215) */
+  private definedFns = new Map<string, (...args: unknown[]) => unknown>()
   /** Host-provided OSC send handler. Engine fires this; host wires to actual transport. */
   private oscHandler: ((host: string, port: number, path: string, ...args: unknown[]) => void) | null = null
 
@@ -892,12 +896,17 @@ export class SonicPiEngine {
         // Asserts + counter helpers (#211 Tier A) — pure build-time
         assert, assert_equal, assert_similar, assert_not, assert_error,
         inc, dec,
-        // define / ndefine — the transpiler converts these to JS function decls
-        // (TreeSitterTranspiler.transpileDefine). The runtime stubs only fire
-        // when the regex fallback transpiler runs without recognising the form;
-        // they keep the call from hitting `undefined` and producing a confusing
-        // ReferenceError. (#211)
-        () => { /* define stub — transpiler handles the real path */ },
+        // define — transpiler emits both the function decl AND a register call
+        // (transpileDefine line ~1586). The register persists the fn across
+        // re-evals so removing a `define` line from the buffer does not break
+        // a still-running live_loop that calls it. (#215)
+        (name: string, fn: (...args: unknown[]) => unknown) => {
+          if (typeof name === 'string' && typeof fn === 'function') {
+            this.definedFns.set(name, fn)
+          }
+        },
+        // ndefine — same call shape as define, but does NOT persist across
+        // re-evals (the register call is omitted by the transpiler).
         () => { /* ndefine stub — transpiler handles the real path */ },
         // time_warp — the transpiler turns `time_warp 0.5 do ... end` into
         // `__b.at([0.5], null, ...)`. This runtime stub catches the rare regex
@@ -912,7 +921,10 @@ export class SonicPiEngine {
         else console.warn('[SonicPi]', warning)
       }
 
-      const sandbox = createIsolatedExecutor(transpiledCode, dslNames)
+      // Seed prior `define`-bound functions so they remain callable even if
+      // the user removes the define line from the buffer. (#215)
+      const persistedFns = Object.fromEntries(this.definedFns)
+      const sandbox = createIsolatedExecutor(transpiledCode, dslNames, persistedFns)
       scopeHandle = sandbox.scopeHandle
       await sandbox.execute(...dslValues)
 
