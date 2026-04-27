@@ -1025,6 +1025,13 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
       return transpileTimeWarp(argsNode, blockNode, ctx)
     }
 
+    // assert_error do … end → assert_error((__b) => { … })  (#216)
+    if (methodName === 'assert_error' && blockNode) {
+      const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
+      const bodyStr = transpileBlockBody(blockNode, bodyCtx)
+      return `assert_error((__b) => {\n${bodyStr}\n${ctx.indent}})`
+    }
+
     // density N do ... end
     if (methodName === 'density') {
       return transpileDensity(argsNode, blockNode, ctx)

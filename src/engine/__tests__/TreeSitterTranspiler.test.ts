@@ -1118,6 +1118,17 @@ end`)
       expect(steps[0].tag).toBe('sample')
     })
 
+    it('assert_error block-form transpiles to a callback (#216)', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  assert_error do
+    raise "boom"
+  end
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('assert_error((__b) => {')
+    })
+
     it('time_warp offsets a block without advancing global virtual time (#211)', () => {
       const result = treeSitterTranspile(`live_loop :t do
   time_warp 0.25 do
