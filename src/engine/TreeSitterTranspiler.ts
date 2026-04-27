@@ -220,8 +220,8 @@ const BUILDER_METHODS = new Set([
   // Random (resolved eagerly)
   'rrand', 'rrand_i', 'rand', 'rand_i', 'choose', 'dice', 'one_in', 'rdist', 'rand_look',
   'shuffle', 'pick',
-  // Tick
-  'tick', 'look', 'tick_reset', 'tick_reset_all',
+  // Tick (#211)
+  'tick', 'look', 'tick_reset', 'tick_reset_all', 'tick_set',
   // Transpose
   'use_transpose', 'with_transpose',
   // Synth defaults / BPM / synth blocks
@@ -232,7 +232,7 @@ const BUILDER_METHODS = new Set([
   // BPM scaling control
   'use_arg_bpm_scaling', 'with_arg_bpm_scaling',
   // Utility
-  'factor_q', 'bools', 'play_pattern_timed', 'sample_duration',
+  'factor_q', 'bools', 'play_pattern_timed', 'sample_duration', 'stretch', 'ramp',
   'hz_to_midi', 'midi_to_hz', 'quantise', 'quantize', 'octs',
   'kill', 'play_chord', 'play_pattern',
   'with_octave', 'with_random_seed', 'with_density',
@@ -899,7 +899,7 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
     // `comment` and `uncomment` are control-flow (like if-true/if-false), NOT
     // structural blocks. They stay in bareCode so their content gets the __b.
     // prefix when wrapped. Separating them would produce bare `play()` at top level.
-    } else if (method && !isBareFxNode && (method === 'live_loop' || method === 'define' || method === 'with_fx' ||
+    } else if (method && !isBareFxNode && (method === 'live_loop' || method === 'define' || method === 'ndefine' || method === 'with_fx' ||
                           method === 'in_thread' || isBareLoopNode)) {
       blocks.push(child)
     } else {
@@ -914,7 +914,7 @@ function transpileProgram(node: any, ctx: TranspileContext): string {
     const m = (child.type === 'call' || child.type === 'method_call')
       ? (child.childForFieldName('method')?.text ?? child.namedChildren[0]?.text)
       : null
-    if (m === 'define') {
+    if (m === 'define' || m === 'ndefine') {
       const argsNode = child.childForFieldName('arguments')
       const nameNode = argsNode?.namedChildren?.[0]
       if (nameNode) {
@@ -1000,9 +1000,9 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
       return transpileLiveLoop(node, argsNode, blockNode, ctx)
     }
 
-    // define :name do |args| ... end
-    if (methodName === 'define') {
-      return transpileDefine(node, argsNode, blockNode, ctx)
+    // define :name do |args| ... end  (and ndefine — same surface, doesn't persist; #211/#215)
+    if (methodName === 'define' || methodName === 'ndefine') {
+      return transpileDefine(node, argsNode, blockNode, ctx, methodName)
     }
 
     // with_fx :name, opts do ... end
@@ -1023,6 +1023,13 @@ function transpileMethodCall(node: any, ctx: TranspileContext): string {
     // time_warp offset do ... end
     if (methodName === 'time_warp') {
       return transpileTimeWarp(argsNode, blockNode, ctx)
+    }
+
+    // assert_error do … end → assert_error((__b) => { … })  (#216)
+    if (methodName === 'assert_error' && blockNode) {
+      const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
+      const bodyStr = transpileBlockBody(blockNode, bodyCtx)
+      return `assert_error((__b) => {\n${bodyStr}\n${ctx.indent}})`
     }
 
     // density N do ... end
@@ -1554,7 +1561,7 @@ function transpileLiveLoop(
 }
 
 function transpileDefine(
-  node: any, argsNode: any, blockNode: any, ctx: TranspileContext
+  node: any, argsNode: any, blockNode: any, ctx: TranspileContext, methodName: string = 'define'
 ): string {
   const args = argsNode?.namedChildren ?? []
   let name = 'unnamed'
@@ -1569,8 +1576,8 @@ function transpileDefine(
 
   if (!blockNode) {
     const line = node.startPosition?.row != null ? node.startPosition.row + 1 : '?'
-    ctx.errors.push(`Parse error at line ${line}: define :${name} is missing 'do ... end' block`)
-    return `/* parse error: define :${name} missing block */`
+    ctx.errors.push(`Parse error at line ${line}: ${methodName} :${name} is missing 'do ... end' block`)
+    return `/* parse error: ${methodName} :${name} missing block */`
   }
 
   // Get block parameters (|a, b = default|)
@@ -1582,7 +1589,14 @@ function transpileDefine(
   const bodyCtx: TranspileContext = { ...ctx, insideLoop: true }
   const bodyStr = transpileBlockBody(blockNode, bodyCtx)
 
-  return `function ${name}(__b${paramStr ? ', ' + paramStr : ''}) {\n${bodyStr}\n${ctx.indent}}`
+  // For `define`, also call the runtime registrar so the engine persists the
+  // function across re-evals (#215). `ndefine` skips this — its semantic is
+  // per-eval only.
+  const decl = `function ${name}(__b${paramStr ? ', ' + paramStr : ''}) {\n${bodyStr}\n${ctx.indent}}`
+  if (methodName === 'define') {
+    return `${decl};\n${ctx.indent}define(${JSON.stringify(name)}, ${name})`
+  }
+  return decl
 }
 
 function transpileWithBlock(

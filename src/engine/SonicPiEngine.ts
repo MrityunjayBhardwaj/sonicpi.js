@@ -22,7 +22,8 @@ const CLAMP_WARN_RE = /clamped to .+ \((min|max)\)$/
 import { friendlyError, formatFriendlyError, type FriendlyError } from './FriendlyErrors'
 import { detectStratum, Stratum } from './Stratum'
 import { SoundEventStream } from './SoundEventStream'
-import { ring, knit, range, line } from './Ring'
+import { ring, knit, range, line, Ring } from './Ring'
+import { assert, assert_equal, assert_similar, assert_not, assert_error, inc, dec } from './Asserts'
 import { MidiBridge } from './MidiBridge'
 import { spread } from './EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq, hzToMidi, noteInfo } from './NoteToFreq'
@@ -120,6 +121,10 @@ export class SonicPiEngine {
   readonly midiBridge = new MidiBridge()
   /** Global key-value store — shared across all loops via get/set */
   private globalStore = new Map<string | symbol, unknown>()
+  /** User-defined functions — `define`/`ndefine` register here. Seeded back into the
+   *  next eval's scopeBase so removing a `define` line from the buffer does not
+   *  break a still-running live_loop that calls it. (#215) */
+  private definedFns = new Map<string, (...args: unknown[]) => unknown>()
   /** Host-provided OSC send handler. Engine fires this; host wires to actual transport. */
   private oscHandler: ((host: string, port: number, path: string, ...args: unknown[]) => void) | null = null
 
@@ -645,9 +650,16 @@ export class SonicPiEngine {
         }
       }
 
-      // Top-level use_random_seed: store for deterministic live_loop seeding
+      // Top-level use_random_seed: store for deterministic live_loop seeding,
+      // AND reset the topLevelBuilder's RNG so top-level rrand/choose/pick/shuffle
+      // are deterministic against the user-supplied seed (#217). Desktop SP
+      // convention: re-running the same buffer with the same seed produces
+      // the same random sequence.
       let storedRandomSeed: number | null = null
-      const topLevelUseRandomSeed = (seed: number) => { storedRandomSeed = seed }
+      const topLevelUseRandomSeed = (seed: number) => {
+        storedRandomSeed = seed
+        topLevelBuilder.use_random_seed(seed)
+      }
 
       // Top-level in_thread: wrap callback in a one-shot live_loop
       const topLevelInThread = (fn: (b: ProgramBuilder) => void) => {
@@ -872,6 +884,42 @@ export class SonicPiEngine {
         (_val?: boolean) => { /* no-op — use_debug controls log verbosity in Desktop SP */ },
         // Latency — no-op at top level; inside loops it's handled by ProgramBuilder + AudioInterpreter
         () => { /* use_real_time: no-op at top level — only meaningful inside live_loops (#149) */ },
+        // Global tick context (#211 Tier A)
+        (name?: string, opts?: { step?: number }) => topLevelBuilder.tick(name ?? '__default', opts),
+        (name?: string, offset?: number) => topLevelBuilder.look(name ?? '__default', offset ?? 0),
+        (nameOrValue: string | number, value?: number) => topLevelBuilder.tick_set(nameOrValue, value),
+        (name?: string) => topLevelBuilder.tick_reset(name ?? '__default'),
+        () => topLevelBuilder.tick_reset_all(),
+        // Ring helpers (#211 Tier A)
+        <T>(arr: T[] | Ring<T>, n: number = 1) => topLevelBuilder.pick(arr, n),
+        <T>(arr: T[] | Ring<T>) => topLevelBuilder.shuffle(arr),
+        <T>(arr: T[] | Ring<T>, n: number) => topLevelBuilder.stretch(arr, n),
+        (...values: number[]) => topLevelBuilder.bools(...values),
+        <T>(...values: T[]) => topLevelBuilder.ramp(...values),
+        // Pattern helpers (#211 Tier A) — deferred steps via topLevelBuilder
+        (notes: (number | string)[], opts?: Record<string, unknown>) => { topLevelBuilder.play_pattern(notes, opts); },
+        (notes: number | string | Ring<number> | number[], opts?: Record<string, unknown>) => { topLevelBuilder.play_chord(notes, opts); },
+        (notes: (number | string)[], times: number | number[], opts?: Record<string, unknown>) => { topLevelBuilder.play_pattern_timed(notes, times, opts); },
+        // Asserts + counter helpers (#211 Tier A) — pure build-time
+        assert, assert_equal, assert_similar, assert_not, assert_error,
+        inc, dec,
+        // define — transpiler emits both the function decl AND a register call
+        // (transpileDefine line ~1586). The register persists the fn across
+        // re-evals so removing a `define` line from the buffer does not break
+        // a still-running live_loop that calls it. (#215)
+        (name: string, fn: (...args: unknown[]) => unknown) => {
+          if (typeof name === 'string' && typeof fn === 'function') {
+            this.definedFns.set(name, fn)
+          }
+        },
+        // ndefine — same call shape as define, but does NOT persist across
+        // re-evals (the register call is omitted by the transpiler).
+        () => { /* ndefine stub — transpiler handles the real path */ },
+        // time_warp — the transpiler turns `time_warp 0.5 do ... end` into
+        // `__b.at([0.5], null, ...)`. This runtime stub catches the rare regex
+        // fallback path; it forwards to topLevelAt's array-of-times shape. (#211)
+        (offset: number, fn: (b: ProgramBuilder) => void) =>
+          topLevelAt([offset], null, fn),
       ]
 
       const codeWarnings = validateCode(transpiledCode)
@@ -880,7 +928,10 @@ export class SonicPiEngine {
         else console.warn('[SonicPi]', warning)
       }
 
-      const sandbox = createIsolatedExecutor(transpiledCode, dslNames)
+      // Seed prior `define`-bound functions so they remain callable even if
+      // the user removes the define line from the buffer. (#215)
+      const persistedFns = Object.fromEntries(this.definedFns)
+      const sandbox = createIsolatedExecutor(transpiledCode, dslNames, persistedFns)
       scopeHandle = sandbox.scopeHandle
       await sandbox.execute(...dslValues)
 
@@ -970,6 +1021,7 @@ export class SonicPiEngine {
     this.loopTicks.clear()
     this.loopSynced.clear()
     this.globalStore.clear()
+    this.definedFns.clear()
     this.persistentFx.clear()
     this.reusableFx.clear()
     this.loopFxScope.clear()
@@ -993,6 +1045,7 @@ export class SonicPiEngine {
     this.loopBuilders.clear()
     this.loopSeeds.clear()
     this.globalStore.clear()
+    this.definedFns.clear()
   }
 
   /** Register a handler for runtime errors inside `live_loop` bodies. */

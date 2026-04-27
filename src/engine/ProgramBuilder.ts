@@ -11,7 +11,7 @@
 import type { Step, Program } from './Program'
 import { SeededRandom } from './SeededRandom'
 import { noteToMidi, midiToFreq, hzToMidi, noteInfo } from './NoteToFreq'
-import { ring, knit, range, line, Ring } from './Ring'
+import { ring, knit, range, line, Ring, Ramp } from './Ring'
 import { spread } from './EuclideanRhythm'
 import { chord, scale, chord_invert, note, note_range, chord_degree, degree, chord_names, scale_names } from './ChordScale'
 
@@ -495,6 +495,15 @@ export class ProgramBuilder {
     this.ticks.clear()
   }
 
+  /** Set a named tick counter to a specific value. Subsequent `tick(name)` returns value+step. */
+  tick_set(nameOrValue: string | number, value?: number): void {
+    if (typeof nameOrValue === 'number') {
+      this.ticks.set('__default', nameOrValue)
+    } else {
+      this.ticks.set(nameOrValue, value ?? 0)
+    }
+  }
+
   // --- Transpose ---
 
   /** Set transpose offset (semitones) for all subsequent play calls. */
@@ -650,6 +659,27 @@ export class ProgramBuilder {
    */
   bools(...values: number[]): Ring<boolean> {
     return new Ring(values.map(v => v !== 0))
+  }
+
+  /**
+   * `stretch([1,2,3], 2)` → Ring([1,1,2,2,3,3]). Repeat each element n times.
+   * Ruby invocation `[1,2,3].stretch(2)` is the Ring method; this is the bare form.
+   */
+  stretch<T>(arr: T[] | Ring<T>, n: number): Ring<T> {
+    const items = arr instanceof Ring ? arr.toArray() : [...arr]
+    const result: T[] = []
+    for (const item of items) {
+      for (let i = 0; i < n; i++) result.push(item)
+    }
+    return new Ring(result)
+  }
+
+  /**
+   * `ramp(60, 64, 67)` → non-cycling ring: clamps to last value instead of wrapping.
+   * Used for envelope-shape iteration that should hold the final value.
+   */
+  ramp<T>(...values: T[]): Ramp<T> {
+    return new Ramp(values)
   }
 
   /**

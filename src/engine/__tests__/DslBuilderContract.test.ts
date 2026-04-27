@@ -23,7 +23,7 @@
  *     add it to PURE_OR_INTENTIONAL_BUILD_TIME below with a one-line
  *     justification.
  *
- * See issues #193–#197 and hetvabhasa SP41.
+ * See issues #193–#197.
  */
 import { describe, it, expect } from 'vitest'
 import { ProgramBuilder } from '../ProgramBuilder'
@@ -84,6 +84,30 @@ const PURE_OR_INTENTIONAL_BUILD_TIME = new Map<string, string>([
   ['degree',           'Pure.'],
   ['chord_names',      'Pure catalog lookup.'],
   ['scale_names',      'Pure catalog lookup.'],
+  // Tick context — build-time per-builder counter; tick is per-iteration deterministic.
+  ['tick',             'Build-time named-tick counter. ProgramBuilder.tick — same surface as desktop SP.'],
+  ['look',             'Build-time named-tick read without advancing.'],
+  ['tick_set',         'Build-time named-tick assignment.'],
+  ['tick_reset',       'Build-time named-tick reset.'],
+  ['tick_reset_all',   'Build-time reset of all named-tick counters.'],
+  // Ring helpers — pure data transforms (#211).
+  ['pick',             'Pure: random sample (build-time seeded against the live_loop seed).'],
+  ['shuffle',          'Pure: Fisher-Yates shuffle (build-time seeded).'],
+  ['stretch',          'Pure: repeat each element n times.'],
+  ['bools',            'Pure: boolean ring constructor.'],
+  ['ramp',             'Pure: non-cycling ring constructor (clamps to last value).'],
+  // Asserts + counter helpers — pure build-time (#211). Failures throw
+  // synchronously so the editor error overlay surfaces them.
+  ['assert',           'Pure: throws AssertionFailedError on falsy condition.'],
+  ['assert_equal',     'Pure: throws on inequality (deep for objects).'],
+  ['assert_similar',   'Pure: float epsilon comparison.'],
+  ['assert_not',       'Pure: throws on truthy condition.'],
+  ['assert_error',     'Pure: throws if block does NOT raise.'],
+  ['inc',              'Pure: x + 1.'],
+  ['dec',              'Pure: x - 1.'],
+  ['define',           'Transpiler emits a JS function decl (TreeSitterTranspiler.transpileDefine). Runtime stub is a no-op.'],
+  ['ndefine',          'Alias for define on the transpile path; same JS function decl. (#211 — non-persistence is identical to define until cross-eval persistence ships.)'],
+  ['time_warp',        'Transpiler turns `time_warp 0.5 do … end` into `__b.at([0.5], null, …)` (transpileTimeWarp). Runtime stub forwards to topLevelAt for the regex fallback path.'],
   // Random — desktop Sonic Pi resolves these at build-time deterministically (seeded)
   ['rrand',            'Desktop SP convention: resolved at build-time against the live_loop seed.'],
   ['rrand_i',          'Desktop SP convention: build-time seeded.'],

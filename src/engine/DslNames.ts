@@ -56,6 +56,22 @@ export const DSL_NAMES = [
   'use_debug',
   // Latency — set schedule-ahead to 0 for responsive MIDI input (#149)
   'use_real_time',
+  // Tier A — global tick context (#211)
+  'tick', 'look', 'tick_set', 'tick_reset', 'tick_reset_all',
+  // Tier A — ring helpers (#211)
+  'pick', 'shuffle', 'stretch', 'bools', 'ramp',
+  // Tier A — pattern helpers (#211)
+  'play_pattern', 'play_chord', 'play_pattern_timed',
+  // Tier A — asserts + counter helpers (#211)
+  'assert', 'assert_equal', 'assert_similar', 'assert_not', 'assert_error',
+  'inc', 'dec',
+  // Tier A — define is transpiler-handled (TreeSitterTranspiler.transpileDefine);
+  // these names are blocklist-safe entries so user code that introspects them
+  // doesn't fall through to globalThis. (#211)
+  'define', 'ndefine',
+  // Tier A — time_warp is transpiler-handled (transpileTimeWarp → __b.at(...)).
+  // Runtime stub is a fallback for the regex transpiler path. (#211)
+  'time_warp',
 ] as const
 
 export type DslName = typeof DSL_NAMES[number]

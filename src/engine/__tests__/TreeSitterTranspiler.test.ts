@@ -440,6 +440,20 @@ end`)
       // Call to defined function should inject __b
       expect(result.code).toContain('bass_hit(__b)')
     })
+
+    it('ndefine produces same JS function decl as define (#211)', () => {
+      const result = treeSitterTranspile(`ndefine :hit do
+  play 60
+end
+
+live_loop :run do
+  hit
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('function hit(__b)')
+      expect(result.code).toContain('hit(__b)')
+    })
   })
 
   describe('Expressions', () => {
@@ -887,6 +901,10 @@ end`,
         const sample_names = () => []
         const sample_groups = () => []
         const sample_loaded = () => false
+        // No-op define stub — the transpiler now emits `define(name, fn)` after
+        // the function decl (#215). This harness doesn't need persistence; it
+        // just needs the call to succeed.
+        const define = (_name: string, _fn: unknown) => {}
 
         // Execute the transpiled code in the scope
         const fn = new Function(
@@ -896,7 +914,7 @@ end`,
           'ring', 'spread', 'chord', 'scale', 'chord_invert', 'note', 'note_range',
           'noteToMidi', 'midiToFreq', 'noteToFreq',
           'sample_duration', 'sample_names', 'sample_groups', 'sample_loaded',
-          '__spAdd', '__spSub', '__spMul',
+          '__spAdd', '__spSub', '__spMul', 'define',
           result.code,
         )
         fn(
@@ -906,7 +924,7 @@ end`,
           ring, spread, chord, scale, chord_invert, note, note_range,
           noteToMidi, midiToFreq, noteToFreq,
           sample_duration, sample_names, sample_groups, sample_loaded,
-          __spAdd, __spSub, __spMul,
+          __spAdd, __spSub, __spMul, define,
         )
 
         if (!capturedBuilderFn) return { steps: [], error: 'No live_loop captured' }
@@ -1098,6 +1116,76 @@ end`)
       expect(error).toBeUndefined()
       // bools(1,0,1,0)[0] = true → sample plays
       expect(steps[0].tag).toBe('sample')
+    })
+
+    it('tick_set :symbol coerces the symbol to a string at the call site (#218)', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  tick_set :foo, 10
+  play (ring 60, 64).at(look :foo)
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      // Symbol should land as a JS string, not a colon-prefixed identifier.
+      expect(result.code).toMatch(/__b\.tick_set\(\s*"foo"\s*,\s*10\s*\)/)
+      // Same coercion for look.
+      expect(result.code).toMatch(/__b\.look\(\s*"foo"\s*\)/)
+    })
+
+    it('tick_set :foo, 10 lands the value in the named counter (#218)', () => {
+      const { steps, error } = executeTranspiled(`live_loop :t do
+  tick_set :foo, 10
+  play (ring 60, 64, 67).at(look :foo)
+  sleep 1
+end`)
+      expect(error).toBeUndefined()
+      // After tick_set :foo, 10 then look :foo, the index lookup should be
+      // (ring 60,64,67).at(10) → 64 (10 mod 3 = 1).
+      const playStep = steps.find((s: any) => s.tag === 'play')
+      expect(playStep).toBeDefined()
+      expect(playStep!.note).toBe(64)
+    })
+
+    it('assert_error block-form transpiles to a callback (#216)', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  assert_error do
+    raise "boom"
+  end
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      expect(result.code).toContain('assert_error((__b) => {')
+    })
+
+    it('time_warp offsets a block without advancing global virtual time (#211)', () => {
+      const result = treeSitterTranspile(`live_loop :t do
+  time_warp 0.25 do
+    play 60
+  end
+  play 64
+  sleep 1
+end`)
+      expect(result.ok).toBe(true)
+      // time_warp transpiles to __b.at([0.25], null, ...)
+      expect(result.code).toContain('__b.at([0.25]')
+      expect(result.code).toContain('null')
+    })
+
+    it('synth + control captures play node ref and emits control step (#211)', () => {
+      const { steps, error } = executeTranspiled(`live_loop :t do
+  s = synth :saw, note: 60, release: 4
+  sleep 0.1
+  control s, cutoff: 80, amp: 0.5
+  sleep 1
+end`)
+      expect(error).toBeUndefined()
+      const playStep = steps.find((s: any) => s.tag === 'play')
+      const controlStep = steps.find((s: any) => s.tag === 'control')
+      expect(playStep).toBeDefined()
+      expect(controlStep).toBeDefined()
+      // control's nodeRef is a number — the captured __b.lastRef from the synth call.
+      expect(typeof controlStep!.nodeRef).toBe('number')
+      expect(controlStep!.params.cutoff).toBe(80)
+      expect(controlStep!.params.amp).toBe(0.5)
     })
 
     it('with_fx block param captures FX node ref for control', () => {

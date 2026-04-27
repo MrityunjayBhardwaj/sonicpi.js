@@ -139,7 +139,7 @@ async function runCode(rubyCode: string): Promise<{ error?: Error; events: strin
       'ring', 'knit', 'range', 'line', 'spread',
       'chord', 'scale', 'chord_invert', 'note', 'note_range',
       'noteToMidi', 'midiToFreq', 'noteToFreq',
-      'puts', 'stop',
+      'puts', 'stop', 'define',
       '__spAdd', '__spSub', '__spMul', '__spIsNote', '__spToNum', '__spIsRing',
     ]
     const dslValues = [
@@ -153,6 +153,7 @@ async function runCode(rubyCode: string): Promise<{ error?: Error; events: strin
       noteToMidi, midiToFreq, noteToFreq,
       (...args: unknown[]) => {},  // puts no-op in tests
       () => {},  // stop no-op
+      (_n: string, _f: unknown) => {},  // define no-op (transpiler emits define(name, fn) post-#215)
       __spAdd, __spSub, __spMul, __spIsNote, __spToNum, __spIsRing,
     ]
 

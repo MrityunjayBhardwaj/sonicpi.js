@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { SeededRandom } from '../SeededRandom'
-import { Ring, ring } from '../Ring'
+import { Ring, ring, ramp, stretch, Ramp } from '../Ring'
 import { spread } from '../EuclideanRhythm'
 import { noteToMidi, midiToFreq, noteToFreq, noteInfo } from '../NoteToFreq'
 import { MidiBridge } from '../MidiBridge'
+import { ProgramBuilder } from '../ProgramBuilder'
+import { assert, assert_equal, assert_similar, assert_not, assert_error, inc, dec, AssertionFailedError } from '../Asserts'
 
 describe('SeededRandom', () => {
   it('is deterministic with same seed', () => {
@@ -106,6 +108,241 @@ describe('Ring', () => {
   it('is iterable', () => {
     const r = ring(1, 2, 3)
     expect([...r]).toEqual([1, 2, 3])
+  })
+})
+
+describe('Global tick context (#211 Tier A)', () => {
+  it('default tick advances from 0', () => {
+    const b = new ProgramBuilder()
+    expect(b.tick()).toBe(0)
+    expect(b.tick()).toBe(1)
+    expect(b.tick()).toBe(2)
+  })
+
+  it('named ticks are independent', () => {
+    const b = new ProgramBuilder()
+    expect(b.tick('a')).toBe(0)
+    expect(b.tick('b')).toBe(0)
+    expect(b.tick('a')).toBe(1)
+    expect(b.tick('b')).toBe(1)
+  })
+
+  it('look reads without advancing', () => {
+    const b = new ProgramBuilder()
+    b.tick('foo'); b.tick('foo')
+    expect(b.look('foo')).toBe(1)
+    expect(b.look('foo')).toBe(1) // unchanged
+    expect(b.tick('foo')).toBe(2)
+  })
+
+  it('tick_set jumps the counter', () => {
+    const b = new ProgramBuilder()
+    b.tick_set('foo', 10)
+    expect(b.tick('foo')).toBe(11)
+    b.tick_set(99) // bare-number form sets default
+    expect(b.tick()).toBe(100)
+  })
+
+  it('tick_reset clears named counter', () => {
+    const b = new ProgramBuilder()
+    b.tick('foo'); b.tick('foo'); b.tick('foo')
+    b.tick_reset('foo')
+    expect(b.tick('foo')).toBe(0)
+  })
+
+  it('tick_reset_all clears every counter', () => {
+    const b = new ProgramBuilder()
+    b.tick('a'); b.tick('b'); b.tick()
+    b.tick_reset_all()
+    expect(b.tick('a')).toBe(0)
+    expect(b.tick('b')).toBe(0)
+    expect(b.tick()).toBe(0)
+  })
+
+  it('look on uninitialized counter returns 0', () => {
+    const b = new ProgramBuilder()
+    expect(b.look('never_ticked')).toBe(0)
+  })
+
+  it('look offset adds without advancing', () => {
+    const b = new ProgramBuilder()
+    b.tick('foo'); b.tick('foo') // counter at 1
+    expect(b.look('foo', 5)).toBe(6)
+    expect(b.look('foo')).toBe(1) // still 1
+  })
+})
+
+describe('Ring helpers (#211 Tier A)', () => {
+  it('stretch repeats each element n times', () => {
+    const r = stretch([1, 2, 3], 2)
+    expect(r.toArray()).toEqual([1, 1, 2, 2, 3, 3])
+  })
+
+  it('stretch accepts a Ring as input', () => {
+    const r = stretch(ring(1, 2, 3), 3)
+    expect(r.toArray()).toEqual([1, 1, 1, 2, 2, 2, 3, 3, 3])
+  })
+
+  it('ramp clamps at boundaries', () => {
+    const r = ramp(60, 64, 67)
+    expect(r.at(0)).toBe(60)
+    expect(r.at(2)).toBe(67)
+    expect(r.at(5)).toBe(67) // clamps high
+    expect(r.at(-1)).toBe(60) // clamps low
+  })
+
+  it('ramp tick advances then sticks at last', () => {
+    const r = ramp(1, 2, 3)
+    expect(r.tick()).toBe(1)
+    expect(r.tick()).toBe(2)
+    expect(r.tick()).toBe(3)
+    expect(r.tick()).toBe(3) // stays
+    expect(r.tick()).toBe(3)
+  })
+
+  it('ramp is iterable + indexable via Proxy', () => {
+    const r = ramp(10, 20, 30)
+    expect([...r]).toEqual([10, 20, 30])
+    expect(r[1]).toBe(20)
+    expect(r instanceof Ramp).toBe(true)
+  })
+
+  it('ProgramBuilder.bools returns truth-value ring', () => {
+    const b = new ProgramBuilder()
+    expect(b.bools(1, 0, 1, 1, 0).toArray()).toEqual([true, false, true, true, false])
+  })
+
+  it('ProgramBuilder.pick is deterministic with seed', () => {
+    const b1 = new ProgramBuilder(42)
+    const b2 = new ProgramBuilder(42)
+    expect(b1.pick([10, 20, 30, 40], 3).toArray())
+      .toEqual(b2.pick([10, 20, 30, 40], 3).toArray())
+  })
+
+  it('use_random_seed reseeds top-level pick/shuffle (#217)', () => {
+    // Same seed → same pick/shuffle sequence across two independent builders.
+    // Models the SonicPiEngine top-level path: topLevelUseRandomSeed calls
+    // topLevelBuilder.use_random_seed before any pick/shuffle runs.
+    const a = new ProgramBuilder()
+    const b = new ProgramBuilder()
+    a.use_random_seed(42)
+    b.use_random_seed(42)
+    expect(a.pick([1, 2, 3, 4, 5], 4).toArray())
+      .toEqual(b.pick([1, 2, 3, 4, 5], 4).toArray())
+    expect(a.shuffle([10, 20, 30, 40, 50]).toArray())
+      .toEqual(b.shuffle([10, 20, 30, 40, 50]).toArray())
+  })
+
+  it('use_random_seed with different seeds produces different sequences (#217)', () => {
+    const a = new ProgramBuilder()
+    const b = new ProgramBuilder()
+    a.use_random_seed(1)
+    b.use_random_seed(2)
+    // At least one of pick/shuffle should differ — extremely high probability
+    // for the seeds 1 vs 2 across a 5-element ring.
+    const aPick = a.pick([1, 2, 3, 4, 5], 4).toArray()
+    const bPick = b.pick([1, 2, 3, 4, 5], 4).toArray()
+    expect(aPick).not.toEqual(bPick)
+  })
+
+  it('ProgramBuilder.shuffle preserves length and elements', () => {
+    const b = new ProgramBuilder(42)
+    const out = b.shuffle([1, 2, 3, 4, 5]).toArray()
+    expect(out.length).toBe(5)
+    expect(new Set(out)).toEqual(new Set([1, 2, 3, 4, 5]))
+  })
+
+  it('ProgramBuilder.stretch matches standalone', () => {
+    const b = new ProgramBuilder()
+    expect(b.stretch([1, 2], 3).toArray()).toEqual([1, 1, 1, 2, 2, 2])
+  })
+
+  it('ProgramBuilder.ramp returns Ramp', () => {
+    const b = new ProgramBuilder()
+    const r = b.ramp(5, 10, 15)
+    expect(r instanceof Ramp).toBe(true)
+    expect(r.at(99)).toBe(15)
+  })
+})
+
+describe('Pattern helpers (#211 Tier A)', () => {
+  it('play_pattern emits N play steps with sleep(1) between', () => {
+    const b = new ProgramBuilder()
+    b.play_pattern([60, 64, 67])
+    const steps = b.build()
+    expect(steps.filter(s => s.tag === 'play').length).toBe(3)
+    expect(steps.filter(s => s.tag === 'sleep').length).toBe(3)
+  })
+
+  it('play_chord plays all notes simultaneously (no sleep between)', () => {
+    const b = new ProgramBuilder()
+    b.play_chord([60, 64, 67])
+    const steps = b.build()
+    expect(steps.filter(s => s.tag === 'play').length).toBe(3)
+    expect(steps.filter(s => s.tag === 'sleep').length).toBe(0)
+  })
+
+  it('play_pattern_timed cycles through times array', () => {
+    const b = new ProgramBuilder()
+    b.play_pattern_timed([60, 64, 67, 72], [0.25, 0.5])
+    const sleeps = b.build().filter(s => s.tag === 'sleep')
+    expect(sleeps.map(s => (s as { tag: 'sleep'; beats: number }).beats)).toEqual([0.25, 0.5, 0.25])
+  })
+
+  it('play_pattern_timed accepts scalar time', () => {
+    const b = new ProgramBuilder()
+    b.play_pattern_timed([60, 64, 67], 0.5)
+    const sleeps = b.build().filter(s => s.tag === 'sleep')
+    expect(sleeps.map(s => (s as { tag: 'sleep'; beats: number }).beats)).toEqual([0.5, 0.5])
+  })
+})
+
+describe('Asserts + inc/dec (#211 Tier A)', () => {
+  it('assert passes on truthy', () => {
+    expect(assert(true)).toBe(true)
+    expect(assert(1)).toBe(true)
+    expect(assert('x')).toBe(true)
+  })
+
+  it('assert throws AssertionFailedError on falsy', () => {
+    expect(() => assert(false)).toThrow(AssertionFailedError)
+    expect(() => assert(0)).toThrow(AssertionFailedError)
+    expect(() => assert(null)).toThrow(/assert failed/)
+  })
+
+  it('assert uses custom message', () => {
+    expect(() => assert(false, 'expected truthy')).toThrow(/expected truthy/)
+  })
+
+  it('assert_equal handles primitives + deep objects', () => {
+    expect(assert_equal(1, 1)).toBe(true)
+    expect(assert_equal('a', 'a')).toBe(true)
+    expect(assert_equal({ x: 1 }, { x: 1 })).toBe(true)
+    expect(() => assert_equal(1, 2)).toThrow(AssertionFailedError)
+    expect(() => assert_equal({ x: 1 }, { x: 2 })).toThrow(AssertionFailedError)
+  })
+
+  it('assert_similar tolerates float epsilon', () => {
+    expect(assert_similar(0.1 + 0.2, 0.3)).toBe(true)
+    expect(() => assert_similar(1, 1.5)).toThrow(AssertionFailedError)
+  })
+
+  it('assert_not is the inverse of assert', () => {
+    expect(assert_not(false)).toBe(true)
+    expect(assert_not(0)).toBe(true)
+    expect(() => assert_not(true)).toThrow(AssertionFailedError)
+  })
+
+  it('assert_error passes when block throws', () => {
+    expect(assert_error(() => { throw new Error('boom') })).toBe(true)
+    expect(() => assert_error(() => 42)).toThrow(/did not raise/)
+  })
+
+  it('inc and dec are pure math', () => {
+    expect(inc(5)).toBe(6)
+    expect(dec(5)).toBe(4)
+    expect(inc(0)).toBe(1)
+    expect(dec(0)).toBe(-1)
   })
 })
 
