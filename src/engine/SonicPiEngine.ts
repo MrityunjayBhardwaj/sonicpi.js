@@ -1582,6 +1582,17 @@ export class SonicPiEngine {
     this.bridge?.setMasterVolume(volume)
   }
 
+  /** Set mixer amp (0.5–6 typical). Live — propagates to scsynth /n_set
+   *  immediately if the bridge is up; otherwise queued for next mixer init. */
+  setMixerAmp(amp: number): void {
+    this.bridge?.setMixerAmp(amp)
+  }
+
+  /** Set mixer pre_amp baseline. Effective wire pre_amp = volume × pre_amp. */
+  setMixerPreAmp(preAmp: number): void {
+    this.bridge?.setMixerPreAmp(preAmp)
+  }
+
   /** Get a friendly version of the last error (for display in a log pane). */
   static formatError(err: Error): FriendlyError {
     return friendlyError(err)

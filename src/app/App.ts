@@ -397,8 +397,10 @@ export class App {
         if (this.engine) this.engine.setVolume((value as number) / 100)
         break
       case 'mixerPreAmp':
+        if (this.engine) this.engine.setMixerPreAmp(value as number)
+        break
       case 'mixerAmp':
-        // These require re-sending mixer params — applied on next play
+        if (this.engine) this.engine.setMixerAmp(value as number)
         break
 
       // Visuals
@@ -436,8 +438,8 @@ export class App {
   private getPrefs(): Record<string, number | boolean> {
     return {
       masterVolume: 80,
-      mixerPreAmp: 0.3,
-      mixerAmp: 1.2,
+      mixerPreAmp: 0.32,
+      mixerAmp: 2,
       scopeLineWidth: 2,
       scopeGlow: 4,
       scopeTrail: 25,
@@ -985,6 +987,16 @@ export class App {
         // Apply saved volume from prefs
         if (typeof savedPrefs.masterVolume === 'number') {
           this.engine.setVolume((savedPrefs.masterVolume as number) / 100)
+        }
+        // Apply saved mixer params (calls /n_set on the live mixer node).
+        // Order matters: pre_amp first so its baseline is in place before
+        // setVolume's pre_amp recompute reads it (setVolume above already
+        // ran but the bridge's own field default matched, so no-op).
+        if (typeof savedPrefs.mixerPreAmp === 'number') {
+          this.engine.setMixerPreAmp(savedPrefs.mixerPreAmp as number)
+        }
+        if (typeof savedPrefs.mixerAmp === 'number') {
+          this.engine.setMixerAmp(savedPrefs.mixerAmp as number)
         }
         await this.sessionLog.initSigning()
         // Expose engine for diagnostics (thread monitor, metrics)

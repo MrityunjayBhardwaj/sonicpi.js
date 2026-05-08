@@ -160,6 +160,15 @@ export class SuperSonicBridge {
   private monitorSynthDefLoaded = false
   /** scsynth mixer node ID — for controlling master volume via /n_set */
   private mixerNodeId = 0
+  /** Runtime mixer params — initialised from MIXER (config.ts) and mutable
+   *  via setMixerAmp / setMixerPreAmp so the Prefs panel can drive them
+   *  live without an engine restart. setMasterVolume reads currentMixerPreAmp
+   *  as the per-volume baseline (so volume × pre_amp keeps composing). */
+  private currentMixerAmp: number = MIXER.AMP
+  private currentMixerPreAmp: number = MIXER.PRE_AMP
+  /** Last clamped 0..1 volume so pre_amp recomputes correctly when the user
+   *  drags pre_amp without touching volume. */
+  private currentMasterVolume = 1.0
   /** Optional callback for OSC trace logging — receives formatted trace strings like desktop Sonic Pi. */
   private oscTraceHandler: ((msg: string) => void) | null = null
   /** SuperSonic.osc encoder (preferred) or fallback */
@@ -247,8 +256,8 @@ export class SuperSonicBridge {
     this.sonic.send('/s_new', 'sonic-pi-mixer', this.mixerNodeId, 0, mixerGroupId,
       'out_bus', 0,
       'in_bus', mixerBus,
-      'amp', MIXER.AMP,
-      'pre_amp', MIXER.PRE_AMP,
+      'amp', this.currentMixerAmp,
+      'pre_amp', this.currentMasterVolume * this.currentMixerPreAmp,
       'hpf', MIXER.HPF,
       'lpf', MIXER.LPF,
       'limiter_bypass', MIXER.LIMITER_BYPASS,
@@ -338,12 +347,35 @@ export class SuperSonicBridge {
   /** Set master volume (0-1). Controls both scsynth mixer pre_amp and Web Audio gain. */
   setMasterVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(1, volume))
-    // Scale pre_amp by volume (Sonic Tau baseline: pre_amp=0.3 at volume=1.0)
-    const scaledPreAmp = clamped * MIXER.PRE_AMP
+    this.currentMasterVolume = clamped
+    // pre_amp on the wire = master volume × user-pref pre_amp baseline.
+    // The pref baseline lets users dial in headroom independent of volume.
+    const scaledPreAmp = clamped * this.currentMixerPreAmp
     this.sonic?.send('/n_set', this.mixerNodeId, 'pre_amp', scaledPreAmp)
     // Web Audio gain for UI slider feedback (not the primary volume control)
     if (this.masterGainNode) {
       this.masterGainNode.gain.setTargetAtTime(clamped, this.masterGainNode.context.currentTime, 0.02)
+    }
+  }
+
+  /** Set mixer amp (final gain stage). Live — sends /n_set immediately if
+   *  the mixer node is alive. New value also persists for any future
+   *  resetMixer / re-init. Range typically 0.5–6 (3 lands at WASM parity
+   *  with desktop's pre-driver-attenuation peak; 6 clips Limiter.ar). */
+  setMixerAmp(amp: number): void {
+    this.currentMixerAmp = amp
+    if (this.sonic && this.mixerNodeId) {
+      this.sonic.send('/n_set', this.mixerNodeId, 'amp', amp)
+    }
+  }
+
+  /** Set mixer pre_amp baseline. Effective wire value = masterVolume × preAmp,
+   *  so dragging this slider with volume<1 still attenuates proportionally. */
+  setMixerPreAmp(preAmp: number): void {
+    this.currentMixerPreAmp = preAmp
+    if (this.sonic && this.mixerNodeId) {
+      const scaledPreAmp = this.currentMasterVolume * preAmp
+      this.sonic.send('/n_set', this.mixerNodeId, 'pre_amp', scaledPreAmp)
     }
   }
 
