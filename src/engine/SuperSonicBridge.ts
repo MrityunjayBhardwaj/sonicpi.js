@@ -1009,10 +1009,17 @@ export class SuperSonicBridge {
     this.loopMonitors.clear()
   }
 
-  /** Allocate a private audio bus for FX routing. */
+  /** Allocate a private audio bus for FX routing. Reserves a stereo pair
+   *  (bus N and N+1) — every relevant synthdef in our chain
+   *  (basic_stereo_player, fx_*) reads or writes 2 channels. Adjacent
+   *  mono allocations would collide on the inner channel, summing the
+   *  upstream stereo write into a downstream stereo write at the same
+   *  address (exp-008). NUM_OUTPUT_CHANNELS is even by construction. */
   allocateBus(): number {
     if (this.freeBuses.length > 0) return this.freeBuses.pop()!
-    return this.nextBusNum++
+    const bus = this.nextBusNum
+    this.nextBusNum += 2
+    return bus
   }
 
   /** Release a private audio bus back to the pool. Guards against duplicate frees. */
