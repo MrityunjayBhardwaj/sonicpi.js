@@ -151,7 +151,18 @@
         font-size: 11.5px;
         line-height: 1.45;
         color: var(--text-dim);
+        max-height: 140px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--text-mute) transparent;
       }
+      .context-note::-webkit-scrollbar { width: 6px; }
+      .context-note::-webkit-scrollbar-track { background: transparent; }
+      .context-note::-webkit-scrollbar-thumb {
+        background: var(--text-mute);
+        border-radius: 3px;
+      }
+      .context-note::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
       .context-note b { color: var(--text); }
       .context-note a {
         color: var(--accent-2, #7aa2f7);
