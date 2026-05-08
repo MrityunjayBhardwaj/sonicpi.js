@@ -31,32 +31,47 @@
 // The sonic-pi-mixer synthdef signal chain (inside scsynth):
 //   In.ar(out_bus) → pre_amp → HPF → LPF → Limiter.ar(0.99) → LeakDC → amp → clip2(1) → ReplaceOut
 //
-// Desktop SP: pre_amp=0.2, amp=6 → effective gain 1.2
-//   But native drivers attenuate ~2.3x before reaching speakers.
+// Desktop SP (live values verified via /g_queryTree, exp-010):
+//   pre_amp=0.32, amp=6 → effective gain 1.92.
+//   Native scsynth output is then attenuated by audio drivers before speakers.
 //
-// WASM: no driver attenuation. Raw scsynth output goes directly to speakers.
-//   We must lower the mixer gain to compensate.
+// WASM scsynth: no driver attenuation. Raw float32 → AudioWorklet → speakers.
 //
-// Sonic Tau reference (app.bundle.js:1784-1787): pre_amp=0.3, amp=0.8
-//   Conservative — kills dynamic range (kicks 2.5x too quiet).
+// Sonic Tau (the reference for browser WASM, app.bundle.js:1786-1787):
+//   pre_amp=0.3, amp=0.8 — deliberately soft to keep signal in linear range.
 //
-// Our values: pre_amp=0.3 (Tau baseline), amp=1.2 (A/B tuned for dynamics).
+// Prior values were Tau-aligned (pre_amp=0.3, amp=1.2 → effective 0.36) which
+// gave web ~0.19× the level of desktop's mixer output — useful for protecting
+// browser-side dynamics, but a confound for parity comparators.
 //
-// A/B test results (same composition, 30s capture):
-//   Desktop SP:          Noise RMS=0.017, Kicks RMS=0.054, Peak=0.41
-//   Old (SP values):     Noise RMS=0.068, Kicks RMS=0.075, Peak=0.46 — noise 4x too loud
-//   Tau (amp=0.8):       Noise RMS=0.015, Kicks RMS=0.021, Peak=0.11 — kicks too quiet
-//   Current (amp=1.2):   Noise RMS=0.031, Kicks RMS=0.039, Peak=0.24 — balanced
+// 2026-05-08 (lpf observation): bumping AMP from 1.2 → 6 (matching desktop
+// SP's live value) overshoots in the other direction — web peaks slam
+// Limiter.ar(0.99) at 1.0 while desktop peaks at 0.44. Two reasons:
+//   (1) Native scsynth's ~2.3× audio-driver attenuation on top of amp=6 yields
+//       net ~2.6× at speaker; WASM has no driver attenuation, so the same
+//       amp=6 yields net 1.92× pre-limiter and clips peaks above 0.99.
+//   (2) WASM `basic_stereo_player` is structurally more peaky than native (per
+//       exp-010 raw-OSC measurement: same /s_new + same buffer + same params
+//       yields web peak ~0.187 vs desktop peak ~0.802 at amp=1.0; the peak
+//       /RMS ratio differs between the two ugen implementations).
+//
+// AMP=3 is a measured compromise: extrapolating linearly from prior captures,
+// AMP=3 yields web peak ~0.47 / RMS ~0.09 — near desktop's peak 0.44 with
+// modest RMS shortfall. Below the Limiter.ar threshold, so we get the WASM
+// ugen's true dynamic envelope rather than a limiter-shaped one.
 // ---------------------------------------------------------------------------
 
 export const MIXER = {
-  /** [TAU] Mixer pre-amplification. Desktop SP uses 0.2 but needs driver attenuation.
-   *  Sonic Tau uses 0.3 for browser WASM context (app.bundle.js:1787). */
-  PRE_AMP: 0.3,
+  /** Mixer pre-amplification. Aligned to desktop SP's live value (exp-010,
+   *  /g_queryTree probe of sonic-pi-mixer node). Was 0.3 (Tau baseline). */
+  PRE_AMP: 0.32,
 
-  /** [TUNED] Mixer final amplification. Desktop SP uses 6 (clips in WASM).
-   *  Sonic Tau uses 0.8 (too quiet). A/B tuned to 1.2 for balanced dynamics. */
-  AMP: 1.2,
+  /** Mixer final amplification. Halfway between Tau (0.8) and desktop (6).
+   *  Lands web peak near desktop's pre-driver-attenuation peak without
+   *  triggering Limiter.ar — keeps the ugen's natural transient envelope
+   *  visible to the comparator. Was 6 (matched desktop, but limiter-clamped),
+   *  was 1.2 (Tau-aligned, pre-SP72-fix dynamics tuning). */
+  AMP: 3,
 
   /** [TAU] High-pass filter cutoff (Hz). Removes subsonic rumble that can
    *  damage speakers. Desktop SP uses synthdef default. Sonic Tau sends 21
