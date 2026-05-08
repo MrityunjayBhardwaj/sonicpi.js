@@ -82,27 +82,56 @@ async function captureRun(
     // main thread controls the recording window. (Earlier attempt with
     // recording_stop/save INSIDE in_thread broke: recording state isn't
     // visible across thread boundaries — issue #266.)
-    //
-    // User code goes inside `in_thread` so its wallclock duration doesn't
-    // push back the main thread's wrap-sleep timeline. Without this, user
-    // code that takes >duration seconds blocks the main thread and the
-    // recording_save line never runs before the harness's /stop-all-jobs
-    // teardown — yielding no WAV.
     const dur = opts.wrapRecordingSec
+    // Only wrap in `in_thread` when user code might block the main thread
+    // long enough that recording_stop never fires. Code containing top-level
+    // `live_loop` or `in_thread` is already async-by-construction (registration
+    // returns immediately, scheduler runs the body), so wrapping it adds no
+    // benefit AND breaks `with_fx` semantics: when the transpiler sees
+    // `with_fx ... do live_loop ... end end` inside `in_thread`, it emits
+    // `__b.with_fx` and `__b.live_loop` (builder-method path), which doesn't
+    // wire the FX bus to the loop's outBus the way the top-level
+    // `topLevelWithFx` / `fxAwareWrappedLiveLoop` path does. Result: dry
+    // signal in the capture even though desktop hears the FX.
+    //
+    // Heuristic: regex-detect `live_loop` or `in_thread` as standalone
+    // identifiers at column-zero-ish positions. Strings/comments containing
+    // these words are rare in test snippets; false positives just degrade
+    // to "skipped wrap" which is safe for short snippets too.
+    const alreadyAsync = /^[ \t]*(?:live_loop|in_thread)\b/m.test(code)
     // with_bpm 60 around the sleep so a user's `use_bpm 120` (or any other
     // tempo set inside <code>) doesn't shrink/expand the recording window.
     // At 60 BPM, sleep N == N real seconds.
-    code =
-      `recording_stop\n` +
-      `recording_start\n` +
-      `in_thread do\n` +
-      `${code}\n` +
-      `end\n` +
-      `with_bpm 60 do\n` +
-      `  sleep ${dur}\n` +
-      `end\n` +
-      `recording_stop\n` +
-      `recording_save "spw_capture_${ts}.wav"\n`
+    if (alreadyAsync) {
+      // User code returns immediately (live_loop registers + exits, in_thread
+      // detaches). Run at top level so with_fx → topLevelWithFx and live_loop
+      // → fxAwareWrappedLiveLoop fire correctly.
+      code =
+        `recording_stop\n` +
+        `recording_start\n` +
+        `${code}\n` +
+        `with_bpm 60 do\n` +
+        `  sleep ${dur}\n` +
+        `end\n` +
+        `recording_stop\n` +
+        `recording_save "spw_capture_${ts}.wav"\n`
+    } else {
+      // User code may block the main thread (e.g., `100.times do play; sleep`).
+      // Push it into `in_thread` so the recording-window timeline is
+      // independent. with_fx parity isn't a concern here — there's no
+      // top-level live_loop registration to break.
+      code =
+        `recording_stop\n` +
+        `recording_start\n` +
+        `in_thread do\n` +
+        `${code}\n` +
+        `end\n` +
+        `with_bpm 60 do\n` +
+        `  sleep ${dur}\n` +
+        `end\n` +
+        `recording_stop\n` +
+        `recording_save "spw_capture_${ts}.wav"\n`
+    }
   }
 
   const context = await browser.newContext({
