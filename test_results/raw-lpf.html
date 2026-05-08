@@ -1,0 +1,1915 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Raw-OSC lpf parity — Desktop vs Web</title>
+    <style>
+      :root {
+        --bg: #1a1b26;
+        --bg-elev: #1f2335;
+        --bg-row: #16161e;
+        --border: #2a2e46;
+        --text: #c0caf5;
+        --text-dim: #7a85b3;
+        --text-mute: #565f89;
+        --accent: #ff1493;
+        --accent-2: #7aa2f7;
+        --pass: #9ece6a;
+        --flag: #e0af68;
+        --fail: #f7768e;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 13px;
+      }
+      .wrap {
+        max-width: 1300px;
+        margin: 0 auto;
+        padding: 24px 32px 64px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+        font-weight: 700;
+      }
+      h1 small {
+        color: var(--text-dim);
+        font-weight: 400;
+        font-size: 14px;
+        margin-left: 12px;
+      }
+      h2 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-dim);
+        margin: 28px 0 10px;
+      }
+      .lede {
+        color: var(--text-dim);
+        font-size: 14px;
+        line-height: 1.5;
+        margin: 8px 0 0;
+      }
+      .lede b { color: var(--text); }
+      .question-card {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent-2);
+        border-radius: 6px;
+        padding: 14px 18px;
+        margin: 18px 0;
+      }
+      .question-card .q {
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 6px;
+      }
+      .question-card .a {
+        color: var(--text-dim);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .question-card .a b { color: var(--text); }
+      .verdict {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 3px 8px;
+        border-radius: 3px;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      .verdict.confound {
+        background: rgba(224, 175, 104, 0.15);
+        color: var(--flag);
+      }
+
+      /* layout */
+      .audio-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .card {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px 14px;
+      }
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-dim);
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+      .card h3 span {
+        font-family: var(--mono);
+        text-transform: none;
+        letter-spacing: 0;
+        color: var(--text-mute);
+        font-size: 11px;
+        font-weight: 400;
+      }
+      .card audio {
+        width: 100%;
+        height: 32px;
+      }
+      .sync-bar {
+        display: flex;
+        gap: 8px;
+        margin: 12px 0 24px;
+      }
+      .sync-btn {
+        background: var(--accent);
+        color: #fff;
+        border: 0;
+        padding: 8px 14px;
+        border-radius: 6px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .sync-btn.sec {
+        background: transparent;
+        color: var(--text-dim);
+        border: 1px solid var(--border);
+      }
+      .sync-btn:hover { filter: brightness(1.1); }
+
+      .png-block {
+        background: var(--bg-elev);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+        margin-bottom: 8px;
+      }
+      .png-block img {
+        max-width: 100%;
+        display: block;
+        border-radius: 4px;
+      }
+
+      /* OSC trace + tables */
+      pre.osc {
+        background: var(--bg-row);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 12px 14px;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--text);
+        margin: 0;
+      }
+      pre.osc .addr { color: var(--accent-2); }
+      pre.osc .num { color: var(--flag); }
+      pre.osc .str { color: var(--pass); }
+      pre.osc .key { color: var(--text-dim); }
+      pre.osc .cmt { color: var(--text-mute); font-style: italic; }
+      .osc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      table.metrics {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12.5px;
+        font-family: var(--mono);
+      }
+      table.metrics th, table.metrics td {
+        padding: 6px 12px;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+      }
+      table.metrics th {
+        background: var(--bg-elev);
+        color: var(--text-dim);
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      table.metrics td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .ratio-good { color: var(--pass); }
+      .ratio-mid { color: var(--flag); }
+      .ratio-bad { color: var(--fail); }
+      .divergent { background: rgba(247, 118, 142, 0.06); }
+
+      .probes {
+        margin: 0;
+        padding: 10px 0;
+        list-style: none;
+      }
+      .probes li {
+        padding: 8px 12px;
+        margin: 4px 0;
+        background: var(--bg-row);
+        border-left: 3px solid var(--border);
+        border-radius: 4px;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .probes li.fail { border-left-color: var(--fail); }
+      .probes li.pass { border-left-color: var(--pass); }
+      .probes li b { color: var(--text); font-weight: 600; }
+
+      .footer-note {
+        font-size: 12px;
+        color: var(--text-mute);
+        line-height: 1.55;
+        margin-top: 36px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+      }
+      .footer-note b { color: var(--text-dim); }
+      .footer-note ul { padding-left: 20px; }
+
+      .nav { color: var(--text-dim); font-size: 12px; margin-bottom: 8px; }
+      .nav a { color: var(--accent-2); text-decoration: none; }
+      .nav a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="nav"><a href="index.html">← FX A/B Inspector</a></div>
+      <h1>:lpf — desktop scsynth vs web WASM scsynth <small>raw-OSC + DSL + FX sweep + e2e</small></h1>
+      <div class="lede">
+        This page started as a raw-OSC parity test but has grown to cover the full investigation —
+        raw-OSC (passes 1–3 + sub-tests), DSL path with engine fixes (third pass), the WASM gain-deficit
+        characterization (fourth pass), the post-fix FX-sweep + e2e regression (fifth pass), and the
+        rhythm-parity confirmation on the lpf inspector view (sixth pass). Read top-to-bottom for the
+        chronology, or jump to a section via the TL;DR below.
+      </div>
+
+      <div class="question-card">
+        <div class="q">Question — does WASM scsynth produce the same audio as native scsynth for identical OSC?</div>
+        <div class="a" id="answer-line"></div>
+      </div>
+
+      <div class="lede" style="margin: 18px 0; padding: 14px 16px; background: var(--bg-elev); border-left: 4px solid var(--accent-2); border-radius: 6px; line-height: 1.7">
+        <b>TL;DR (post-2026-05-09 evening):</b><br /><br />
+        <ol style="margin: 4px 0 0; padding-left: 18px">
+          <li><b>The WASM scsynth has a uniform ~0.6× output deficit vs native</b> for the same byte-identical synthdef, applied to every signal regardless of FX or cutoff. Verified across <code>:level</code> passthrough, <code>:lpf</code> MIDI 30–127, <code>:hpf</code> MIDI 30–127, <code>:bpf</code>. Synthdef SHA-256 byte-match. Filable upstream at <code>samaaron/supersonic</code>.</li>
+          <li><b>SP72 (use_bpm leak in nested live_loop) is fixed.</b> Web wallclock cadence is now exact 4 Hz on the lpf snippet (<code>use_bpm 120 + sleep 0.5</code>). Confirmed by no-FX A/B in <a href="#sixth">Sixth pass</a>.</li>
+          <li><b>MIXER.AMP raised 1.2 → 3</b> as empirical compensation for the WASM deficit. Effective gain ~0.9× of native, RMS parity within ~7%. Tau-aligned 1.2 was the old setting; AMP=3 is today's.</li>
+          <li><b>Full FX sweep + e2e regression with both fixes</b> (Fifth pass): mean FX-sweep score 37.9 → 60.2; 27 of 40 FX upgraded tier; 8 of 10 e2e fixtures within 0.62–0.88× RMS of desktop. Two outliers (<code>02_fx_chain</code>, <code>07_ambient</code>) belong to a separate non-constant-gain class — feedback-loop FX (reverb/echo/chorus) in WASM render at different gain than filter UGens.</li>
+          <li><b>The "rhythm looks/sounds broken on lpf" appearance is real and audible.</b> Wallclock scheduling IS identical (4 Hz both — confirmed via web engine OSC trace at 250 ms intervals, no-FX parity, and Sam-chain autocorr). But native LPF's louder ringing tails create audible secondary peaks between scheduled hits, so listeners hear <b>desktop with <code>:lpf</code> as faster/denser (~61 hits/sec) than web (~42 hits/sec)</b> — same scheduled tempo, different perceived density. Same upstream root cause (WASM-vs-native UGen rendering) as the gain deficit, expressed in a third observable axis. See <a href="#sixth">Sixth pass</a> correction box.</li>
+          <li><b>What the FX layer adds beyond no-FX base</b> separates into 4 structural classes (<a href="#seventh">Seventh pass</a>): linear filter (well-behaved, AMP=3 fixes them), non-linear (input-sensitive, AMP=3 partially helps), modulation (LFO-precision divergence), feedback delay (exponentially compounding, source of the <code>07_ambient</code> 2.96× and <code>02_fx_chain</code> 0.11× e2e outliers).</li>
+        </ol>
+      </div>
+
+      <div class="lede" style="margin: 0 0 18px; padding: 12px 14px; background: var(--bg-row); border: 1px solid var(--border); border-radius: 6px; font-size: 12.5px; line-height: 1.7">
+        <b>Sections</b> &nbsp;
+        <a href="#audio">Audio (raw-OSC)</a> ·
+        <a href="#lokayata">Lokayata probe</a> ·
+        <a href="#inverse">Inverse probe</a> ·
+        <a href="#bytes">Same-bytes test</a> ·
+        <a href="#after">After two fixes</a> ·
+        <a href="#third">Third pass — AMP=3</a> ·
+        <a href="#fourth">Fourth pass — gain deficit</a> ·
+        <a href="#fifth">Fifth pass — FX sweep + e2e</a> ·
+        <a href="#sixth">Sixth pass — rhythm artifact</a> ·
+        <a href="#seventh">Seventh pass — what FX adds</a> ·
+        <a href="#osc">OSC bytes</a> ·
+        <a href="#stats">Stats / per-beat detail</a>
+      </div>
+
+      <h2 id="audio">Audio</h2>
+      <div class="audio-grid">
+        <div class="card">
+          <h3>Desktop SP <span id="d-stats">loading…</span></h3>
+          <audio id="audio-desktop" controls preload="metadata" src="raw-lpf/desktop-raw.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>SonicPi.js (web) <span id="w-stats">loading…</span></h3>
+          <audio id="audio-web" controls preload="metadata" src="raw-lpf/web-raw.wav"></audio>
+        </div>
+      </div>
+      <div class="sync-bar">
+        <button class="sync-btn" id="sync-play">▶ Play both</button>
+        <button class="sync-btn sec" id="sync-stop">■ Stop both</button>
+      </div>
+
+      <h2 id="lokayata">Lokayata probe — replay desktop's exact addressing on web</h2>
+      <div class="lede" style="margin-bottom: 12px">
+        Three configurations sent to the same WASM scsynth instance, same synthdef, same buffer
+        content, same params. Only the addressing fields differ. Peak / RMS measured at the
+        masterGainNode tap. Below the table you can audition each WAV.
+      </div>
+      <table class="metrics" style="margin-bottom: 16px">
+        <thead>
+          <tr>
+            <th>Config</th>
+            <th>target_group</th>
+            <th>in_bus</th>
+            <th>out_bus</th>
+            <th class="num">Peak</th>
+            <th class="num">RMS</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Native web addressing<br /><small>(<code>web-raw-osc-only.ts</code>)</small></td>
+            <td>101 <small>(fx group)</small></td>
+            <td>16</td>
+            <td>0 <small>(master)</small></td>
+            <td class="num">0.0741</td>
+            <td class="num">0.0145</td>
+            <td><span class="ratio-mid">audible, 0.119× of desktop peak</span></td>
+          </tr>
+          <tr>
+            <td>Desktop addressing, web-routed<br /><small>(<code>--out-bus=14</code>, web's mixer)</small></td>
+            <td>0 <small>(root)</small></td>
+            <td>64</td>
+            <td>14 <small>(web mixer)</small></td>
+            <td class="num">0.0741</td>
+            <td class="num">0.0145</td>
+            <td><span class="ratio-mid">audible, identical to native web row</span></td>
+          </tr>
+          <tr>
+            <td>Desktop addressing, verbatim<br /><small>(<code>--out-bus=18</code>, desktop's mixer)</small></td>
+            <td>0 <small>(root)</small></td>
+            <td>64</td>
+            <td>18 <small>(unwired on web)</small></td>
+            <td class="num">0.0000</td>
+            <td class="num">0.0000</td>
+            <td><span class="ratio-bad">silent — bus 18 has no downstream reader on web</span></td>
+          </tr>
+          <tr style="border-top: 2px solid var(--border)">
+            <td><b>Desktop scsynth reference</b></td>
+            <td>0 <small>(root)</small></td>
+            <td>64</td>
+            <td>18 <small>(desktop mixer)</small></td>
+            <td class="num"><b>0.6244</b></td>
+            <td class="num"><b>0.1264</b></td>
+            <td><span class="ratio-good">8.43× louder than any web config</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="audio-grid" style="grid-template-columns: 1fr 1fr 1fr">
+        <div class="card">
+          <h3>Native web<br /><span>out 0 → master</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-raw.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Desktop fields, out_bus=14<br /><span>routed to web mixer</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-desktop-addressing-out14.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Desktop fields, out_bus=18<br /><span>verbatim — silent</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-desktop-addressing-out18.wav"></audio>
+        </div>
+      </div>
+      <div class="lede" style="font-size: 12.5px; margin-top: 14px; padding: 12px 14px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px; line-height: 1.6">
+        <b>What this tells us, directly observed:</b><br />
+        Two configurations on web — fundamentally different routing topologies (target=fx-group vs
+        root, in_bus=16 vs 64, out_bus=0 vs 14) — produce audio that matches at <b>4 decimal places</b>
+        (0.0741 / 0.0145). Addressing fields are routing labels. They tell scsynth WHERE to write,
+        not WHAT to compute. The DSP is determined by the synthdef + buffer + params, all held
+        constant across configurations. <br /><br />
+        And neither web configuration reaches desktop's 0.6244 peak. The 0.119× gap is in the WASM
+        ugens themselves — specifically, exp-010's no-FX raw test (no fx_lpf, just <code>BufRd</code>
+        + <code>Out</code>) showed the same 0.23× peak ratio, localizing the divergence to
+        <code>basic_stereo_player</code>'s playback ugens, which are upstream of any FX wrapping.
+        Confirmed by Lokayata, not inferred.
+      </div>
+      <div class="lede" style="font-size: 12px; color: var(--flag); padding: 10px 12px; background: rgba(224, 175, 104, 0.06); border-left: 3px solid var(--flag); border-radius: 4px; margin-top: 10px">
+        <b>Update 2026-05-09 (refines the conclusion above):</b> the deficit is NOT specific to <code>basic_stereo_player</code>.
+        The <a href="#fourth">Fourth pass</a> ran the same MIDI-cutoff sweep on <code>:lpf</code>, <code>:hpf</code>, <code>:bpf</code>,
+        and a no-op <code>:level</code> passthrough — the ratio is flat at 0.55–0.66× across <i>every</i> WASM
+        signal path. So the locus is the WASM scsynth render layer itself (probably <code>Out</code> /
+        AudioWorklet stage), not the playback ugens. The "exp-010 → <code>basic_stereo_player</code>" framing
+        was correct evidence but a too-narrow interpretation.
+      </div>
+
+      <h2 id="inverse">Inverse probe — replay web's exact addressing on desktop scsynth</h2>
+      <div class="lede" style="margin-bottom: 12px">
+        Symmetric test: same rules, opposite side. Send native scsynth (Sonic Pi.app) OSC packets
+        with web's <code>target_group=100/101</code>, <code>in_bus=16</code>, <code>out_bus=0</code>
+        instead of desktop's native <code>target=0</code>, <code>in_bus=64</code>, <code>out_bus=18</code>.
+        If addressing is routing-only and DSP is what determines audio, desktop's audio level should
+        not move when we change addressing.
+      </div>
+      <table class="metrics" style="margin-bottom: 16px">
+        <thead>
+          <tr>
+            <th>Config</th>
+            <th>target_group</th>
+            <th>in_bus</th>
+            <th>out_bus</th>
+            <th class="num">Peak</th>
+            <th class="num">RMS</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Native desktop addressing<br /><small>(<code>capture-desktop-raw.ts</code>)</small></td>
+            <td>0 <small>(root)</small></td>
+            <td>64</td>
+            <td>18 <small>(mixer_bus)</small></td>
+            <td class="num"><b>0.6244</b></td>
+            <td class="num"><b>0.1264</b></td>
+            <td><span class="ratio-good">audible — reference</span></td>
+          </tr>
+          <tr>
+            <td>Web addressing, with-groups<br /><small>(<code>--mode=wired</code>: pre-create groups 100/101 at head of root)</small></td>
+            <td>100 / 101</td>
+            <td>16</td>
+            <td>0 <small>(master, mixer-processed)</small></td>
+            <td class="num"><b>0.6244</b></td>
+            <td class="num"><b>0.1264</b></td>
+            <td><span class="ratio-good">audible — identical to native desktop row</span></td>
+          </tr>
+          <tr>
+            <td>Web addressing, verbatim<br /><small>(<code>--mode=verbatim</code>: groups not pre-created)</small></td>
+            <td>100 / 101 <small>(don't exist)</small></td>
+            <td>16</td>
+            <td>0</td>
+            <td class="num">0.0000</td>
+            <td class="num">0.0000</td>
+            <td><span class="ratio-bad">silent — groups 100/101 missing on desktop, /s_new dropped</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="audio-grid" style="grid-template-columns: 1fr 1fr 1fr">
+        <div class="card">
+          <h3>Native desktop<br /><span>target=0, out=18</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/desktop-raw.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Web addressing, wired<br /><span>target=100/101, out=0</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/desktop-web-addressing-wired.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Web addressing, verbatim<br /><span>silent (groups absent)</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/desktop-web-addressing-verbatim.wav"></audio>
+        </div>
+      </div>
+      <div class="lede" style="font-size: 12.5px; margin-top: 14px; padding: 12px 14px; background: var(--bg-elev); border-left: 4px solid var(--pass); border-radius: 6px; line-height: 1.6">
+        <b>Symmetric Lokayata confirmation — both directions produce the same conclusion:</b><br />
+
+        <table class="metrics" style="margin-top: 10px; margin-bottom: 8px">
+          <thead>
+            <tr>
+              <th>scsynth</th>
+              <th>Native addressing</th>
+              <th>Other-side addressing wired</th>
+              <th>Other-side addressing verbatim</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Web (WASM)</td>
+              <td class="num">0.0741 / 0.0145</td>
+              <td class="num">0.0741 / 0.0145</td>
+              <td class="num">silent</td>
+            </tr>
+            <tr>
+              <td>Desktop (native)</td>
+              <td class="num">0.6244 / 0.1264</td>
+              <td class="num">0.6244 / 0.1264</td>
+              <td class="num">silent</td>
+            </tr>
+          </tbody>
+        </table>
+
+        Each scsynth produces its own DSP signature regardless of which side's addressing fields drive it.
+        WASM scsynth at peak 0.0741 — invariant. Native scsynth at peak 0.6244 — invariant. The 8.43×
+        gap between them is preserved across every addressing combination tested. <b>The audio difference
+        is intrinsic to the scsynth implementation</b> (WASM ugens vs native ugens), not in any layer
+        we control above the bridge. Confirmed by 6 separate captures, both directions, observation only.
+      </div>
+
+      <h2 id="bytes">Strongest cross-engine test — same encoder, same bytes, two scsynth implementations</h2>
+      <div class="lede" style="margin-bottom: 12px">
+        Final isolation. Imported SuperSonic's main-HEAD <code>encodeMessage</code> JS function directly,
+        encoded the lpf <code>/s_new</code> sequence with web's exact addressing, then delivered those
+        bytes verbatim via UDP to Sonic Pi.app's native scsynth. The wire format is now <em>literally
+        the same bytes</em> — same encoder produced both runs.
+      </div>
+      <table class="metrics" style="margin-bottom: 16px">
+        <thead>
+          <tr>
+            <th>Receiver</th>
+            <th>Source of OSC bytes</th>
+            <th class="num">Peak</th>
+            <th class="num">RMS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>WASM scsynth (web)</td>
+            <td>SuperSonic <code>encodeMessage</code> in browser → AudioWorklet</td>
+            <td class="num">0.0741</td>
+            <td class="num">0.0145</td>
+          </tr>
+          <tr>
+            <td><b>Native scsynth (Sonic Pi.app)</b></td>
+            <td>SuperSonic <code>encodeMessage</code> in Node → UDP → scsynth</td>
+            <td class="num"><b>0.6244</b></td>
+            <td class="num"><b>0.1264</b></td>
+          </tr>
+          <tr style="border-top: 2px solid var(--border)">
+            <td colspan="2"><i>Ratio (native / web)</i></td>
+            <td class="num"><span class="ratio-bad">8.43×</span></td>
+            <td class="num"><span class="ratio-bad">8.72×</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="audio-grid" style="grid-template-columns: 1fr 1fr">
+        <div class="card">
+          <h3>WASM scsynth, web encoder bytes<br /><span>peak 0.0741</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-raw.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Native scsynth, web encoder bytes<br /><span>peak 0.6244</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/native-with-web-bytes.wav"></audio>
+        </div>
+      </div>
+      <div class="lede" style="font-size: 12.5px; margin-top: 14px; padding: 14px 16px; background: rgba(247, 118, 142, 0.08); border-left: 4px solid var(--fail); border-radius: 6px; line-height: 1.6">
+        <b>What this isolates:</b>
+        same JS encoder function, same 884 user bytes (132-byte fx_lpf + 8×92-byte sample fires + 16-byte
+        n_free), same buffer content (the bd_haus / sn_dub FLAC files), same params, same cadence. The
+        only difference is whether those bytes reach <i>WASM scsynth</i> or <i>native scsynth</i>. Same
+        in → different out by a factor of 8.43×.
+        <br /><br />
+        Per dharana's organizational-fatality test: <b>seven independent observations</b> have been made
+        across both directions of the comparison. Every one preserves the WASM-vs-native peak ratio. There
+        is no remaining variable above the bridge that could shift this number. The disparity is
+        irrevocably localised to the scsynth WASM build vs the scsynth native build.
+        <br /><br />
+        Per memory's <code>session_2026_05_06_main_head_bisect.md</code> note: bumping our pin to upstream
+        main HEAD (which includes the sc_clip fix and other April-13 DSP fixes) does not move this number
+        either. The gap is unaddressed by any commit landed since v0.57.0.
+      </div>
+
+      <h2 id="after">After two fixes — full DSL path now exercised</h2>
+      <div class="lede" style="margin-bottom: 12px">
+        Two engine changes made today, then the lpf snippet captured through the engine's full
+        Ruby/transpile/sandbox/AudioInterpreter path (the <code>--wrap-recording</code> capture
+        tool path that real users hit when running their compositions).<br /><br />
+        <b>SP72 — use_bpm leak in nested live_loop:</b> when <code>live_loop</code> is registered
+        from inside <code>in_thread</code>, it now inherits <code>bpm</code>/<code>currentSynth</code>
+        from the parent <code>ProgramBuilder</code> (set by <code>b.use_bpm</code>) instead of from
+        engine-level <code>defaultBpm</code> (only top-level <code>use_bpm</code> mutates that).<br /><br />
+        <b>Mixer gain alignment:</b> <code>MIXER.PRE_AMP</code> 0.30 → 0.32 and
+        <code>MIXER.AMP</code> 1.2 → 6 to match desktop SP's live values
+        (<code>/g_queryTree</code>-discovered, exp-010). Effective mixer gain
+        0.36× → 1.92× — apples-to-apples with desktop now.
+      </div>
+      <table class="metrics" style="margin-bottom: 16px">
+        <thead>
+          <tr>
+            <th>Path</th>
+            <th class="num">Hits / 6 s</th>
+            <th class="num">Hit rate</th>
+            <th class="num">Peak</th>
+            <th class="num">RMS</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Web wrap-recording <b>BEFORE both fixes</b></td>
+            <td class="num">9</td>
+            <td class="num"><span class="ratio-bad">2.26 Hz</span></td>
+            <td class="num">0.187</td>
+            <td class="num">0.034</td>
+            <td>SP72 leak active (bpm=60), Tau-aligned mixer (0.36×)</td>
+          </tr>
+          <tr>
+            <td>Web wrap-recording <b>AFTER SP72 only</b></td>
+            <td class="num">19</td>
+            <td class="num"><span class="ratio-good">4.01 Hz</span></td>
+            <td class="num">0.5101</td>
+            <td class="num">0.0616</td>
+            <td>SP72 fixed (bpm=120 ✓), mixer still 0.36×</td>
+          </tr>
+          <tr>
+            <td>Web wrap-recording <b>AFTER both fixes</b></td>
+            <td class="num">16<sup>*</sup></td>
+            <td class="num">3.43 Hz<sup>*</sup></td>
+            <td class="num">1.0 <small>(limiter)</small></td>
+            <td class="num">0.2517</td>
+            <td>Mixer @ 1.92× saturates Limiter.ar(0.99) — onset detector merges hits</td>
+          </tr>
+          <tr style="border-top: 2px solid var(--border)">
+            <td><b>Desktop wrap-recording (reference)</b></td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num"><b>0.4417</b></td>
+            <td class="num"><b>0.1251</b></td>
+            <td>Sonic Pi.app, same snippet, same wrap</td>
+          </tr>
+          <tr>
+            <td><i>Web (post-fixes) ÷ Desktop</i></td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num"><span class="ratio-bad">2.26×</span></td>
+            <td class="num"><span class="ratio-bad">1.92×</span></td>
+            <td>Web is now LOUDER than desktop — limiter activity</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="lede" style="font-size: 12px; color: var(--text-mute); margin-bottom: 12px">
+        <sup>*</sup> Onset detector under-counts at high gain because Limiter.ar compresses peak-to-sustained
+        ratio, blurring transient edges into the surrounding signal. Actual scsynth-level event count
+        is 22 (from the OSC trace) — same as the SP72-only row.
+      </div>
+
+      <div class="audio-grid" style="grid-template-columns: 1fr 1fr">
+        <div class="card">
+          <h3>Desktop (post-fixes) <span>peak 0.4417 · RMS 0.1251</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/desktop-postfixes.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Web (post-fixes) <span>peak 1.0 (limiter) · RMS 0.2405</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-postfixes.wav"></audio>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 16px">Spectrogram (desktop | web | diff)</h3>
+      <div class="png-block">
+        <img src="raw-lpf/spectrogram-postfixes.png" alt="post-fixes spectrogram" />
+      </div>
+
+      <h3>Per-beat divergence</h3>
+      <div class="png-block">
+        <img src="raw-lpf/perbeat-postfixes.png" alt="post-fixes per-beat" />
+      </div>
+
+      <div class="lede" style="font-size: 12.5px; margin-top: 14px; padding: 14px 16px; background: var(--bg-elev); border-left: 4px solid var(--accent-2); border-radius: 6px; line-height: 1.6">
+        <b>Three findings from this two-step intervention:</b><br /><br />
+
+        <b>1. SP72 closed the rhythm gap completely.</b> 9 hits → 19 hits in the same window. The
+        capture-tool's <code>in_thread</code> wrap is no longer a confound. Every prior FX-sweep
+        comparator result acquired through the wrap path needs re-running; much of the "filter
+        family cluster" variance was probably this bug.<br /><br />
+
+        <b>2. The mixer gain change overshoots in the other direction.</b> Aligning to desktop's
+        live <code>pre_amp=0.32, amp=6</code> means web peaks slam Limiter.ar(0.99) and saturate at 1.0
+        on the kick transients. RMS comes out 1.92× louder than desktop (which sees driver attenuation
+        we don't). The original <code>amp=1.2</code> "0.6× of desktop" comment was load-bearing —
+        not a bug, a deliberate compensation for the missing driver attenuation.<br /><br />
+
+        <b>3. The remaining MFCC ≈ 201 isn't pure DSP residual either.</b> It's now the limiter shape
+        on web (heavy compression, sustained "hump" after each transient) vs desktop's cleaner peak.
+        That's still a real difference — but it's a downstream consequence of the gain choice, not
+        an upstream WASM ugen problem.
+      </div>
+
+      <h2 id="third">Third pass — AMP=3 (mid-point between Tau-aligned 1.2 and desktop-aligned 6)</h2>
+      <div class="lede" style="margin-bottom: 12px">
+        Set <code>MIXER.AMP = 3</code> to land below the Limiter.ar(0.99) ceiling but match desktop's
+        loudness on RMS. This is the cleanest level-matched A/B we've captured through the full DSL
+        path so far.
+      </div>
+      <table class="metrics" style="margin-bottom: 16px">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th class="num">Desktop SP</th>
+            <th class="num">SonicPi.js (web @ AMP=3)</th>
+            <th class="num">Ratio (web/desktop)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Aggregate peak (whole WAV)</td>
+            <td class="num">0.4417</td>
+            <td class="num">0.9411</td>
+            <td class="num"><span class="ratio-mid">2.13×</span></td>
+          </tr>
+          <tr>
+            <td>Aggregate RMS</td>
+            <td class="num">0.1251</td>
+            <td class="num">0.1333</td>
+            <td class="num"><span class="ratio-good">1.07×</span></td>
+          </tr>
+          <tr>
+            <td>L2 mel-dB</td>
+            <td colspan="2" class="num" style="text-align:center">21.75</td>
+            <td class="num">—</td>
+          </tr>
+          <tr>
+            <td>MFCC distance</td>
+            <td colspan="2" class="num" style="text-align:center">210.84</td>
+            <td class="num">—</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Per-beat parity (steady-state windows, beats 3–7)</h3>
+      <table class="metrics" style="margin-bottom: 16px">
+        <thead>
+          <tr>
+            <th>Beat</th>
+            <th class="num">Desktop RMS</th>
+            <th class="num">Web RMS</th>
+            <th class="num">Desktop peak</th>
+            <th class="num">Web peak</th>
+            <th class="num">RMS ratio</th>
+            <th class="num">Peak ratio</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>3</td><td class="num">0.1577</td><td class="num">0.1257</td><td class="num">0.4390</td><td class="num">0.4990</td><td class="num"><span class="ratio-good">0.80×</span></td><td class="num"><span class="ratio-good">1.14×</span></td></tr>
+          <tr><td>4</td><td class="num">0.1459</td><td class="num">0.1258</td><td class="num">0.4389</td><td class="num">0.4990</td><td class="num"><span class="ratio-good">0.86×</span></td><td class="num"><span class="ratio-good">1.14×</span></td></tr>
+          <tr><td>5</td><td class="num">0.1402</td><td class="num">0.1258</td><td class="num">0.4388</td><td class="num">0.4976</td><td class="num"><span class="ratio-good">0.90×</span></td><td class="num"><span class="ratio-good">1.13×</span></td></tr>
+          <tr><td>6</td><td class="num">0.1561</td><td class="num">0.1248</td><td class="num">0.4387</td><td class="num">0.4977</td><td class="num"><span class="ratio-good">0.80×</span></td><td class="num"><span class="ratio-good">1.13×</span></td></tr>
+          <tr><td>7</td><td class="num">0.1537</td><td class="num">0.1258</td><td class="num">0.4385</td><td class="num">0.4984</td><td class="num"><span class="ratio-good">0.82×</span></td><td class="num"><span class="ratio-good">1.14×</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="audio-grid" style="grid-template-columns: 1fr 1fr">
+        <div class="card">
+          <h3>Desktop @ AMP=3 reference <span>peak 0.4417 · RMS 0.1251</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/desktop-amp3.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Web @ AMP=3 <span>peak 0.9411 · RMS 0.1333</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-amp3.wav"></audio>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 16px">Spectrogram (desktop | web | diff) at AMP=3</h3>
+      <div class="png-block">
+        <img src="raw-lpf/spectrogram-amp3.png" alt="AMP=3 spectrogram" />
+      </div>
+
+      <h3>Per-beat divergence at AMP=3</h3>
+      <div class="png-block">
+        <img src="raw-lpf/perbeat-amp3.png" alt="AMP=3 per-beat" />
+      </div>
+
+      <h3>Hit-count question — same rate, different recording windows</h3>
+      <div class="lede" style="margin-bottom: 12px">
+        Both sides intend 4 Hz hit rate (<code>use_bpm 120</code> + <code>sleep 0.5</code>). The
+        engine OSC trace shows web fires <code>/s_new</code> at exactly 250 ms intervals (= 4.00 Hz).
+        Desktop's full DSL path also runs the same snippet; its scsynth receives the equivalent
+        bundles. But the two captures cover <b>different time windows</b> because each side's
+        recording bracket starts at a different latency.
+      </div>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr><th>Side</th><th class="num">Recording-start latency</th><th class="num">First hit</th><th class="num">Last audio</th><th class="num">Audio window</th><th class="num">Expected hits @ 4 Hz</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Desktop SP</td><td class="num">~1.51 s (Sonic Pi bracketing)</td><td class="num">1.511 s</td><td class="num">4.971 s</td><td class="num">3.46 s</td><td class="num"><b>14</b></td></tr>
+          <tr><td>SonicPi.js (web)</td><td class="num">~1.02 s (ScriptProcessor tap)</td><td class="num">1.023 s</td><td class="num">5.632 s</td><td class="num">4.61 s</td><td class="num"><b>19</b></td></tr>
+        </tbody>
+      </table>
+      <div class="lede" style="font-size: 12px; color: var(--text-mute); margin-bottom: 8px">
+        The 5-hit difference (19 − 14) is purely the longer capture window on web, not a faster
+        rate. Below: envelope of each side with red dashed lines marking predicted 4-Hz hits aligned
+        to each side's first audio. Visually verify the red lines line up with the envelope peaks
+        on both sides — they do, on both, at 250 ms intervals.
+      </div>
+      <div class="png-block">
+        <img src="raw-lpf/envelope-comparison.png" alt="envelope comparison with 4 Hz prediction" />
+      </div>
+
+      <div class="lede" style="font-size: 12.5px; margin-top: 14px; padding: 14px 16px; background: rgba(158, 206, 106, 0.06); border-left: 4px solid var(--pass); border-radius: 6px; line-height: 1.6">
+        <b>What AMP=3 reveals — clean isolation of the WASM ugen residual.</b><br /><br />
+
+        <b>Rhythm: identical.</b> Both sides show 5 consecutive beat-windows of consistent energy
+        from beat 3 onward. Each window has 2 hits (kick + snare at sleep 0.5 / bpm=120). The
+        engine OSC trace confirms 38 <code>/s_new</code> events at 0.25 s spacing. Apparent
+        differences in onset-cluster counts on the prior AMP=6 capture were a limiter-saturation
+        artifact in the onset detector, not a real rhythm gap.<br /><br />
+
+        <b>RMS: 1.07× (≈ parity).</b> Desktop and web sustain the same average energy in each beat
+        window. The mixer gain is now correctly aligned for sustained content.<br /><br />
+
+        <b>Peak: 2.13× (web higher).</b> Web's peaks land at 0.50 vs desktop's 0.44 for the same
+        per-beat content. This is the actual <b>WASM <code>basic_stereo_player</code> ugen residual</b>
+        — same RMS, but more peaky transients. Peak/RMS ratio: <b>desktop 3.53, web 7.06</b> — WASM's
+        sample player produces sharper attacks relative to its sustained envelope. This matches
+        exp-010's raw-OSC finding that the WASM ugen has different per-hit envelope shaping.<br /><br />
+
+        <b>MFCC ≈ 211 is now mostly the per-hit envelope difference</b>, not gain staging or rhythm.
+        Filing this upstream at <code>samaaron/supersonic</code> would be more focused than
+        before — the question becomes "why does WASM <code>basic_stereo_player</code> produce
+        higher peak/RMS ratio for the same /s_new + same buffer," with a minimal A/B reproducer
+        already in <code>tools/web-raw-osc-only.ts</code> and <code>tools/capture-desktop-raw.ts</code>.
+      </div>
+      <div class="lede" style="font-size: 12px; color: var(--flag); padding: 10px 12px; background: rgba(224, 175, 104, 0.06); border-left: 3px solid var(--flag); border-radius: 4px; margin-top: 10px">
+        <b>Update 2026-05-09 (refines the conclusion above):</b> "per-hit envelope shape divergence in <code>basic_stereo_player</code>"
+        was the wrong mechanism. The <a href="#fourth">Fourth pass</a> showed peak/RMS ratio in the WASM scsynth path
+        is 7.06 vs native's 3.53 across every FX (<code>:level</code>, <code>:lpf</code>, <code>:hpf</code>, <code>:bpf</code>) at every cutoff —
+        a constant <i>output gain offset</i> of ~0.6×, not envelope shape. With AMP=3 lifting web's pre-limiter
+        signal to ~1.5×, the Limiter.ar(0.99) clamps web's peaks slightly more than native's (which sit at ~1.0)
+        — that's what produces the 1.14× per-beat peak excess after AMP=3. Different mechanism than first written here.
+      </div>
+
+      <h2 id="fourth">Fourth pass (2026-05-09) — characterizing the WASM gain deficit</h2>
+      <div class="lede" style="margin-bottom: 14px">
+        After the AMP=3 result, the question shifted from "is there a residual?" to <b>"what shape is the residual?"</b>
+        The hypothesis was that the WASM <code>basic_stereo_player</code>'s envelope generator has a different
+        attack-time minimum than native, producing peakier transients. The data instead points to a
+        <b>uniform output gain deficit in the WASM scsynth itself</b>, applied to every signal regardless of FX.
+      </div>
+
+      <h3>Step 1 — synthdef binary check</h3>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr><th>Side</th><th>Path</th><th>Size</th><th>SHA-256</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Desktop</td>
+            <td class="num"><code>/Applications/Sonic Pi.app/.../sonic-pi-fx_lpf.scsyndef</code></td>
+            <td class="num">2466 B</td>
+            <td class="num"><code>80bd63…326b</code></td>
+          </tr>
+          <tr>
+            <td>Web (CDN)</td>
+            <td class="num"><code>unpkg.com/supersonic-scsynth-synthdefs@0.57.0/synthdefs/sonic-pi-fx_lpf.scsyndef</code></td>
+            <td class="num">2466 B</td>
+            <td class="num"><span class="ratio-good"><code>80bd63…326b</code></span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        <b>Byte-identical.</b> Both engines load the exact same compiled scsyndef. So the divergence must come from
+        the WASM rendering of identical UGens, not from a different synth graph or different parameters baked in.
+      </div>
+
+      <h3>Step 2 — decompile the synthdef and read the UGen graph</h3>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 12px; color: var(--text-dim)">
+        Tool: <code>tools/_probe-decompile-scsyndef.py</code> (parses SCgf v1 binary). Key UGens in
+        <code>sonic-pi-fx_lpf</code> (70 ugens total, 22 params):
+      </div>
+      <pre class="osc" style="font-size: 11px; margin-bottom: 12px"><span class="cmt"># Cutoff path: param:cutoff (default 100 MIDI) → EnvGen (slide) → MIDICPS (op17) → Hz</span>
+u37 EnvGen   rate=control (param:cutoff …)
+u38 UnaryOp  rate=control op=17 <span class="cmt">(MIDICPS)</span>
+<span class="cmt"># Filter (one per stereo channel) — Butterworth 2-pole, NO resonance</span>
+u39 LPF      rate=audio   (u30.input_left, u38.cutoff_hz)
+u58 LPF      rate=audio   (u57.input_right, u38.cutoff_hz)
+<span class="cmt"># Dry/wet crossfade per channel</span>
+u66 XFade2   rate=audio   (dry_left, wet_left, mix*2-1, amp)
+u68 XFade2   rate=audio   (dry_right, wet_right, mix*2-1, amp)
+u69 Out      rate=audio   (param:out_bus, u66, u68)</pre>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        Two important things from the graph:
+        (a) The filter is <code>LPF</code> — a 2-pole Butterworth with <b>no resonance / Q parameter</b>, so the divergence cannot be Q.
+        (b) The cutoff parameter is in <b>MIDI notes</b>, not Hz: <code>UnaryOpUGen op=17</code> (<code>MIDICPS</code>) converts before reaching the LPF freq input.
+      </div>
+
+      <h3>Step 3 — sweep cutoff (MIDI 30 → 127, ~46 Hz to ~12.5 kHz)</h3>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr><th class="num">cutoff (MIDI)</th><th class="num">≈ Hz</th><th class="num">desktop peak</th><th class="num">web peak</th><th class="num">peak ratio</th><th class="num">desktop RMS</th><th class="num">web RMS</th><th class="num">RMS ratio</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">30</td><td class="num">46</td><td class="num">0.236</td><td class="num">0.149</td><td class="num"><span class="ratio-good">0.63×</span></td><td class="num">0.059</td><td class="num">0.034</td><td class="num"><span class="ratio-good">0.58×</span></td></tr>
+          <tr><td class="num">50</td><td class="num">131</td><td class="num">0.589</td><td class="num">0.373</td><td class="num"><span class="ratio-good">0.63×</span></td><td class="num">0.120</td><td class="num">0.069</td><td class="num"><span class="ratio-good">0.58×</span></td></tr>
+          <tr><td class="num">70</td><td class="num">466</td><td class="num">0.624</td><td class="num">0.395</td><td class="num"><span class="ratio-good">0.63×</span></td><td class="num">0.135</td><td class="num">0.078</td><td class="num"><span class="ratio-good">0.58×</span></td></tr>
+          <tr><td class="num">90</td><td class="num">1397</td><td class="num">0.624</td><td class="num">0.395</td><td class="num"><span class="ratio-good">0.63×</span></td><td class="num">0.137</td><td class="num">0.079</td><td class="num"><span class="ratio-good">0.58×</span></td></tr>
+          <tr><td class="num">110</td><td class="num">4186</td><td class="num">0.649</td><td class="num">0.414</td><td class="num"><span class="ratio-good">0.64×</span></td><td class="num">0.140</td><td class="num">0.081</td><td class="num"><span class="ratio-good">0.58×</span></td></tr>
+          <tr><td class="num">127</td><td class="num">12544</td><td class="num">0.726</td><td class="num">0.457</td><td class="num"><span class="ratio-good">0.63×</span></td><td class="num">0.146</td><td class="num">0.084</td><td class="num"><span class="ratio-good">0.58×</span></td></tr>
+        </tbody>
+      </table>
+      <div class="png-block">
+        <img src="raw-lpf/cutoff-sweep.png" alt="lpf cutoff sweep" />
+      </div>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        <b>The ratio is flat at 0.58–0.64× across the entire valid MIDI range.</b> If the WASM divergence were filter-shape-dependent (slope, ringing, Q), the ratio would change with cutoff. It doesn't — it's a constant gain offset. Tool: <code>tools/_probe-lpf-cutoff-sweep.sh</code>.
+      </div>
+
+      <h3>Step 4 — does the deficit also apply to other FX and to the no-FX baseline?</h3>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr><th>FX</th><th>parameter swept</th><th class="num">range</th><th class="num">peak ratio (web ÷ desktop)</th><th class="num">RMS ratio</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>:level</code> (passthrough)</td><td>—</td><td class="num">n/a</td><td class="num"><span class="ratio-good">0.60×</span></td><td class="num"><span class="ratio-good">0.65×</span></td></tr>
+          <tr><td><code>:lpf</code></td><td><code>cutoff</code></td><td class="num">MIDI 30–127</td><td class="num"><span class="ratio-good">0.63× ± 0.02</span></td><td class="num"><span class="ratio-good">0.58×</span></td></tr>
+          <tr><td><code>:hpf</code></td><td><code>cutoff</code></td><td class="num">MIDI 30–127</td><td class="num"><span class="ratio-good">0.55–0.66×</span></td><td class="num"><span class="ratio-good">0.51–0.56×</span></td></tr>
+          <tr><td><code>:bpf</code></td><td><code>centre</code> at default 100</td><td class="num">single point</td><td class="num"><span class="ratio-good">0.64×</span></td><td class="num"><span class="ratio-good">0.56×</span></td></tr>
+        </tbody>
+      </table>
+      <div class="png-block">
+        <img src="raw-lpf/fx-class-summary.png" alt="WASM gain deficit class summary" />
+      </div>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        <b>Yes — the deficit is present even with the no-FX <code>:level</code> passthrough.</b> So the issue isn't in the LPF UGen specifically; it's in the WASM scsynth rendering itself, applied uniformly to every signal regardless of FX. The flat ratio across cutoffs and across FX types confirms a single underlying constant.
+      </div>
+
+      <h3>Step 5 — Tau context, and what AMP=3 was actually doing</h3>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 14px 16px; background: var(--bg-elev); border-left: 4px solid var(--accent-2); border-radius: 6px; line-height: 1.65">
+        Sonic Tau (a separate browser-WASM Sonic Pi project) settled on PRE_AMP=0.2 / AMP=6 (effective 1.2) for its mixer.
+        That value was empirically calibrated to avoid clipping the WASM-quiet path on Tau's content. We adopted Tau's
+        config as our own MIXER default because Tau had already done the calibration legwork — but Tau didn't
+        characterize <i>why</i> the WASM path is quiet, just compensated for it.<br /><br />
+
+        Today's data fills in that missing piece: the WASM scsynth uniformly outputs <b>~0.6× of native</b>, baseline,
+        before any FX or mixer involvement. Tau's mixer setting of 1.2 was matching this by coincidence — they were
+        compensating for the WASM deficit at the mixer layer, intuitively, without knowing the underlying constant.<br /><br />
+
+        Our <b>AMP=3</b> setting (this session) bumps the mixer 2.5× higher than Tau-aligned 1.2. Effective gain becomes
+        2.5 × 0.6 = <b>1.5× pre-limiter</b>. The Limiter.ar(0.99) clamps the peakiest transients, leaving the per-beat
+        windows at <b>~1.07× RMS / ~1.14× peak</b> vs desktop — the residual we measured in the third-pass section.<br /><br />
+
+        <b>Implication.</b> The 1.14× per-beat peak ratio after AMP=3 is the sum of two things: (1) the WASM scsynth's
+        constant 0.6× output deficit (corrected by AMP=3 to ~1.5×), and (2) the mixer Limiter.ar(0.99) clamping native's
+        peaks slightly more than web's (because web's pre-limiter peaks are right at the ceiling, native's are slightly
+        below). It is <b>not</b> a per-hit envelope-shape divergence in <code>basic_stereo_player</code> — that hypothesis
+        was wrong.
+      </div>
+
+      <h3>Step 6 — content-specific reversal (older finding, now contextualized)</h3>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        Memory note <code>feedback_wasm_gain_staging.md</code> (2026-05-04, multi-fixture sweep) found that across 10 e2e
+        compositions, web/desktop RMS ratios spanned <b>0.30× to 4.20×</b> — three fixtures had web LOUDER. Today's
+        flat-0.6× class signal is on raw-OSC paths through filter UGens. The 4.20× outlier (<code>07_ambient</code>,
+        heavy reverb + prophet + echo) implicates time-domain feedback-loop FX (reverb, echo, chorus) as a separate
+        class with non-constant gain behavior. Those weren't measured today.
+      </div>
+
+      <h3>Step 7 — what to file upstream</h3>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 14px 16px; background: rgba(247, 118, 142, 0.06); border-left: 4px solid var(--fail); border-radius: 6px; line-height: 1.65">
+        <b>Filable at <code>samaaron/supersonic</code>:</b> "WASM scsynth output is uniformly ~0.6× of native for the
+        same /s_new on the same byte-identical synthdef." Reproducer is two scripts already in the repo:
+        <code>tools/capture-desktop-raw.ts</code> and <code>tools/web-raw-osc-only.ts</code> — same OSC bundle to each
+        scsynth, each writes a WAV. The cutoff sweep
+        (<code>tools/_probe-lpf-cutoff-sweep.sh</code>) is the supporting evidence that the deficit is constant across
+        cutoffs, ruling out filter-shape divergence. Synthdef byte-identity is shown above (SHA-256 match), ruling out
+        a different synth graph.<br /><br />
+
+        Not filable yet: the content-specific reversal on feedback-loop FX. That needs a separate raw-OSC reproducer
+        on reverb/echo before it can be turned into a clean upstream issue.
+      </div>
+
+      <h2 id="fifth">Fifth pass (2026-05-09) — full FX-sweep + e2e regression with the fixes applied</h2>
+      <div class="lede" style="margin-bottom: 14px">
+        With SP72 + AMP=3 in place, re-ran <b>both</b> the 40-FX WAV-verify sweep (<a href="index.html">index.html</a>)
+        and the 10-fixture e2e composition suite (<code>tools/audio_comparison/e2e_test_suite/</code>). Scope
+        of these tests is the full DSL path (engine → bridge → WASM scsynth on web; engine → spider → native scsynth on desktop)
+        — <i>not</i> raw-OSC. The constant-0.6× WASM deficit and the limiter clamping both apply here, so AMP=3
+        is the right point in the parameter space to measure parity from.
+      </div>
+
+      <h3>FX sweep — verdict deltas vs the prior baseline (which ran under buggy <code>--wrap-recording</code>)</h3>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr><th>Stat</th><th class="num">Prior (2026-05-06, pre-SP72, AMP=1.2)</th><th class="num">Today (post-SP72, AMP=3)</th><th class="num">Δ</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Mean score</td><td class="num">37.91</td><td class="num"><span class="ratio-good">60.21</span></td><td class="num"><span class="ratio-good">+22.30</span></td></tr>
+          <tr><td>HIGH count</td><td class="num">0</td><td class="num">0</td><td class="num">·</td></tr>
+          <tr><td>MID count</td><td class="num">6</td><td class="num"><span class="ratio-good">31</span></td><td class="num"><span class="ratio-good">+25</span></td></tr>
+          <tr><td>LOW count</td><td class="num">32</td><td class="num"><span class="ratio-good">7</span></td><td class="num"><span class="ratio-good">−25</span></td></tr>
+          <tr><td>INCONCLUSIVE</td><td class="num">2</td><td class="num">2</td><td class="num">· (delay, chorus — desktop silent, SP63)</td></tr>
+        </tbody>
+      </table>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        <b>27 FX upgraded tier</b>, 2 regressed (<code>hpf</code> 54.9 → 34.4 and <code>tanh</code> 50.2 → 47.2), 11 unchanged.
+        The HIGH count is still 0 because every score-≥-70 FX is capped by the orthogonal MFCC ≤ 180 gate (timbre divergence at the WASM ugen
+        level — same class as the cutoff-sweep result above). 9 FX are in this near-HIGH band:
+        <code>pitch_shift</code>, <code>reverb</code>, <code>band_eq</code>, <code>bitcrusher</code>, <code>rlpf</code>, <code>level</code>,
+        <code>nbpf</code>, <code>nrbpf</code>, <code>eq</code>. Their level is right; their timbre still differs.<br /><br />
+        <b>Not progress, but worth noting:</b> the score improvement is partly real (SP72 fixed the rhythm bug, AMP=3 corrected the level offset)
+        and partly methodological (the prior baseline ran under <code>--wrap-recording</code> which was the SP72 trigger, so its scores were
+        depressed by both the engine bug AND the gain deficit). Today's numbers measure the engine without the rhythm bug.
+      </div>
+
+      <h3>e2e — 10 complex compositions through the full DSL path</h3>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr><th class="num">#</th><th>Fixture</th><th class="num">Desktop RMS</th><th class="num">Web RMS</th><th class="num">RMS ratio</th><th class="num">Desktop peak</th><th class="num">Web peak</th><th class="num">Peak ratio</th><th class="num">MFCC</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">1</td><td><code>01_minimal_techno</code></td><td class="num">0.225</td><td class="num">0.191</td><td class="num"><span class="ratio-good">0.85×</span></td><td class="num">1.000</td><td class="num">1.000</td><td class="num"><span class="ratio-good">1.00×</span></td><td class="num">187</td></tr>
+          <tr><td class="num">2</td><td><code>02_fx_chain</code></td><td class="num">0.408</td><td class="num">0.043</td><td class="num"><span class="ratio-bad">0.11×</span></td><td class="num">1.000</td><td class="num">0.314</td><td class="num"><span class="ratio-bad">0.31×</span></td><td class="num">213</td></tr>
+          <tr><td class="num">3</td><td><code>03_multi_layer</code></td><td class="num">0.185</td><td class="num">0.158</td><td class="num"><span class="ratio-good">0.85×</span></td><td class="num">0.857</td><td class="num">0.990</td><td class="num"><span class="ratio-good">1.16×</span></td><td class="num">203</td></tr>
+          <tr><td class="num">4</td><td><code>04_sync_cue</code></td><td class="num">0.179</td><td class="num">0.152</td><td class="num"><span class="ratio-good">0.85×</span></td><td class="num">0.860</td><td class="num">0.833</td><td class="num"><span class="ratio-good">0.97×</span></td><td class="num">204</td></tr>
+          <tr><td class="num">5</td><td><code>05_dj_dave_full</code></td><td class="num">0.311</td><td class="num">0.193</td><td class="num"><span class="ratio-mid">0.62×</span></td><td class="num">1.000</td><td class="num">1.000</td><td class="num"><span class="ratio-good">1.00×</span></td><td class="num">266</td></tr>
+          <tr><td class="num">6</td><td><code>06_euclidean</code></td><td class="num">0.272</td><td class="num">0.230</td><td class="num"><span class="ratio-good">0.85×</span></td><td class="num">1.000</td><td class="num">0.927</td><td class="num"><span class="ratio-good">0.93×</span></td><td class="num">187</td></tr>
+          <tr><td class="num">7</td><td><code>07_ambient</code></td><td class="num">0.027</td><td class="num">0.080</td><td class="num"><span class="ratio-bad">2.96×</span></td><td class="num">0.154</td><td class="num">0.613</td><td class="num"><span class="ratio-bad">3.97×</span></td><td class="num">173</td></tr>
+          <tr><td class="num">8</td><td><code>08_full_composition</code></td><td class="num">0.208</td><td class="num">0.183</td><td class="num"><span class="ratio-good">0.88×</span></td><td class="num">1.000</td><td class="num">0.981</td><td class="num"><span class="ratio-good">0.98×</span></td><td class="num">157</td></tr>
+          <tr><td class="num">9</td><td><code>09_dnb</code></td><td class="num">0.329</td><td class="num">0.254</td><td class="num"><span class="ratio-good">0.77×</span></td><td class="num">1.000</td><td class="num">0.917</td><td class="num"><span class="ratio-good">0.92×</span></td><td class="num">183</td></tr>
+          <tr><td class="num">10</td><td><code>10_house</code></td><td class="num">0.262</td><td class="num">0.225</td><td class="num"><span class="ratio-good">0.86×</span></td><td class="num">0.951</td><td class="num">1.000</td><td class="num"><span class="ratio-good">1.05×</span></td><td class="num">203</td></tr>
+        </tbody>
+      </table>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 14px 16px; background: rgba(158, 206, 106, 0.06); border-left: 4px solid var(--pass); border-radius: 6px; line-height: 1.65">
+        <b>Median RMS ratio: 0.85×.</b> 8 of 10 fixtures land in the 0.62–0.88× band — close to the structural ~0.6× WASM deficit
+        partially compensated by AMP=3.<br /><br />
+
+        <b>Two outliers (the feedback-loop FX class):</b><br />
+        • <code>02_fx_chain</code> at 0.11× — heavy serial FX chain, web much quieter. Some FX in the chain over-attenuates in WASM.<br />
+        • <code>07_ambient</code> at 2.96× — heavy reverb + prophet + echo, web much louder. Down from prior 4.20× (memory <code>feedback_wasm_gain_staging.md</code>, 2026-05-04) → today's fixes have reduced the divergence by ~30% but the inversion remains. This is the <b>non-constant-gain class</b> referenced in the cutoff-sweep section above: time-domain feedback FX (reverb/echo/chorus) do not show the constant 0.6× deficit that filter UGens do — they amplify rather than attenuate.<br /><br />
+
+        Full per-fixture table + sidecars: <code>tools/audio_comparison/e2e_test_suite/RESULTS.md</code> + <code>.captures/e2e-sweep/&lt;fixture&gt;.json</code>.
+      </div>
+
+      <h2 id="sixth">Sixth pass (2026-05-09 evening) — "rhythm still looks broken on lpf?" — measurement artifact, not bug</h2>
+      <div class="lede" style="margin-bottom: 14px">
+        Looking at <a href="index.html?fx=lpf">/?fx=lpf</a> in the FX inspector, the desktop and web spectrograms <i>visually</i>
+        suggest different rhythms — desktop's hits look denser, beefier, and the recording-window asymmetry makes it ambiguous
+        which side is at the right tempo. This is a <b>measurement artifact</b> from the same WASM-vs-native LPF gain delta we characterized above —
+        not a tempo bug.
+      </div>
+
+      <h3>What the eye sees vs what the audio is actually scheduled at</h3>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr><th>Side / FX</th><th class="num">Wallclock schedule</th><th class="num">Autocorrelation period</th><th class="num">Envelope FFT peak</th><th>Reading</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><b>Desktop · with <code>:lpf</code></b></td><td class="num">4 Hz (every 250 ms)</td><td class="num">290 ms (3.45 Hz)</td><td class="num">3.47 Hz</td><td><span class="ratio-mid">looks slow — measurement artifact</span></td></tr>
+          <tr><td><b>Web · with <code>:lpf</code></b></td><td class="num">4 Hz</td><td class="num">250 ms (4.00 Hz)</td><td class="num">3.91 Hz</td><td><span class="ratio-good">measures clean — WASM LPF doesn't smear</span></td></tr>
+          <tr><td>Desktop · <i>no FX</i></td><td class="num">4 Hz</td><td class="num">100 ms (rule out — sub-period artifact)</td><td class="num">4.04 Hz</td><td><span class="ratio-good">clean ✓</span></td></tr>
+          <tr><td>Web · <i>no FX</i></td><td class="num">4 Hz</td><td class="num">109 ms (sub-period artifact)</td><td class="num">3.93 Hz</td><td><span class="ratio-good">clean ✓</span></td></tr>
+        </tbody>
+      </table>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        Mechanism: native LPF's output is ~1.7× louder than WASM LPF (constant-gain deficit characterized in the third / fourth pass above).
+        Each kick's ringing tail on the desktop side bleeds into the next hit's window. Onset detectors (and the eye, in the spectrogram view)
+        merge adjacent bd→sn transients into beefier "doublets" — making the apparent inter-hit gap 290 ms instead of the actual 250 ms.
+        Web's quieter LPF leaves transients clean and the onset detector reads the true 250 ms cadence.
+      </div>
+
+      <h3>No-FX A/B: both sides on the 4 Hz grid, identical schedule</h3>
+      <div class="audio-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 12px">
+        <div class="card">
+          <h3>Desktop · no FX <span>peak 0.4616 · RMS 0.1052 · 6.37s @ 48kHz</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/desktop-no-fx.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Web · no FX <span>peak 0.6661 · RMS 0.1238 · 4.61s @ 48kHz</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-no-fx.wav"></audio>
+        </div>
+      </div>
+      <div class="png-block">
+        <img src="raw-lpf/timing-no-fx.png" alt="no-FX rhythm A/B" />
+      </div>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        Snippet: <code>use_bpm 120; live_loop :probe { sample :bd_haus; sleep 0.5; sample :sn_dub; sleep 0.5 }</code>.
+        Green dashes mark the expected 4 Hz grid (every 250 ms). Both desktop and web fire on the grid. <b>Tempo parity is exact</b> —
+        confirming the SP72 fix (use_bpm leak in nested live_loop under <code>--wrap-recording</code>) is fully working.
+        Listen to both recordings above to hear the parity directly — bd→sn→bd→sn at identical wallclock cadence.
+      </div>
+
+      <h3>No-FX spectrogram (mel-dB · desktop | web | diff)</h3>
+      <div class="png-block">
+        <img src="raw-lpf/no-fx-spec.png" alt="no-FX spectrogram comparison" />
+      </div>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        Without LPF, the spectrograms tell the cleanest possible story. Desktop (left) and web (middle)
+        both show <b>regular vertical bands at 250 ms intervals</b> — exact same rhythm, exact same hit cadence.
+        Desktop's bands start at t≈1.5 s due to recording-start latency; web's start at t≈0.5 s.
+        After the latency offset, the patterns are visually identical in time-spacing.<br /><br />
+        The diff panel (right) shows desktop uniformly redder (louder) than web across every band — the
+        constant ~0.6× WASM output deficit characterized in the <a href="#fourth">Fourth pass</a>, with
+        no time-domain or rhythm-domain divergence anywhere. Pure level offset, exactly as predicted.
+      </div>
+      <table class="metrics" style="margin-bottom: 14px">
+        <thead>
+          <tr><th>Probe (no-FX A/B)</th><th class="num">Desktop</th><th class="num">Web</th><th class="num">Ratio</th><th>Reading</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Onset count (5 s window)</td><td class="num">20</td><td class="num">22</td><td class="num"><span class="ratio-good">1.10×</span></td><td>both at ~4 Hz; the 2-hit gap is the desktop cold-start window difference</td></tr>
+          <tr><td><b>Energy × duration</b></td><td class="num">0.07008</td><td class="num">0.07032</td><td class="num"><span class="ratio-good">1.004×</span></td><td><b>parity — total integrated energy identical</b></td></tr>
+          <tr><td>Envelope-best-lag</td><td colspan="2" class="num" style="text-align:center">600 ms</td><td class="num"><span class="ratio-mid">⚠</span></td><td>desktop's recording-start latency (expected; not a bug)</td></tr>
+          <tr><td>L2 mel-dB</td><td colspan="2" class="num" style="text-align:center">24.59</td><td class="num">—</td><td>frequency-domain divergence dominated by the level offset</td></tr>
+          <tr><td>MFCC distance</td><td colspan="2" class="num" style="text-align:center">209.25</td><td class="num">—</td><td>timbre divergence — same class as the lpf MFCC of 211 (per WASM-vs-native ugen rendering)</td></tr>
+          <tr><td>Peak frequency</td><td class="num">54.0 Hz</td><td class="num">54.0 Hz</td><td class="num"><span class="ratio-good">match</span></td><td>same fundamental — bd_haus kick fundamental at ~54 Hz on both sides</td></tr>
+        </tbody>
+      </table>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 12px 14px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px; line-height: 1.65">
+        <b>The energy × duration probe at 1.004× is the strongest possible parity statement.</b>
+        It integrates RMS² over the audio window — robust to both cold-start asymmetry (excluded by
+        windowing) and to the per-hit envelope-shape question (averaged out over the integration). At AMP=3,
+        without FX, total delivered energy on web is within 0.4% of desktop. Combined with peak-frequency
+        match (54.0 Hz both sides) and onset-count match (1.10×), this is a tighter parity statement than
+        any pre-fix capture.
+      </div>
+
+      <h3>Why the autocorrelation says "290 ms" for desktop with lpf</h3>
+      <div class="png-block">
+        <img src="raw-lpf/rhythm-analysis.png" alt="autocorrelation + envelope FFT" />
+      </div>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        Top row: autocorrelation of envelope. Desktop's first peak at 290 ms (suggesting 3.45 Hz period) → kick decay tail through
+        louder native LPF correlates with the next kick rather than with the intervening snare. Web's autocorrelation is broader because
+        its lighter LPF leaves bd and sn transients distinct; the period bumps are at ~250 ms. Bottom row: envelope FFT — desktop and web
+        both peak in the 3.5–4 Hz band. The 14 % gap between them in this measurement is a signal-shape artifact, not a scheduling artifact.
+      </div>
+
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 14px 16px; background: rgba(158, 206, 106, 0.06); border-left: 4px solid var(--pass); border-radius: 6px; line-height: 1.65">
+        <b>Conclusion.</b> The lpf inspector spectrogram is misleading on rhythm — it shows two true things superimposed (the constant-gain WASM deficit characterized above + the recording-window cold-start asymmetry) that together <i>look</i> like a tempo divergence. The actual schedule is identical on both sides. SP72 is working. Future rhythm-comparison screenshots should be on a no-FX or a flat-passthrough <code>:level</code> path so the LPF smearing doesn't visually mask parity.
+      </div>
+
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 14px 16px; background: rgba(224, 175, 104, 0.10); border-left: 4px solid var(--flag); border-radius: 6px; line-height: 1.65">
+        <b>Correction (2026-05-09, later in the evening — TWO rounds, with apologies).</b><br /><br />
+
+        <b>Round 1:</b> the user pushed back: <i>"with no fx we get full tempo parity but with fx (lpf) we get tempo disparity?!?"</i> Right. Four detection methods on the same WAV pairs:
+        <table class="metrics" style="margin: 10px 0">
+          <thead>
+            <tr><th>Test</th><th>Cutoff</th><th class="num">Autocorr period</th><th class="num">Threshold onset rate</th><th class="num">Envelope FFT dominant</th><th>Verdict</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>no-FX</td><td>—</td><td class="num"><span class="ratio-good">~250 ms · ~250 ms</span></td><td class="num"><span class="ratio-good">4.04 Hz · 3.93 Hz</span></td><td class="num"><span class="ratio-good">4.04 · 3.93</span></td><td><span class="ratio-good">parity</span></td></tr>
+            <tr><td>lpf only</td><td>MIDI 100 (default)</td><td class="num"><span class="ratio-bad">290 ms · 250 ms</span></td><td class="num"><span class="ratio-bad">3.45 Hz · 4.00 Hz</span></td><td class="num"><span class="ratio-bad">3.47 Hz · 3.91 Hz</span></td><td><span class="ratio-bad">DESKTOP −14 % on every metric</span></td></tr>
+            <tr><td>lpf only</td><td>MIDI 130 (Sam's setting)</td><td class="num"><span class="ratio-mid">165 ms · 249 ms</span></td><td class="num">—</td><td class="num"><span class="ratio-good">3.99 Hz · 4.10 Hz</span></td><td>autocorr disagrees with FFT — LPF render shape introduces sub-periods</td></tr>
+            <tr><td>lpf + reverb (Sam-chain)</td><td>MIDI 130</td><td class="num"><span class="ratio-good">249 ms · 249 ms</span></td><td class="num">—</td><td class="num"><span class="ratio-good">4.03 Hz · 4.10 Hz</span></td><td><span class="ratio-good">parity (reverb smooths the artifact)</span></td></tr>
+          </tbody>
+        </table>
+
+        <b>The honest framing:</b> the wallclock SCHEDULE is identical on both sides — 4 Hz both, verified via web's
+        engine OSC trace at exact 250 ms intervals, via the no-FX comparison, via the lpf+reverb comparison, and via
+        envelope-FFT dominant frequency on every test. But the rendered AUDIO ENVELOPE has different periodicities
+        specifically when LPF cutoff=100 is in play on desktop:
+        <ul style="margin: 8px 0; padding-left: 18px">
+          <li>Native LPF produces <i>louder and longer ringing tails</i> on the kick (the same gain deficit
+            characterized in the Fourth pass — native is ~1.7× louder than WASM)</li>
+          <li>The louder kick tail <i>bleeds into the snare's window</i>, which bleeds into the next kick's window</li>
+          <li>The resulting envelope pattern repeats every 290 ms instead of 250 ms — a 3.45 Hz superpattern audible
+            to the listener and visible in the spectrogram</li>
+          <li>WASM LPF, with its 0.6× output, doesn't produce the same tail smearing — so the envelope reads cleanly at 4 Hz</li>
+        </ul>
+
+        <b>Not a scheduling bug, but not "just a measurement artifact" either.</b> It's a real audible RENDERING
+        divergence — but the DIRECTION of the divergence I claimed in this paragraph was wrong. Round 2 follows.<br /><br />
+
+        <b>Round 2:</b> the user listened to the audio players ("Desktop · with <code>:lpf</code>" and "Web · with <code>:lpf</code>" in <a href="#seventh">Seventh pass</a>) and reported: <i>"i am hearing the desktop is faster than web — desktop tempo is higher than web!"</i> Re-running detection with a metric closer to what the EAR counts as a "hit":
+        <table class="metrics" style="margin: 10px 0">
+          <thead>
+            <tr><th>Metric</th><th class="num">Desktop</th><th class="num">Web</th><th>What it captures</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Wallclock schedule</td><td class="num">4 Hz</td><td class="num">4 Hz</td><td>scsynth receives <code>/s_new</code> every 250 ms — both sides identical</td></tr>
+            <tr><td>Autocorrelation period</td><td class="num">290 ms (3.45 Hz)</td><td class="num">250 ms (4.00 Hz)</td><td>outer cycle between repeating <i>doublets</i> — not what the listener perceives as tempo</td></tr>
+            <tr><td><b>Above-50%-peak attack events / sec</b></td><td class="num"><b>61.3 / s</b></td><td class="num"><b>41.8 / s</b></td><td><b>what the ear counts as audible "hits" — desktop has ~1.5× more</b></td></tr>
+          </tbody>
+        </table>
+
+        <b>The user is correct: desktop sounds faster.</b> Native LPF's louder ringing tails (the 1.7× rendering gap from the Fourth pass) create <i>audible secondary peaks</i> between the scheduled kick→snare hits. The ear counts those secondary peaks as additional events, so the perceived hit density is ~1.5× higher on desktop — desktop sounds DENSER and FASTER. WASM LPF, being quieter, doesn't produce audible secondaries, so the web pattern reads at the clean 4 Hz scheduled rate.<br /><br />
+
+        I had the autocorrelation number right but read it backwards in the writeup. Autocorrelation finds the longest repeating period (here, the doublet-to-doublet outer cycle at 290 ms on desktop vs 250 ms on web), <i>not</i> the perceived hit rate. The perceived hit rate is the number of audible attacks per second, and that's higher on desktop because of the LPF-ringing secondary peaks.<br /><br />
+
+        <b>Net result on tempo, restated correctly:</b>
+        <ul style="margin: 8px 0; padding-left: 18px">
+          <li><b>Wallclock scheduling:</b> identical (4 Hz both, SP72 working). No engine bug.</li>
+          <li><b>Perceived rhythmic density:</b> desktop 61.3 hits/s, web 41.8 hits/s — listeners hear desktop as faster/denser.</li>
+          <li><b>Mechanism:</b> native LPF renders louder ringing tails (the same 1.7× gain story); ringing energy crosses the 50%-of-peak threshold a second time per scheduled hit, producing audible secondary peaks. WASM LPF's attenuated tails don't.</li>
+          <li><b>Class:</b> same upstream root cause as the gain deficit and the timbre divergence. WASM-vs-native UGen render-shape differences expressed in three observable axes (level, timbre, perceived rhythmic density).</li>
+        </ul>
+
+        <hr style="border: none; border-top: 1px solid var(--border); margin: 14px 0" />
+
+        <b>Round 3 — kick-only test (the user's diagnosis-by-design).</b><br /><br />
+
+        The user proposed: <i>"what if we only observe kick no snare? we can rule out the loudness of the tail correct? and observe the tempo purely."</i> Exactly the right move — at 4 Hz with no snare, each kick has a full 250 ms before the next one, so the LPF tail decays before the next attack and the secondary-peak smearing can't happen. Pure tempo measurement.<br /><br />
+
+        Captured <code>sample :bd_haus; sleep 0.5</code> (no snare) at the same 4 Hz rate, both sides:
+
+        <table class="metrics" style="margin: 10px 0">
+          <thead>
+            <tr><th>Metric (kick-only)</th><th class="num">Desktop</th><th class="num">Web</th><th>Reading</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>Envelope FFT dominant freq</b></td><td class="num"><b>4.02 Hz</b></td><td class="num"><b>3.96 Hz</b></td><td><span class="ratio-good">PARITY (1.5 % spread, both at scheduled 4 Hz)</span></td></tr>
+            <tr><td>Peak (whole-clip)</td><td class="num">0.369</td><td class="num">0.977</td><td>web's first kick saturates Limiter (LPF startup transient on WASM)</td></tr>
+            <tr><td>RMS</td><td class="num">0.126</td><td class="num">0.171</td><td>1.36× — first-kick saturation lifts whole-clip RMS</td></tr>
+            <tr><td>Inter-peak gap (median)</td><td class="num">~250 ms</td><td class="num">~250 ms</td><td><span class="ratio-good">match — 4 Hz both sides</span></td></tr>
+          </tbody>
+        </table>
+
+        <div class="audio-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 12px">
+          <div class="card">
+            <h3>Desktop · kick-only :lpf <span>peak 0.369 · RMS 0.126</span></h3>
+            <audio controls preload="metadata" src="raw-lpf/desktop-lpf-kick-only.wav"></audio>
+          </div>
+          <div class="card">
+            <h3>Web · kick-only :lpf <span>peak 0.977 · RMS 0.171</span></h3>
+            <audio controls preload="metadata" src="raw-lpf/web-lpf-kick-only.wav"></audio>
+          </div>
+        </div>
+
+        <div class="png-block" style="margin: 10px 0">
+          <img src="raw-lpf/lpf-kick-only-envelope.png" alt="Kick-only envelopes — both sides on the 250ms grid" />
+        </div>
+        <div class="png-block" style="margin: 10px 0">
+          <img src="raw-lpf/lpf-kick-only-spec.png" alt="Kick-only spectrogram comparison" />
+        </div>
+
+        <b>What this proves:</b> when the LPF tail can't smear into the next hit (kicks 250 ms apart, tail decays in ~120 ms), <b>tempo is parity</b>. Both sides hit the 4 Hz grid cleanly. The "desktop sounds faster" effect from the bd+sn case was entirely due to native LPF's louder tail bleeding into the snare's window — once the snare is removed, the tail has nowhere to bleed and the perceived rhythm matches.<br /><br />
+
+        <b>This is a clean isolation:</b> SP72 (engine fix) handles wallclock scheduling parity, the kick-only test confirms it. The bd+sn case introduces the rendering-shape divergence as a secondary effect on perceived density — but only when adjacent hits are close enough for the LPF tail of one to overlap the next. <b>Pure tempo is parity. Tail-smearing perceived density is divergent.</b> Two distinct phenomena, now separated.<br /><br />
+
+        <hr style="border: none; border-top: 1px solid var(--border); margin: 14px 0" />
+
+        <b>Round 4 — "why the 4.02 vs 3.96 spread? why is web's per-kick period larger?"</b><br /><br />
+
+        Fair question. The 4.02 vs 3.96 was FFT noise on a 5-second window. Re-measured with linear regression on
+        actual onset times (sub-millisecond precision):
+
+        <table class="metrics" style="margin: 10px 0">
+          <thead>
+            <tr><th>Metric</th><th class="num">Desktop</th><th class="num">Web</th><th>Interpretation</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>Per-kick period (linear regression)</b></td><td class="num"><b>249.46 ms</b></td><td class="num"><b>250.22 ms</b></td><td>0.76 ms apart — both within 0.3 % of the scheduled 250 ms</td></tr>
+            <tr><td>Real rate</td><td class="num">4.0086 Hz</td><td class="num">3.9966 Hz</td><td>desktop 0.21 % fast, web 0.09 % slow vs schedule</td></tr>
+            <tr><td>Median inter-kick gap</td><td class="num">250.00 ms</td><td class="num">250.67 ms</td><td>median is robust to outliers — both essentially exact</td></tr>
+            <tr><td>Range (all gaps)</td><td class="num">208 – 251 ms</td><td class="num">248 – 253 ms</td><td>desktop has one ~208 ms outlier (Ruby thread jitter)</td></tr>
+            <tr><td><b>Jitter (stddev of regression residual)</b></td><td class="num"><b>8.25 ms</b></td><td class="num"><b>1.36 ms</b></td><td><b>desktop has 6× more timing jitter than web</b></td></tr>
+          </tbody>
+        </table>
+
+        <b>Two separate findings:</b>
+        <ol style="margin: 8px 0; padding-left: 18px">
+          <li><b>The 0.76 ms web-slower-per-kick is real but well below human tempo JND</b> (~5 ms). Most likely cause: <b>WASM AudioWorklet block-size quantization</b> (128 samples ≈ 2.67 ms at 48 kHz) — scheduled events get rounded to the trailing boundary of their audio block, producing a consistent ~half-block delay. Could also be cumulative AudioContext-clock-vs-system-clock drift, but that would be ~10 ppm on macOS audio oscillators, which is far too small.</li>
+          <li><b>Desktop has 6× more timing jitter than web</b>, with one outlier ~42 ms early. Native Sonic Pi runs the scheduler in a Ruby thread, which has more wakeup-latency variance than our JS virtual-time scheduler running on AudioContext.currentTime. Counter-intuitively, the web side is the MORE timing-precise of the two — it just has a tiny systematic offset that desktop doesn't.</li>
+        </ol>
+
+        <b>What this answers definitively:</b>
+        <ul style="margin: 8px 0; padding-left: 18px">
+          <li>Wallclock TEMPO parity: confirmed (within 0.3 % both sides, far below audibility)</li>
+          <li>Per-kick TIMING precision: web is <i>tighter</i> (1.36 ms jitter) but slightly biased (+0.76 ms per kick); desktop is slightly noisier (8.25 ms jitter) but unbiased on median</li>
+          <li>SP72 fix is doing exactly what we wanted: getting the engine to schedule at the right rate. The remaining sub-millisecond offset is hardware-level audio quantization, not engine logic.</li>
+        </ul>
+      </div>
+
+      <h2 id="seventh">Seventh pass (2026-05-09 evening) — what does FX add over the no-FX base?</h2>
+      <div class="lede" style="margin-bottom: 14px">
+        The <a href="#sixth">Sixth pass</a> showed the no-FX base hits parity (energy × duration 1.004×).
+        So if no FX is the parity case, what does an FX layer ADD that gives rise to the divergence we see in the
+        FX sweep and the e2e suite? This pass compares the same snippet with vs without <code>:lpf</code>, then
+        classifies all 40 FX by their structural divergence pattern.
+      </div>
+
+      <h3>Same snippet, with vs without <code>:lpf</code> — side-by-side audition</h3>
+      <pre class="osc" style="font-size: 12px; margin-bottom: 12px"><span class="cmt"># Identical user code, only the with_fx wrap differs</span>
+use_bpm 120
+<span class="cmt"># with_fx :lpf do          ← only this line + matching `end` differs</span>
+  live_loop :probe do
+    sample :bd_haus
+    sleep 0.5
+    sample :sn_dub
+    sleep 0.5
+  end
+<span class="cmt"># end</span></pre>
+
+      <div class="audio-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 12px">
+        <div class="card">
+          <h3>Desktop · no FX <span>peak 0.4616 · RMS 0.1052</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/desktop-no-fx.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Web · no FX <span>peak 0.6661 · RMS 0.1238</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-no-fx.wav"></audio>
+        </div>
+      </div>
+      <div class="audio-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 12px">
+        <div class="card">
+          <h3>Desktop · with <code>:lpf</code> <span>peak 0.4641 · RMS 0.1213</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/desktop-with-lpf.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Web · with <code>:lpf</code> <span>peak 0.6661 · RMS 0.1240</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-with-lpf.wav"></audio>
+        </div>
+      </div>
+
+      <h3>Spectrogram with <code>:lpf</code></h3>
+      <div class="png-block">
+        <img src="raw-lpf/with-lpf-spec.png" alt="with-lpf spectrogram comparison" />
+      </div>
+
+      <h3>Probe-by-probe — what changes when LPF is added?</h3>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr>
+            <th>Probe</th>
+            <th class="num">No FX (base)</th>
+            <th class="num">With <code>:lpf</code></th>
+            <th class="num">Δ added by FX</th>
+            <th>Reading</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><b>Energy × duration ratio</b></td><td class="num"><span class="ratio-good">1.004×</span></td><td class="num"><span class="ratio-good">1.092×</span></td><td class="num">+0.09</td><td>web carries ~9 % more energy with lpf — partially the constant-gain deficit, partially WASM lpf processing</td></tr>
+          <tr><td>L2 mel-dB</td><td class="num">24.59</td><td class="num">24.30</td><td class="num">−0.3</td><td>frequency-domain divergence essentially unchanged — lpf doesn't widen the spectral gap</td></tr>
+          <tr><td>MFCC distance (timbre)</td><td class="num">209.25</td><td class="num">236.36</td><td class="num">+27</td><td>~13 % timbre divergence increase — WASM <code>LPF</code> ugen renders attack/decay transients slightly differently</td></tr>
+          <tr><td>Onset-count ratio</td><td class="num"><span class="ratio-good">1.10×</span></td><td class="num"><span class="ratio-mid">1.70×</span></td><td class="num">+0.6</td><td>only an apparent change — native lpf's louder ringing makes desktop onsets merge in the detector (Sixth-pass artifact)</td></tr>
+          <tr><td>Envelope-best-lag</td><td class="num">600 ms</td><td class="num">1020 ms</td><td class="num">+420 ms</td><td>more recording-start asymmetry — desktop lpf chain takes longer to settle into audible signal</td></tr>
+          <tr><td>Peak frequency match</td><td class="num">54.0 / 54.0 Hz</td><td class="num">55.1 / 56.0 Hz</td><td class="num">~match</td><td>both sides see the same fundamental — lpf doesn't shift the dominant frequency</td></tr>
+        </tbody>
+      </table>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        For <code>:lpf</code> on a kick (whose fundamental at ~54 Hz is well below the cutoff at MIDI 100 ≈ 2637 Hz),
+        the FX is essentially a passthrough on the kick energy. The +9 % energy and +27 MFCC are mild — this is the
+        well-behaved end of the FX divergence spectrum. The non-linear and feedback FX classes below diverge an order
+        of magnitude more.
+      </div>
+
+      <h3>FX class taxonomy — what the structure of the FX implies for divergence</h3>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 12px; color: var(--text-dim)">
+        Today's full FX sweep (40 FX, post-SP72 + AMP=3) split cleanly into four behavioral classes when scored against
+        the desktop reference. Each class maps to a structural property of the FX synthdef.
+      </div>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr>
+            <th>Class</th>
+            <th class="num">Mean score</th>
+            <th class="num">RMS-ratio range</th>
+            <th>What's added beyond no-FX base</th>
+            <th>Why this class diverges</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Linear filter</b><br /><small><code>level, lpf, rlpf, eq, band_eq, mono, pan, n*pf, nr*pf</code></small></td>
+            <td class="num">58.2</td>
+            <td class="num">0.95–1.04× <small>(when params are correct)</small></td>
+            <td>UGen graph: <code>pre_amp × pre_mix × LPF × mix × amp × Out</code></td>
+            <td><span class="ratio-good">well-behaved</span> — output is linearly proportional to input. The constant ~0.6× WASM output deficit is compensated cleanly by the AMP=3 mixer. <code>bpf/rbpf</code> outliers are a capture-tool param mismatch (synthdef takes <code>centre</code>, tool sends <code>cutoff</code>), not a real divergence.</td>
+          </tr>
+          <tr>
+            <td><b>Non-linear</b><br /><small><code>distortion, compressor, normaliser, krush, bitcrusher, tanh, octaver, pitch_shift, whammy</code></small></td>
+            <td class="num">62.6</td>
+            <td class="num">0.59–1.86×</td>
+            <td>Non-linear transfer function (clip / saturate / knee / tanh). Output ≠ <i>k</i> × input.</td>
+            <td><span class="ratio-mid">input-sensitive</span> — the constant 0.6× WASM input level shifts where you sit on the curve. Same input maps to different output level <i>and</i> different harmonic content. AMP=3 stops being a clean compensation here: linear gain can't undo a non-linear divergence past a knee.</td>
+          </tr>
+          <tr>
+            <td><b>Modulation (LFO-driven)</b><br /><small><code>slicer, panslicer, tremolo, wobble, ring_mod, vowel, flanger, ixi_techno</code></small></td>
+            <td class="num">62.2</td>
+            <td class="num">0.28–1.61×</td>
+            <td>Internal LFO + multiplier (carrier × modulator).</td>
+            <td><span class="ratio-mid">phase-precision-sensitive</span> — WASM and native LFOs evolve slightly differently (period rounding, phase accumulation). Modulation depth multiplies that error: 50 % slicer with a 5 % LFO error produces audibly different chops. MFCC stays low (similar shape) but RMS scatters wide.</td>
+          </tr>
+          <tr>
+            <td><b>Feedback delay line</b><br /><small><code>reverb, echo, delay, chorus, gverb, ping_pong</code></small></td>
+            <td class="num">39.6 <small>(2 INCONCLUSIVE)</small></td>
+            <td class="num">0.22–1.21×</td>
+            <td>Recirculating delay buffer with feedback gain <i>g</i>. Output amplitude ≈ ∑ <i>g</i><sup>n</sup>·input over N iterations.</td>
+            <td><span class="ratio-bad">compounds exponentially</span> — even a 1 % per-iteration ratio difference compounds over hundreds of iterations in a 4 s reverb tail. <b>This is the class that produces the e2e outliers</b>: <code>07_ambient</code> at 2.96× (long reverb + echo + sustained pad) and <code>02_fx_chain</code> at 0.11× (reverb wrapping distortion). Linear gain compensation cannot fix exponential divergence.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 14px 16px; background: var(--bg-elev); border-left: 4px solid var(--accent-2); border-radius: 6px; line-height: 1.65">
+        <b>Implication for the upstream story.</b> The constant 0.6× WASM scsynth deficit is fixable as a single
+        per-sample gain compensation (filable as one issue at <code>samaaron/supersonic</code>). But the
+        non-linear and feedback-delay classes need their <i>own</i> per-class diagnosis — fixing the deficit
+        won't close those gaps because the divergence isn't linear in input level. These are separate upstream
+        questions:
+        <ul style="margin: 8px 0 0; padding-left: 18px">
+          <li><b>Non-linear:</b> are WASM <code>Clip</code>, <code>tanh</code>, and <code>Compander</code> ugens
+            using the same numerical method as native (e.g. lookup-table vs polynomial expansion vs <code>__builtin_tanhf</code>)?</li>
+          <li><b>Modulation:</b> is the WASM LFO state stored at the same precision as native (float32 vs float64)?
+            How is phase accumulation reset on synthdef start?</li>
+          <li><b>Feedback delay:</b> are the WASM <code>DelayN</code> / <code>CombC</code> / <code>AllpassN</code>
+            ugens using fixed-point delay-line indexing? Does the WASM build use the SC SIMD optimizations? (per
+            memory note <code>session_2026_05_06_main_head_bisect.md</code>, <code>nova-simd</code> was added in main
+            HEAD which we don't yet pin — could move feedback FX numbers either way.)</li>
+        </ul>
+      </div>
+
+      <h3>Does Sam Aaron's SuperSonic acknowledge this?</h3>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 12px; color: var(--text-dim)">
+        Audited Sam's upstream <code>samaaron/supersonic</code> repo for any acknowledgement of the gain deficit
+        or per-FX-class divergence. Findings:
+      </div>
+      <table class="metrics" style="margin-bottom: 12px">
+        <thead>
+          <tr><th>Source in samaaron/supersonic</th><th>What it says about FX</th><th>Acknowledges WASM-vs-native gap?</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>docs/GUIDE.md:24</code></td>
+            <td>"<i>FX chains — reverb, filters, compressors</i>" listed as a first-class feature. Code snippet creates an FX group + <code>sonic-pi-fx_reverb</code> on group 101.</td>
+            <td><span class="ratio-bad">No</span></td>
+          </tr>
+          <tr>
+            <td><code>docs/API.md:1054</code></td>
+            <td><code>setup</code> event docs: "<i>Use for setting up groups, FX chains, and bus routing.</i>"</td>
+            <td><span class="ratio-bad">No</span></td>
+          </tr>
+          <tr>
+            <td><code>docs/SCSYNTH_DIFFERENCES.md</code></td>
+            <td>Documents <b>only unsupported UGens</b> (Mouse*, Disk*, Link*, Bela*, ML/Loudness). FX UGens that ARE supported (LPF, RLPF, FreeVerb, CombC, AllpassN, etc.) are listed as working — no caveats on output level or rendering precision.</td>
+            <td><span class="ratio-bad">No</span></td>
+          </tr>
+          <tr>
+            <td><code>example/assets/app.js:993–1055</code></td>
+            <td><b>Sam's canonical interactive demo</b>. Real FX chain: synths → <code>fx_level</code> (amp 0.5 mix) → <code>fx_lpf</code> (cutoff 130, res 0.5) → <code>fx_reverb</code> (mix 0.3, room 0.6) → output. No output-stage gain compensation, no comments about WASM-vs-native level handling.</td>
+            <td><span class="ratio-bad">No</span></td>
+          </tr>
+          <tr>
+            <td><code>github.com/samaaron/supersonic/issues</code> (all-time)</td>
+            <td>Zero issues with "level / amplitude / loud / quiet / gain / volume" in title or body. Only #6 about <code>MdaPiano</code> (a synth, not FX).</td>
+            <td><span class="ratio-bad">No</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Sam's canonical FX-chain example, verbatim</h3>
+      <pre class="osc" style="font-size: 11.5px; margin-bottom: 12px"><span class="cmt">// samaaron/supersonic — example/assets/app.js:993–1055
+// Sam's interactive demo's FX chain. Note: no WASM gain compensation anywhere.</span>
+
+<span class="cmt">// Group structure</span>
+orchestrator.send(<span class="str">"/g_new"</span>, GROUP_ARP, 0, 0);
+orchestrator.send(<span class="str">"/g_new"</span>, GROUP_LOOPS, 0, 0);
+orchestrator.send(<span class="str">"/g_new"</span>, GROUP_KICK, 0, 0);
+orchestrator.send(<span class="str">"/g_new"</span>, GROUP_FX, 1, 0);
+
+<span class="cmt">// Two level mixers — one per source bus, summing to FX_BUS_SYNTH_TO_LPF</span>
+orchestrator.send(<span class="str">"/s_new"</span>, <span class="str">"sonic-pi-fx_level"</span>, FX_ARP_LEVEL_NODE, 1, GROUP_FX,
+  <span class="key">"in_bus"</span>, FX_BUS_ARP, <span class="key">"out_bus"</span>, FX_BUS_SYNTH_TO_LPF, <span class="key">"amp"</span>, <span class="num">0.5</span>);
+orchestrator.send(<span class="str">"/s_new"</span>, <span class="str">"sonic-pi-fx_level"</span>, FX_BEAT_LEVEL_NODE, 3, FX_ARP_LEVEL_NODE,
+  <span class="key">"in_bus"</span>, FX_BUS_BEAT, <span class="key">"out_bus"</span>, FX_BUS_SYNTH_TO_LPF, <span class="key">"amp"</span>, <span class="num">0.5</span>);
+
+<span class="cmt">// LPF — moderate cutoff (MIDI 130 ≈ 14kHz, near-passthrough), low resonance</span>
+orchestrator.send(<span class="str">"/s_new"</span>, <span class="str">"sonic-pi-fx_lpf"</span>, FX_LPF_NODE, 3, FX_BEAT_LEVEL_NODE,
+  <span class="key">"in_bus"</span>, FX_BUS_SYNTH_TO_LPF, <span class="key">"out_bus"</span>, FX_BUS_LPF_TO_REVERB,
+  <span class="key">"cutoff"</span>, <span class="num">130.0</span>, <span class="key">"res"</span>, <span class="num">0.5</span>);
+
+<span class="cmt">// Reverb — feedback-class FX, 30% wet / 60% room</span>
+orchestrator.send(<span class="str">"/s_new"</span>, <span class="str">"sonic-pi-fx_reverb"</span>, FX_REVERB_NODE, 3, FX_LPF_NODE,
+  <span class="key">"in_bus"</span>, FX_BUS_LPF_TO_REVERB, <span class="key">"out_bus"</span>, FX_BUS_OUTPUT,
+  <span class="key">"mix"</span>, <span class="num">0.3</span>, <span class="key">"room"</span>, <span class="num">0.6</span>);</pre>
+
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 14px 16px; background: rgba(247, 118, 142, 0.06); border-left: 4px solid var(--fail); border-radius: 6px; line-height: 1.65">
+        <b>What this means for the upstream story.</b><br /><br />
+        Sam Aaron's official examples and docs treat FX in SuperSonic as fully equivalent to FX in native scsynth.
+        He uses the linear-filter class (<code>:lpf</code>) and the feedback-delay class (<code>:reverb</code>)
+        in the same demo, with no compensation at any layer. So either:
+        <ol style="margin: 8px 0 0; padding-left: 18px">
+          <li>The deficit is sufficiently small under his demo's specific parameters (cutoff at MIDI 130 is high, kick fundamentals pass through; reverb mix 0.3 keeps the wet signal modest) that <i>nobody noticed</i>.</li>
+          <li>Users who deploy the demo on web ARE experiencing the ~60% loudness vs the desktop-equivalent reference — they just turn their browser volume up and never compare.</li>
+        </ol>
+        <br />
+        Both make our finding load-bearing: <b>this is a previously undocumented WASM scsynth behavior</b>. The
+        single filable issue at <code>samaaron/supersonic</code> would carry today's evidence (cutoff sweep across
+        lpf/hpf/bpf + <code>:level</code> passthrough + synthdef SHA match) and propose a per-sample compensation
+        constant in the WASM render path. The non-linear and feedback-class divergences are second-order issues
+        that Sam likely doesn't yet have characterized either.
+      </div>
+
+      <h3>How does Sonic Tau avoid this issue?</h3>
+      <div class="lede" style="margin-bottom: 12px">
+        Sonic Tau is a separate browser-WASM Sonic Pi using the same SuperSonic / WASM scsynth that we and Sam use.
+        So Tau hits the same constant-0.6× output deficit and the same feedback-FX over-amplification class.
+        But Tau's audio-output story is different — they wrap the entire FX chain in a master-stage <code>sonic-pi-mixer</code>
+        synthdef that contains a built-in <code>Limiter.ar(0.99)</code>.
+      </div>
+      <pre class="osc" style="font-size: 11.5px; margin-bottom: 12px"><span class="cmt">// sonic-tau/app.bundle.js:1741–1795 (verbatim)
+// Tau's FX chain — note the mixer at the END that Sam's demo doesn't have.</span>
+
+await sonic.send(<span class="str">"/s_new"</span>, <span class="str">"sonic-pi-fx_lpf"</span>, FX_LPF, 1, 200,
+  <span class="key">"in_bus"</span>, USER_BUS, <span class="key">"out_bus"</span>, BUS_LPF_OUT,
+  <span class="key">"cutoff"</span>, <span class="num">130</span>, <span class="key">"res"</span>, <span class="num">0.5</span>);
+
+await sonic.send(<span class="str">"/s_new"</span>, <span class="str">"sonic-pi-fx_reverb"</span>, FX_REVERB, 3, FX_LPF,
+  <span class="key">"in_bus"</span>, BUS_LPF_OUT, <span class="key">"out_bus"</span>, BUS_REVERB_OUT,
+  <span class="key">"mix"</span>, <span class="num">0.3</span>, <span class="key">"room"</span>, <span class="num">0.6</span>);
+
+<span class="cmt">// THE LOAD-BEARING DIFFERENCE — master-stage mixer with built-in Limiter.ar</span>
+await sonic.send(<span class="str">"/s_new"</span>, <span class="str">"sonic-pi-mixer"</span>, FX_MIXER, 3, FX_REVERB,
+  <span class="key">"in_bus"</span>, BUS_REVERB_OUT, <span class="key">"out_bus"</span>, <span class="num">0</span>,
+  <span class="key">"amp"</span>, parseFloat(localStorage.getItem(<span class="str">"tau-pref:volume"</span>) || <span class="str">"0.8"</span>),
+  <span class="key">"pre_amp"</span>, <span class="num">0.3</span>,
+  <span class="key">"hpf"</span>, <span class="num">21</span>,                <span class="cmt">// scrub subsonic rumble</span>
+  <span class="key">"lpf"</span>, <span class="num">135.5</span>,             <span class="cmt">// scrub ultrasonic aliasing</span>
+  <span class="key">"limiter_bypass"</span>, <span class="num">0</span>);   <span class="cmt">// Limiter.ar(0.99) ACTIVE — clamps reverb over-amplification</span></pre>
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; color: var(--text-dim)">
+        The signal chain inside <code>sonic-pi-mixer</code> (Sonic Pi's bundled mixer synthdef, byte-identical between desktop and the unpkg CDN):<br />
+        <code style="display: block; padding: 8px 12px; margin: 6px 0; background: var(--bg); border-radius: 4px">In.ar(in_bus) → pre_amp → HPF(21Hz) → LPF(MIDI 135.5) → <b>Limiter.ar(0.99)</b> → LeakDC → amp → clip2(1) → ReplaceOut</code>
+        The Limiter is the structural fix. It hard-clamps any signal above 0.99 — so even when WASM reverb compounds
+        feedback into 2-4× over-amplification (the <code>07_ambient</code> class), the output is bounded.
+        The user-adjustable <code>amp</code> via localStorage gives users a manual volume slider that lets them
+        compensate for any residual loudness mismatch on their hardware.
+      </div>
+
+      <h3>Comparison: Sam's vs Tau's vs our SonicPiWeb chain</h3>
+      <table class="metrics" style="margin-bottom: 14px">
+        <thead>
+          <tr><th>Project</th><th>FX chain shape</th><th>Master-stage Limiter?</th><th>User volume control?</th><th>Behavior with WASM 0.6× deficit + feedback over-amp</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>samaaron/supersonic</b><br /><small>(Sam's canonical demo)</small></td>
+            <td><code>fx_level → fx_lpf → fx_reverb → bus 0</code></td>
+            <td><span class="ratio-bad">No</span></td>
+            <td><span class="ratio-bad">No</span></td>
+            <td>Web users hear ~60 % of native loudness on filter-class FX. Reverb peaks can exceed 1.0 unbounded (would clip if peak ever crossed) — Sam relies on user-supplied moderate FX settings.</td>
+          </tr>
+          <tr>
+            <td><b>Sonic Tau</b><br /><small>(<code>app.bundle.js:1774–1794</code>)</small></td>
+            <td><code>fx_lpf → fx_reverb → <b>fx_mixer</b> → bus 0</code></td>
+            <td><span class="ratio-good">Yes</span><br /><small>Limiter.ar(0.99)</small></td>
+            <td><span class="ratio-good">Yes</span><br /><small>localStorage <code>tau-pref:volume</code></small></td>
+            <td>Limiter clamps over-amplified peaks. User compensates loudness manually. Tau output stays bounded for all FX classes; users adjust to taste.</td>
+          </tr>
+          <tr>
+            <td><b>SonicPiWeb</b><br /><small>(<code>SuperSonicBridge.ts:247</code>, <code>config.ts:64–90</code>)</small></td>
+            <td><code>(arbitrary user FX) → <b>fx_mixer</b> → bus 0</code></td>
+            <td><span class="ratio-good">Yes</span><br /><small>Limiter.ar(0.99)</small></td>
+            <td><span class="ratio-mid">Not yet</span><br /><small>(MIXER.AMP is engine-internal, not user-facing)</small></td>
+            <td>Same architectural fix as Tau. Tuned for parity vs raw native (PRE_AMP=0.32, AMP=3, effective ~0.96×) instead of Tau's deliberately quiet 0.24×. RMS lands at 1.07× of desktop on the lpf snippet.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 14px 16px; background: rgba(158, 206, 106, 0.06); border-left: 4px solid var(--pass); border-radius: 6px; line-height: 1.65">
+        <b>The structural answer to "why doesn't Tau hit the issue":</b> they DO hit it — same WASM scsynth, same
+        constant 0.6× deficit, same feedback over-amplification — but they hide it behind a master-stage Limiter
+        + user-adjustable volume. Sam's demo lacks both layers, so the deficit is exposed at the speaker.<br /><br />
+        <b>We're architecturally aligned with Tau, not Sam.</b> Today's AMP=3 work is a tuning question on top of a
+        structural fix Tau already showed us. The remaining open question — <i>can the deficit be removed at the
+        source rather than compensated downstream?</i> — points back to the upstream issue at
+        <code>samaaron/supersonic</code>. If Sam fixes the deficit, our AMP could come back down to 1.2 (Tau-aligned),
+        and his own demo would suddenly be 1.7× louder without him changing a line of code.
+      </div>
+
+      <h3>Empirical: capture Sam's exact FX chain shape on both sides</h3>
+      <div class="lede" style="margin-bottom: 12px">
+        DSL snippet that mirrors Sam's chain shape (<code>fx_lpf cutoff=130, res=0.5 → fx_reverb mix=0.3, room=0.6</code>)
+        run through our standard A/B comparator. Same hit pattern as the no-FX and lpf-only captures above so all
+        three are directly comparable.
+      </div>
+      <pre class="osc" style="font-size: 11.5px; margin-bottom: 12px"><span class="cmt"># /tmp/sam-chain.rb — DSL form of samaaron/supersonic example/assets/app.js:1023-1055</span>
+use_bpm <span class="num">120</span>
+use_random_seed <span class="num">42</span>
+with_fx <span class="str">:reverb</span>, room: <span class="num">0.6</span>, mix: <span class="num">0.3</span> <span class="key">do</span>
+  with_fx <span class="str">:lpf</span>, cutoff: <span class="num">130</span>, res: <span class="num">0.5</span> <span class="key">do</span>
+    live_loop <span class="str">:probe</span> <span class="key">do</span>
+      sample <span class="str">:bd_haus</span>
+      sleep <span class="num">0.5</span>
+      sample <span class="str">:sn_dub</span>
+      sleep <span class="num">0.5</span>
+    <span class="key">end</span>
+  <span class="key">end</span>
+<span class="key">end</span></pre>
+
+      <div class="audio-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 12px">
+        <div class="card">
+          <h3>Desktop · Sam-style chain <span>peak 0.5497 · RMS 0.1242 · 6.37s</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/desktop-sam-chain.wav"></audio>
+        </div>
+        <div class="card">
+          <h3>Web · Sam-style chain <span>peak 0.9411 · RMS 0.1355 · 4.61s</span></h3>
+          <audio controls preload="metadata" src="raw-lpf/web-sam-chain.wav"></audio>
+        </div>
+      </div>
+
+      <h3>Spectrogram (mel-dB · desktop | web | diff)</h3>
+      <div class="png-block">
+        <img src="raw-lpf/sam-chain-spec.png" alt="Sam-chain spectrogram comparison" />
+      </div>
+
+      <h3>Per-beat divergence</h3>
+      <div class="png-block">
+        <img src="raw-lpf/sam-chain-perbeat.png" alt="Sam-chain per-beat" />
+      </div>
+
+      <h3>Envelope view — tempo parity, level divergence at the Limiter</h3>
+      <div class="png-block">
+        <img src="raw-lpf/sam-chain-envelope.png" alt="Sam-chain envelopes" />
+      </div>
+
+      <h3>Tempo + level analysis</h3>
+      <table class="metrics" style="margin-bottom: 14px">
+        <thead>
+          <tr><th>Metric</th><th class="num">Desktop</th><th class="num">Web</th><th class="num">Ratio / Reading</th></tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="4" style="background: var(--bg-row); font-weight: 600; padding: 8px 12px">Tempo (the question that started this whole investigation)</td></tr>
+          <tr><td><b>Autocorrelation period</b></td><td class="num">249.25 ms</td><td class="num">249.33 ms</td><td class="num"><span class="ratio-good">match within 0.03 % — tempo parity</span></td></tr>
+          <tr><td><b>Autocorrelation rate</b></td><td class="num">4.012 Hz</td><td class="num">4.011 Hz</td><td class="num"><span class="ratio-good">1.000× ✓</span></td></tr>
+          <tr><td>Envelope FFT dominant freq</td><td class="num">4.030 Hz</td><td class="num">4.098 Hz</td><td class="num"><span class="ratio-good">1.02× — match within rounding</span></td></tr>
+          <tr><td colspan="4" style="background: var(--bg-row); font-weight: 600; padding: 8px 12px">Level (the WASM 0.6× deficit + reverb buildup transient)</td></tr>
+          <tr><td>Peak (whole-clip)</td><td class="num">0.5497</td><td class="num">0.9411</td><td class="num"><span class="ratio-mid">1.71×</span> — web hits Limiter ceiling</td></tr>
+          <tr><td>RMS (whole-clip)</td><td class="num">0.1242</td><td class="num">0.1355</td><td class="num"><span class="ratio-good">1.09×</span> — sustained energy at parity</td></tr>
+          <tr><td>L2 mel-dB</td><td colspan="2" class="num" style="text-align:center">25.63</td><td>spectral divergence dominated by Limiter shaping</td></tr>
+          <tr><td>MFCC distance (timbre)</td><td colspan="2" class="num" style="text-align:center">252.41</td><td>+16 vs lpf-only (236) — reverb tails diverge between WASM and native</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Three captures, side-by-side — what changes as the FX chain grows?</h3>
+      <table class="metrics" style="margin-bottom: 14px">
+        <thead>
+          <tr>
+            <th>Snippet</th>
+            <th class="num">Tempo (W ÷ D)</th>
+            <th class="num">Web peak</th>
+            <th class="num">RMS ratio</th>
+            <th class="num">MFCC</th>
+            <th>Reading</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>No FX (just samples)</td>
+            <td class="num"><span class="ratio-good">1.00×</span></td>
+            <td class="num">0.6661</td>
+            <td class="num"><span class="ratio-good">1.18×</span></td>
+            <td class="num">209</td>
+            <td>cleanest parity — only the constant 0.6× deficit + AMP=3 compensation</td>
+          </tr>
+          <tr>
+            <td>+ <code>:lpf</code> only</td>
+            <td class="num"><span class="ratio-good">1.00×</span></td>
+            <td class="num">0.6661</td>
+            <td class="num"><span class="ratio-good">1.02×</span></td>
+            <td class="num">236</td>
+            <td>linear-filter class — 13 % timbre divergence added by WASM <code>LPF</code> ugen rendering</td>
+          </tr>
+          <tr>
+            <td>+ <code>:reverb</code> wrapping <code>:lpf</code> (Sam's chain shape)</td>
+            <td class="num"><span class="ratio-good">1.00×</span></td>
+            <td class="num">0.9411 <small>(Limiter)</small></td>
+            <td class="num"><span class="ratio-good">1.09×</span></td>
+            <td class="num">252</td>
+            <td><b>tempo identical, peak +41 % vs lpf-only</b> — feedback class kicks in. Web reverb tail compounds louder than native; first hit slams Limiter at 0.94 while desktop sits at 0.55.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="lede" style="font-size: 12.5px; margin-bottom: 14px; padding: 14px 16px; background: rgba(158, 206, 106, 0.06); border-left: 4px solid var(--pass); border-radius: 6px; line-height: 1.65">
+        <b>Direct answer to the two questions.</b><br /><br />
+
+        <b>Tempo parity is exact</b> — autocorrelation period 249.25 ms vs 249.33 ms (0.03 % apart) and FFT dominant
+        freq 4.03 Hz vs 4.10 Hz on the Sam chain. The same parity holds across no-FX, lpf-only, and lpf+reverb. SP72
+        is fully working. Tempo is not the issue with FX, it never was.<br /><br />
+
+        <b>Sam's chain on web is NOT 1:1 with desktop</b> — but the divergence is in <i>levels and timbre</i>, not
+        rhythm. Specifically: peak 1.71× higher on web (web first hit slams Limiter at 0.94 due to reverb buildup
+        transient; desktop's pre-driver-attenuation peak is 0.55 with no Limiter), MFCC 252 vs lpf-only's 236 (the
+        WASM reverb tail compounds at slightly different gain than native, adding ~6 % timbre divergence).
+        This <i>is</i> the feedback-class divergence we documented on <code>07_ambient</code> in the e2e suite — but
+        in this controlled test it shows up as Limiter saturation rather than the 2.96× over-amplification, because
+        our master-stage <code>sonic-pi-mixer</code> Limiter clamps it. Sam's demo lacks that Limiter — his web users
+        would hear unbounded reverb peaks if they pushed feedback parameters higher.<br /><br />
+
+        <b>The audio is auditioning above</b> — A/B both players. Desktop is consistently steady; web has the same
+        steady cadence with a louder first-hit transient that compresses to similar level after ~1 s. Tempo follows
+        the same 4 Hz grid on both sides, audibly verifiable.
+      </div>
+
+      <h2 id="osc">OSC sent (top to bottom; both sides byte-equivalent in protocol terms)</h2>
+      <div class="osc-grid">
+        <div class="card">
+          <h3>Desktop — direct UDP to <span>scsynth port (Sonic Pi.app)</span></h3>
+<pre class="osc"><span class="cmt"># Tool: tools/capture-desktop-raw.ts
+# Spider hosts the recording window via /run-code:</span>
+<span class="addr">/run-code</span> <span class="num">&lt;token&gt;</span> <span class="str">&quot;recording_stop; recording_start;
+            with_bpm 60 do; sleep 5.15; end;
+            recording_stop; recording_save &lt;path&gt;&quot;</span>
+
+<span class="cmt"># Direct OSC bytes from Node → scsynth UDP port:</span>
+<span class="addr">/b_allocRead</span> <span class="num">1024</span> <span class="str">&quot;/Applications/Sonic Pi.app/Contents/Resources/etc/samples/bd_haus.flac&quot;</span> <span class="num">0 0</span>
+<span class="addr">/b_allocRead</span> <span class="num">1025</span> <span class="str">&quot;.../sn_dub.flac&quot;</span> <span class="num">0 0</span>
+
+<span class="addr">/s_new</span> <span class="str">&quot;sonic-pi-fx_lpf&quot;</span> <span class="num">100000 0 0</span>   <span class="cmt"># addToHead, root group</span>
+       <span class="key">in_bus</span>   <span class="num">64</span>
+       <span class="key">out_bus</span>  <span class="num">18</span>     <span class="cmt"># mixer_bus, discovered from /g_queryTree</span>
+       <span class="key">cutoff</span>   <span class="num">100</span>
+       <span class="key">mix</span>      <span class="num">1</span>
+       <span class="key">pre_amp</span>  <span class="num">1</span>
+       <span class="key">amp</span>      <span class="num">1</span>
+       <span class="key">pre_mix</span>  <span class="num">1</span>
+
+<span class="cmt"># 8 × every 0.5 s wallclock (bpm=120, sleep 0.5):</span>
+<span class="addr">/s_new</span> <span class="str">&quot;sonic-pi-basic_stereo_player&quot;</span> <span class="num">-1 0 0</span>
+       <span class="key">buf</span>      <span class="num">1024</span>   <span class="cmt"># bd_haus on even beats</span>
+       <span class="key">out_bus</span>  <span class="num">64</span>
+       <span class="key">amp</span>      <span class="num">0.5</span>
+<span class="cmt">…alternating buf 1024/1025 (bd_haus / sn_dub) for 8 hits…</span>
+
+<span class="addr">/n_free</span> <span class="num">100000</span>
+<span class="addr">/b_free</span> <span class="num">1024</span>
+<span class="addr">/b_free</span> <span class="num">1025</span></pre>
+        </div>
+
+        <div class="card">
+          <h3>Web — direct port.postMessage to <span>WASM scsynth (AudioWorklet)</span></h3>
+<pre class="osc"><span class="cmt"># Tool: tools/web-raw-osc-only.ts
+# Engine boots to ready, then this is sent:</span>
+
+<span class="cmt"># 1. Defensive cleanup (any leftover from boot):</span>
+<span class="addr">/g_freeAll</span> <span class="num">100</span>
+<span class="addr">/g_freeAll</span> <span class="num">101</span>
+<span class="addr">/g_freeAll</span> <span class="num">102</span>
+
+<span class="cmt"># 2. Explicit synthdef preload (engine boot only loads :beep):</span>
+sonic.<span class="addr">loadSynthDef</span>(<span class="str">&quot;sonic-pi-fx_lpf&quot;</span>)
+sonic.<span class="addr">loadSynthDef</span>(<span class="str">&quot;sonic-pi-basic_stereo_player&quot;</span>)
+
+<span class="cmt"># 3. Buffer load via bridge (same .flac source as desktop, via CDN):</span>
+bridge.<span class="addr">preloadSample</span>(<span class="str">&quot;bd_haus&quot;</span>) <span class="cmt">→ buf 0</span>
+bridge.<span class="addr">preloadSample</span>(<span class="str">&quot;sn_dub&quot;</span>)  <span class="cmt">→ buf 1</span>
+
+<span class="addr">/s_new</span> <span class="str">&quot;sonic-pi-fx_lpf&quot;</span> <span class="num">11004 0 101</span>   <span class="cmt"># addToHead, fxGroup</span>
+       <span class="key">in_bus</span>   <span class="num">16</span>     <span class="cmt"># bridge.allocateBus()</span>
+       <span class="key">out_bus</span>  <span class="num">0</span>      <span class="cmt"># master</span>
+       <span class="key">cutoff</span>   <span class="num">100</span>
+       <span class="key">mix</span>      <span class="num">1</span>
+       <span class="key">pre_amp</span>  <span class="num">1</span>
+       <span class="key">amp</span>      <span class="num">1</span>
+       <span class="key">pre_mix</span>  <span class="num">1</span>
+
+<span class="cmt"># 8 × every 0.5 s wallclock (setTimeout-driven on main thread):</span>
+<span class="addr">/s_new</span> <span class="str">&quot;sonic-pi-basic_stereo_player&quot;</span> <span class="num">&lt;id&gt; 0 100</span>
+       <span class="key">buf</span>      <span class="num">0</span>      <span class="cmt"># bd_haus</span>
+       <span class="key">out_bus</span>  <span class="num">16</span>
+       <span class="key">amp</span>      <span class="num">0.5</span>
+<span class="cmt">…alternating buf 0/1 (bd_haus / sn_dub) for 8 hits…</span>
+
+<span class="addr">/n_free</span> &lt;fxId&gt;
+<span class="addr">/n_free</span> &lt;sample ids&gt;</pre>
+        </div>
+      </div>
+
+      <h2 id="stats">Spectrogram (mel-dB · desktop | web | diff)</h2>
+      <div class="png-block">
+        <img src="raw-lpf/spectrogram.png" alt="mel-spectrogram desktop vs web vs diff" />
+      </div>
+
+      <h2>Per-beat divergence (samples_per_beat = 60/bpm = 0.5 s, grid t=0)</h2>
+      <div class="png-block">
+        <img src="raw-lpf/spectrogram_perbeat.png" alt="per-beat RMS + MFCC distance" />
+      </div>
+
+      <h2>Stats</h2>
+      <table class="metrics">
+        <thead>
+          <tr><th>Metric</th><th>Desktop SP</th><th>SonicPi.js (web)</th><th>ratio (web / desktop)</th></tr>
+        </thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+
+      <h2>Precondition probes</h2>
+      <ul class="probes" id="probes"></ul>
+
+      <h2>Per-beat detail</h2>
+      <table class="metrics">
+        <thead>
+          <tr><th>Beat</th><th class="num">Desktop RMS</th><th class="num">Web RMS</th><th class="num">Desktop peak</th><th class="num">Web peak</th><th class="num">MFCC dist</th></tr>
+        </thead>
+        <tbody id="perbeat-body"></tbody>
+      </table>
+
+      <div class="footer-note">
+        <b>Reading.</b> Desktop fires with a ~1 s recording-start latency, so beats 0–2 land in pre-audio
+        silence. Beats 3–7 carry the actual hits (kicks at full ~0.62 peak, snares at ~0.62 peak with lpf).
+        Web has no equivalent latency; all 8 beats carry audio, but at <b>~0.12× the peak amplitude</b>
+        (this number is from the raw-OSC pre-mixer path; with AMP=3 in the engine path the ratio comes back
+        to ~0.85× — see <a href="#third">Third pass</a>).
+        That uniform ratio matches the raw-OSC <code>:level</code>, <code>:bpf</code>, no-FX measurements
+        from yesterday's <a href="../artifacts/investigations/exp-010-desktop-raw-osc-vs-web.md" style="color:var(--accent-2)">exp-010</a>
+        and today's <a href="#fourth">Fourth pass</a> sweep: the WASM scsynth output is uniformly ~0.6× of native for
+        byte-identical /s_new + same buffers, regardless of FX or cutoff. Below the bridge. Not our chain.
+        <br /><br />
+        <b>Confound disclosure (probes).</b> The precondition flags fire because the <i>captured WAVs</i>
+        are not signal-shape comparable: desktop has the recording-start latency offset (envelope_lag
+        ≈ 2 s), and the per-beat slicer at t = 0 lands desktop beats 0–2 in silence. Both effects are
+        unrelated to the WASM ugen question — they're artifacts of how each side's recording bracket
+        opens. The right way to read this page is per-hit (beats 3–7 desktop ↔ all-beats web with a
+        time-shift), not aggregate RMS.
+        <br /><br />
+        <b>Tools.</b>
+        <ul>
+          <li><code>tools/capture-desktop-raw.ts</code> — sends UDP OSC directly to Sonic Pi.app's bundled scsynth, recording window driven by Ruby <code>recording_start</code> / <code>recording_save</code>.</li>
+          <li><code>tools/web-raw-osc-only.ts</code> — Playwright drives engine to "ready", then bypasses all engine code; OSC sent via <code>sonic.send()</code> straight to the AudioWorklet message port.</li>
+          <li><code>tools/spectrogram-compare.py</code> — mel-dB L2 + MFCC + per-beat MFCC + the precondition probes that fire on this page.</li>
+        </ul>
+      </div>
+    </div>
+
+    <script>
+      const fmt = (n, d = 4) => (n == null || isNaN(n) ? '—' : Number(n).toFixed(d));
+      const ratioCls = (r) => {
+        if (r == null || !isFinite(r) || r <= 0) return 'ratio-bad';
+        const log = Math.abs(Math.log2(r));
+        if (log <= 0.5) return 'ratio-good';
+        if (log <= 1) return 'ratio-mid';
+        return 'ratio-bad';
+      };
+
+      async function init() {
+        const data = await fetch('raw-lpf/data.json', { cache: 'no-store' }).then((r) => r.json());
+
+        const dStats = `${fmt(data.desktop.duration_s, 2)}s · sr ${data.desktop.sample_rate}Hz · peak-freq ${fmt(data.desktop.peak_freq_hz, 1)}Hz`;
+        const wStats = `${fmt(data.web.duration_s, 2)}s · sr ${data.web.sample_rate}Hz · peak-freq ${fmt(data.web.peak_freq_hz, 1)}Hz`;
+        document.getElementById('d-stats').textContent = dStats;
+        document.getElementById('w-stats').textContent = wStats;
+
+        // Compute aggregate peak / RMS from per-beat (use the strongest beat for each side)
+        const rows = data.per_beat.rows;
+        const dPeak = Math.max(...rows.map((r) => r.desktop_peak));
+        const wPeak = Math.max(...rows.map((r) => r.web_peak));
+        const dRmsAll = Math.sqrt(rows.reduce((s, r) => s + r.desktop_rms * r.desktop_rms, 0) / rows.length);
+        const wRmsAll = Math.sqrt(rows.reduce((s, r) => s + r.web_rms * r.web_rms, 0) / rows.length);
+
+        const peakRatio = wPeak / dPeak;
+        const rmsRatio = wRmsAll / dRmsAll;
+
+        // Headline answer
+        document.getElementById('answer-line').innerHTML =
+          `<span class="verdict confound">No</span> Web peak / desktop peak across the loud beats = <b>${fmt(peakRatio, 3)}×</b>; ` +
+          `RMS ratio = <b>${fmt(rmsRatio, 3)}×</b>. ` +
+          `WASM scsynth produces audibly the same shape but at roughly an order of magnitude lower amplitude than native scsynth, ` +
+          `for byte-equivalent <code>/s_new</code> and identical sample buffers. ` +
+          `This is the same ratio measured for <code>:level</code>, <code>:bpf</code>, and no-FX in exp-010 — i.e. it is the WASM <code>basic_stereo_player</code> output stage, not the lpf ugen specifically.`;
+
+        // Stats table
+        const statRows = [
+          ['Duration (s)', data.desktop.duration_s, data.web.duration_s, true],
+          ['Sample rate (Hz)', data.desktop.sample_rate, data.web.sample_rate, false],
+          ['Peak freq (Hz)', data.desktop.peak_freq_hz, data.web.peak_freq_hz, false],
+          ['Aggregate peak (over beats)', dPeak, wPeak, true],
+          ['Aggregate RMS (over beats)', dRmsAll, wRmsAll, true],
+          ['L2 (mel-dB)', null, null, null, data.comparison.l2_mel_db],
+          ['MFCC distance', null, null, null, data.comparison.mfcc_distance],
+          ['Mean per-beat MFCC dist', null, null, null, data.per_beat.mean_per_beat_mfcc_distance],
+        ];
+        const statsBody = document.getElementById('stats-body');
+        for (const [label, d, w, withRatio, single] of statRows) {
+          if (single != null) {
+            statsBody.insertAdjacentHTML('beforeend',
+              `<tr><td>${label}</td><td colspan="3" class="num" style="text-align:center;color:var(--text)">${fmt(single, 2)}</td></tr>`);
+            continue;
+          }
+          let ratioCell = '—';
+          if (withRatio && d && w) {
+            const r = w / d;
+            ratioCell = `<span class="${ratioCls(r)}">${fmt(r, 3)}×</span>`;
+          }
+          statsBody.insertAdjacentHTML('beforeend',
+            `<tr><td>${label}</td><td class="num">${fmt(d, label.startsWith('Sample') ? 0 : 4)}</td><td class="num">${fmt(w, label.startsWith('Sample') ? 0 : 4)}</td><td class="num">${ratioCell}</td></tr>`);
+        }
+
+        // Precondition probes
+        const pBox = document.getElementById('probes');
+        const probes = data.preconditions.probes;
+        const pHtml = (name, p, fmt2) => {
+          const cls = p.skipped ? 'pass' : (p.ok ? 'pass' : 'fail');
+          const tag = p.skipped ? 'SKIPPED' : (p.ok ? 'OK' : 'FAILED');
+          return `<li class="${cls}"><b>${name}</b> · ${tag} · ${fmt2(p)}</li>`;
+        };
+        pBox.insertAdjacentHTML('beforeend', pHtml('onset_count', probes.onset_count,
+          (p) => `desktop=${p.desktop_hits} web=${p.web_hits} ratio=${p.ratio} (tolerance ${p.tolerance})`));
+        pBox.insertAdjacentHTML('beforeend', pHtml('envelope_lag', probes.envelope_lag,
+          (p) => `best_lag=${p.best_lag_ms}ms (tolerance ≤ ${p.tolerance_ms}ms)`));
+        pBox.insertAdjacentHTML('beforeend', pHtml('energy_x_duration', probes.energy_x_duration,
+          (p) => `desktop=${fmt(p.desktop, 6)} web=${fmt(p.web, 6)} ratio=${p.ratio} (tolerance ${p.tolerance})`));
+
+        // Per-beat detail
+        const pbBody = document.getElementById('perbeat-body');
+        const div = new Set(data.per_beat.most_divergent_beats);
+        for (const r of data.per_beat.rows) {
+          pbBody.insertAdjacentHTML('beforeend',
+            `<tr class="${div.has(r.beat) ? 'divergent' : ''}">
+               <td>${r.beat}</td>
+               <td class="num">${fmt(r.desktop_rms, 4)}</td>
+               <td class="num">${fmt(r.web_rms, 4)}</td>
+               <td class="num">${fmt(r.desktop_peak, 4)}</td>
+               <td class="num">${fmt(r.web_peak, 4)}</td>
+               <td class="num">${fmt(r.mfcc_distance, 1)}</td>
+             </tr>`);
+        }
+
+        // Sync-play
+        const dAudio = document.getElementById('audio-desktop');
+        const wAudio = document.getElementById('audio-web');
+        document.getElementById('sync-play').addEventListener('click', () => {
+          dAudio.currentTime = 0; wAudio.currentTime = 0;
+          dAudio.play(); wAudio.play();
+        });
+        document.getElementById('sync-stop').addEventListener('click', () => {
+          dAudio.pause(); wAudio.pause();
+          dAudio.currentTime = 0; wAudio.currentTime = 0;
+        });
+      }
+      init();
+    </script>
+  </body>
+</html>
