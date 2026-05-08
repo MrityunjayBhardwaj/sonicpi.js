@@ -44,8 +44,58 @@
       .app {
         display: grid;
         grid-template-columns: 380px 1fr;
-        height: 100vh;
+        height: calc(100vh - 38px);
       }
+      /* ───────── unified tab bar ───────── */
+      .tab-bar {
+        height: 38px;
+        display: flex;
+        align-items: stretch;
+        background: var(--bg-elev);
+        border-bottom: 1px solid var(--border);
+        padding: 0 16px;
+        gap: 4px;
+      }
+      .tab-bar a {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 16px;
+        font-size: 12px;
+        color: var(--text-dim);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        transition: color 0.1s, border-color 0.1s;
+        font-family: var(--mono);
+        text-transform: lowercase;
+        letter-spacing: 0.04em;
+      }
+      .tab-bar a:hover {
+        color: var(--text);
+      }
+      .tab-bar a[data-active="1"] {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+      }
+      .tab-bar a .count {
+        font-size: 10px;
+        color: var(--text-mute);
+        background: rgba(86,95,137,0.2);
+        padding: 1px 6px;
+        border-radius: 999px;
+      }
+      .tab-bar a[data-active="1"] .count {
+        background: rgba(255,20,147,0.15);
+        color: var(--accent);
+      }
+      .tab-bar .spacer { flex: 1; }
+      .tab-bar .meta {
+        align-self: center;
+        font-size: 11px;
+        color: var(--text-mute);
+        font-family: var(--mono);
+      }
+      .tab-bar .meta a { padding: 0; font-size: 11px; }
       /* ───────── sidebar ───────── */
       .sidebar {
         background: var(--bg-elev);
@@ -504,6 +554,13 @@
     </style>
   </head>
   <body>
+    <nav class="tab-bar">
+      <a href="index.html" data-active="1">FX A/B <span class="count">40</span></a>
+      <a href="e2e.html">E2E suite <span class="count">10</span></a>
+      <a href="community.html">community + forum <span class="count">48</span></a>
+      <span class="spacer"></span>
+      <span class="meta"><a href="raw-lpf.html">raw-lpf investigation</a></span>
+    </nav>
     <div class="app">
       <aside class="sidebar">
         <div class="sidebar-head">
