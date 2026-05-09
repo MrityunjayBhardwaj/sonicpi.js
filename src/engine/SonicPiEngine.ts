@@ -263,14 +263,24 @@ export class SonicPiEngine {
     }
 
     try {
+      // No-op Update short-circuit: if the user clicks Update without
+      // changing a single character, hot-swap is pure churn — it would kill
+      // every running synth, recreate FX, and restart loop iterations even
+      // though the new code is identical to the old. The audible result is
+      // a perceived "the music changed" glitch even though nothing should
+      // have. Detect the no-op case and return early. Music continues
+      // seamlessly. Matches the desktop SP "no-change Run is invisible" feel.
+      const isReEvaluate = this.scheduler !== null && this.playing
+      if (isReEvaluate && code === this.currentCode) {
+        return {}
+      }
+
       this.currentCode = code
       this.currentStratum = detectStratum(code)
       // Reset clamp-warning dedup so re-pressing Run re-surfaces clamp messages
       // (the user may have changed the offending value, and they shouldn't be
       // forever-silenced because we already showed the warning once).
       this.warnDedup.clear()
-
-      const isReEvaluate = this.scheduler !== null && this.playing
 
       // First run or after stop: create fresh scheduler
       if (!isReEvaluate) {
@@ -1408,10 +1418,10 @@ export class SonicPiEngine {
           this.bridge.freeAllNodes()
           this.nodeRefMap.clear()
           // Clear persistent FX node tracking — freeAllNodes killed the FX
-          // nodes in group 101. They'll be recreated on the next iteration
-          // of each loop, using the loopFxScope/fxScopeChains mappings that
-          // were repopulated BEFORE sandbox.execute() above (do NOT clear
-          // those here — that wipes the new code's wiring).
+          // nodes in group 101. They'll be recreated immediately below
+          // (eager) so in-flight iterations of long-cycle loops don't write
+          // /s_new to dead buses for several seconds while waiting for
+          // their next iteration to lazy-create FX.
           this.persistentFx.clear()
           this.reusableFx.clear()
         }
