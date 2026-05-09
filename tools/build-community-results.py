@@ -26,6 +26,41 @@ OUT_COMMUNITY = OUT / "community"
 OUT_HTML = OUT / "community.html"
 
 
+# ─── Scoring + classification, mirrors tools/fx-sweep.ts ───────────────────
+import math
+
+
+def _ratio_score(r: float | None) -> float:
+    if r is None or r <= 0:
+        return 0.0
+    return max(0.0, 100.0 - 50.0 * abs(math.log2(r)))
+
+
+def _l2_score(v: float | None) -> float:
+    return 0.0 if v is None else max(0.0, 100.0 - 2.0 * v)
+
+
+def _mfcc_score(v: float | None) -> float:
+    return 0.0 if v is None else max(0.0, 100.0 - 0.2 * v)
+
+
+def consistency_score(rms_r, peak_r, l2_db, mfcc):
+    if rms_r is None or peak_r is None or l2_db is None or mfcc is None:
+        return None
+    return (0.30 * _ratio_score(rms_r) + 0.15 * _ratio_score(peak_r) +
+            0.30 * _l2_score(l2_db) + 0.25 * _mfcc_score(mfcc))
+
+
+def classify(score, mfcc, desktop_silent: bool) -> str:
+    if desktop_silent or score is None:
+        return "INCONCLUSIVE"
+    if score >= 70 and mfcc is not None and mfcc <= 180:
+        return "HIGH"
+    if score >= 50:
+        return "MID"
+    return "LOW"
+
+
 def copy_if_exists(src: Path | str | None, dst: Path) -> bool:
     if not src:
         return False
@@ -55,6 +90,8 @@ def mirror_fixture(name: str, sidecar: dict) -> dict:
     desktop_wav = desktop.get("wavPath")
     web_wav = web.get("wavPath")
     spec_png = spec.get("spectrogram_png")
+    per_beat = spec.get("per_beat") or {}
+    perbeat_png = per_beat.get("per_beat_png")
     report = sidecar.get("reportPath")
 
     snippet_src = SUITE_ROOT / parent / f"{base}.rb"
@@ -63,6 +100,7 @@ def mirror_fixture(name: str, sidecar: dict) -> dict:
     ok_desktop = copy_if_exists(desktop_wav, fdir / "desktop.wav")
     ok_web = copy_if_exists(web_wav, fdir / "web.wav")
     ok_spec = copy_if_exists(spec_png, fdir / "spectrogram.png")
+    ok_perbeat = copy_if_exists(perbeat_png, fdir / "perbeat.png")
     ok_snippet = copy_if_exists(snippet_src, fdir / "snippet.rb")
     ok_metrics = copy_if_exists(sidecar_src, fdir / "metrics.json")
     ok_report = copy_if_exists(report, fdir / "report.md")
@@ -71,6 +109,13 @@ def mirror_fixture(name: str, sidecar: dict) -> dict:
     w = web.get("stats") or {}
     rms_ratio = (w.get("rms", 0) / d["rms"]) if d.get("rms") else None
     peak_ratio = (w.get("peak", 0) / d["peak"]) if d.get("peak") else None
+    l2_db = spec.get("l2_mel_db")
+    mfcc = spec.get("mfcc_distance")
+
+    desktop_silent = bool(d) and d.get("peak", 0) == 0 and d.get("rms", 0) == 0
+    score = consistency_score(rms_ratio, peak_ratio, l2_db, mfcc)
+    verdict = classify(score, mfcc, desktop_silent or not d or not w)
+    preconds = spec.get("preconditions") or {}
 
     return {
         "name": name,
@@ -83,16 +128,24 @@ def mirror_fixture(name: str, sidecar: dict) -> dict:
         "web": w,
         "rms_ratio": rms_ratio,
         "peak_ratio": peak_ratio,
-        "l2_mel_db": spec.get("l2_mel_db"),
-        "mfcc_distance": spec.get("mfcc_distance"),
+        "l2_mel_db": l2_db,
+        "mfcc_distance": mfcc,
         "frames_compared": spec.get("frames_compared"),
         "desktop_peak_freq_hz": spec.get("desktop_peak_freq_hz"),
         "web_peak_freq_hz": spec.get("web_peak_freq_hz"),
         "spec_error": sidecar.get("spectrogramError"),
+        "score": score,
+        "verdict": verdict,
+        "bpm": per_beat.get("bpm"),
+        "beats": per_beat.get("beats"),
+        "mean_per_beat_mfcc": per_beat.get("mean_per_beat_mfcc_distance"),
+        "most_divergent_beats": per_beat.get("most_divergent_beats") or [],
+        "precondition_violated": bool(preconds.get("violated")),
         "artifacts": {
             "desktop_wav": f"community/{parent}/{base}/desktop.wav" if ok_desktop else None,
             "web_wav": f"community/{parent}/{base}/web.wav" if ok_web else None,
             "spectrogram": f"community/{parent}/{base}/spectrogram.png" if ok_spec else None,
+            "perbeat": f"community/{parent}/{base}/perbeat.png" if ok_perbeat else None,
             "snippet": f"community/{parent}/{base}/snippet.rb" if ok_snippet else None,
             "metrics": f"community/{parent}/{base}/metrics.json" if ok_metrics else None,
             "report": f"community/{parent}/{base}/report.md" if ok_report else None,
@@ -154,6 +207,11 @@ def render_card(entry: dict) -> str:
         if a["spectrogram"]
         else '<div class="no-spec">no spectrogram (capture incomplete)</div>'
     )
+    perbeat_img = (
+        f'<img src="{a["perbeat"]}" alt="{name} per-beat" loading="lazy" />'
+        if a["perbeat"]
+        else '<div class="no-spec">no per-beat chart</div>'
+    )
     desktop_audio = (
         f'<audio controls preload="metadata" src="{a["desktop_wav"]}"></audio>'
         if a["desktop_wav"]
@@ -170,16 +228,40 @@ def render_card(entry: dict) -> str:
     fail_class = " failed" if failed else ""
     mfcc_str = f'{entry["mfcc_distance"]:.0f}' if entry["mfcc_distance"] else "—"
     l2_str = f'{entry["l2_mel_db"]:.1f}' if entry["l2_mel_db"] else "—"
+    score_str = "—" if entry["score"] is None else f'{entry["score"]:.1f}'
+    verdict = entry["verdict"]
+    bpm = entry.get("bpm")
+    beats = entry.get("beats")
+    mean_pb = entry.get("mean_per_beat_mfcc")
+    div_beats = entry.get("most_divergent_beats") or []
+    pb_meta = ""
+    if bpm and beats:
+        bits = [f"bpm {bpm:.0f}", f"beats {beats}"]
+        if mean_pb is not None:
+            bits.append(f"mean per-beat MFCC {mean_pb:.0f}")
+        if div_beats:
+            bits.append(f"most divergent: {', '.join(str(b) for b in div_beats[:5])}")
+        pb_meta = f'<small>{" · ".join(bits)}</small>'
+    precon_badge = ""
+    if entry.get("precondition_violated"):
+        precon_badge = '<span class="badge precon">PRECON</span>'
 
     return f"""
     <section class="fixture{fail_class}" id="{name}">
       <header>
         <h2>{base} <span class="parent-tag">{parent}</span></h2>
-        <div class="ratios">
-          <span>RMS× <b class="{rms_class}">{fmt_ratio(entry["rms_ratio"])}</b></span>
-          <span>peak× <b class="{peak_class}">{fmt_ratio(entry["peak_ratio"])}</b></span>
-          <span>MFCC <b>{mfcc_str}</b></span>
-          <span>L2 dB <b>{l2_str}</b></span>
+        <div class="header-right">
+          <div class="ratios">
+            <span>RMS× <b class="{rms_class}">{fmt_ratio(entry["rms_ratio"])}</b></span>
+            <span>peak× <b class="{peak_class}">{fmt_ratio(entry["peak_ratio"])}</b></span>
+            <span>MFCC <b>{mfcc_str}</b></span>
+            <span>L2 dB <b>{l2_str}</b></span>
+          </div>
+          <div class="verdict">
+            <span class="badge {verdict}">{verdict}</span>
+            <span class="score">{score_str}<small>/100</small></span>
+            {precon_badge}
+          </div>
         </div>
       </header>
       {fail_note}
@@ -199,6 +281,11 @@ def render_card(entry: dict) -> str:
         <div class="spec-card">
           <h3>Spectrogram (mel-dB · 3 panels: desktop / web / |Δ|)</h3>
           {spec_img}
+        </div>
+        <div class="spec-card">
+          <h3>Per-beat divergence (RMS, peak, MFCC distance per beat window)</h3>
+          {perbeat_img}
+          {pb_meta}
         </div>
         <details class="snippet">
           <summary>Source ({parent}/{base}.rb)</summary>
@@ -341,7 +428,17 @@ HTML_TEMPLATE = """<!doctype html>
   .fixture {{ background: var(--bg2); border-radius: 8px; padding: 20px 24px; margin-bottom: 24px; }}
   .fixture.failed {{ opacity: 0.6; border-left: 3px solid var(--bad); }}
   .fail-note {{ background: rgba(247,118,142,0.08); border-left: 3px solid var(--bad); padding: 8px 12px; margin: 10px 0; font-size: 12px; color: var(--text-dim); border-radius: 0 4px 4px 0; }}
-  .fixture header {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #2c3147; }}
+  .fixture header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #2c3147; gap: 16px; flex-wrap: wrap; }}
+  .header-right {{ display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }}
+  .verdict {{ display: flex; gap: 10px; align-items: center; font-family: var(--mono); }}
+  .verdict .score {{ font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; }}
+  .verdict .score small {{ font-size: 11px; color: var(--text-dim); font-weight: 400; }}
+  .badge {{ font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 3px; line-height: 1; display: inline-block; }}
+  .badge.HIGH {{ background: rgba(158,206,106,0.15); color: var(--good); }}
+  .badge.MID {{ background: rgba(224,175,104,0.15); color: var(--mid); }}
+  .badge.LOW {{ background: rgba(247,118,142,0.15); color: var(--bad); }}
+  .badge.INCONCLUSIVE {{ background: rgba(86,95,137,0.2); color: var(--text-dim); }}
+  .badge.precon {{ background: rgba(224,175,104,0.18); color: var(--mid); border: 1px solid rgba(224,175,104,0.4); }}
   .ratios {{ display: flex; gap: 18px; font-family: var(--mono); font-size: 12px; color: var(--text-dim); }}
   .ratios b {{ color: var(--text); }}
   .grid {{ display: flex; flex-direction: column; gap: 16px; }}
