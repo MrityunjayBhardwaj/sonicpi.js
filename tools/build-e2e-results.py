@@ -185,12 +185,12 @@ def render_card(entry: dict) -> str:
     rms_class = ratio_class(entry["rms_ratio"])
     peak_class = ratio_class(entry["peak_ratio"])
     spec_img = (
-        f'<img src="{a["spectrogram"]}" alt="{name} spectrogram" loading="lazy" />'
+        f'<img src="{a["spectrogram"]}" alt="{name} spectrogram" />'
         if a["spectrogram"]
         else '<div class="no-spec">no spectrogram</div>'
     )
     perbeat_img = (
-        f'<img src="{a["perbeat"]}" alt="{name} per-beat" loading="lazy" />'
+        f'<img src="{a["perbeat"]}" alt="{name} per-beat" />'
         if a["perbeat"]
         else '<div class="no-spec">no per-beat chart</div>'
     )
