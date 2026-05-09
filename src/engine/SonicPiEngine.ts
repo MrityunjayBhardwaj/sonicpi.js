@@ -1379,6 +1379,17 @@ export class SonicPiEngine {
       const prevInTopLevelEval = this.inTopLevelEval
       this.inTopLevelEval = true
       try {
+        // On hot-swap, clear FX-scope mappings BEFORE the DSL re-execution
+        // repopulates them via wrappedLiveLoop (line ~822-824). Clearing AFTER
+        // execute() would wipe the new mappings, leaving every loop wrapped
+        // in a top-level `with_fx` block silently un-routed (task.outBus stays
+        // default, audio bypasses the FX chain entirely). Symptom: kicks
+        // (no FX) play normally, FX-wrapped loops lose all FX-processed
+        // mid-content on Update.
+        if (isReEvaluate) {
+          this.loopFxScope.clear()
+          this.fxScopeChains.clear()
+        }
         await sandbox.execute(...dslValues)
       } finally {
         this.inTopLevelEval = prevInTopLevelEval
@@ -1396,13 +1407,13 @@ export class SonicPiEngine {
         if (this.bridge) {
           this.bridge.freeAllNodes()
           this.nodeRefMap.clear()
-          // Clear persistent FX — freeAllNodes killed the FX nodes in group 101.
-          // They will be recreated on the next iteration of each loop.
-          // loopFxScope/fxScopeChains are repopulated by the DSL re-execution above.
+          // Clear persistent FX node tracking — freeAllNodes killed the FX
+          // nodes in group 101. They'll be recreated on the next iteration
+          // of each loop, using the loopFxScope/fxScopeChains mappings that
+          // were repopulated BEFORE sandbox.execute() above (do NOT clear
+          // those here — that wipes the new code's wiring).
           this.persistentFx.clear()
           this.reusableFx.clear()
-          this.loopFxScope.clear()
-          this.fxScopeChains.clear()
         }
 
         // Commit: hot-swap same-named, stop removed, start new
