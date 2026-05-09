@@ -24,6 +24,9 @@ interface SuperSonic {
   resume(): void
   recover(): void
   destroy(): void
+  /** Cancel pending JS-side OSC bundles + clear scsynth WASM scheduler queue.
+   *  SuperSonic blocks `/clearSched` directly; this is the documented API. */
+  purge(): Promise<void>
   node: AudioWorkletNode
   audioContext: AudioContext
 }
@@ -1128,6 +1131,13 @@ export class SuperSonicBridge {
   /** Free all synth, FX, and monitor nodes (clean slate for re-evaluate). */
   freeAllNodes(): void {
     if (!this.sonic) return
+    // Drain pending JS-side bundles AND clear scsynth's WASM scheduler queue
+    // before freeing nodes. Without purge(), `/s_new` bundles already shipped
+    // with future timetags (the ~0.5–1s lookahead) keep spawning new synths
+    // AFTER /g_freeAll runs, producing an audible tail on Stop.
+    // Fire-and-forget: the clearSched postMessage and JS-side cancel are
+    // synchronous side effects inside purge(); we only skip awaiting the ack.
+    this.sonic.purge().catch(() => {})
     this.sonic.send('/g_freeAll', 100)  // synths group
     this.sonic.send('/g_freeAll', 101)  // FX group
     this.sonic.send('/g_freeAll', 102)  // monitors group

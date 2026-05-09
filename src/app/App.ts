@@ -514,6 +514,14 @@ export class App {
     // Save buffers on page unload
     window.addEventListener('beforeunload', () => this.saveBuffers())
 
+    // Stop the engine on tab close so pre-bundled `/s_new` messages with future
+    // NTP timetags don't keep spawning synths in scsynth's WASM scheduler queue
+    // during AudioContext wind-down. `pagehide` fires reliably on close,
+    // navigation, and bfcache (more reliable than `beforeunload`).
+    window.addEventListener('pagehide', () => {
+      try { this.engine?.stop() } catch { /* tab is dying — best effort */ }
+    })
+
     // Tab backgrounding: warn and resume AudioContext when tab returns (#7)
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
