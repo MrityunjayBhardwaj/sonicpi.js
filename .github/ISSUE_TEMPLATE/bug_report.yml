@@ -1,7 +1,18 @@
 name: Bug Report
 description: Something isn't working as expected
-labels: ["bug"]
+labels: ["bug", "needs-triage"]
 body:
+  - type: checkboxes
+    id: known-issues
+    attributes:
+      label: Pre-flight check
+      description: A quick scan of the docs saves everyone time.
+      options:
+        - label: "I've checked [KNOWN_ISSUES.md](https://github.com/MrityunjayBhardwaj/SonicPi.js/blob/main/KNOWN_ISSUES.md) and this isn't already documented as a known limitation"
+          required: true
+        - label: "I've searched [open issues](https://github.com/MrityunjayBhardwaj/SonicPi.js/issues?q=is%3Aissue) for a duplicate"
+          required: true
+
   - type: input
     id: version
     attributes:
@@ -71,3 +82,14 @@ body:
       options:
         - label: "Yes, the same code works correctly in desktop Sonic Pi"
         - label: "I haven't tested in desktop Sonic Pi"
+
+  - type: textarea
+    id: audio-attachment
+    attributes:
+      label: Audio attachment (for audio-output bugs)
+      description: |
+        If the bug is audible (wrong sound, level, FX behaviour, dropout, glitch),
+        please attach a WAV. The toolbar's ⏺ Rec → ⏺ Save flow downloads a raw
+        float32 WAV of exactly what came out of scsynth. Drag the file into this
+        text box or upload to a hosting service and link it. Audio bugs reproduce
+        ~10× faster when we can hear what you heard.

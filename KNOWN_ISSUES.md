@@ -146,7 +146,9 @@ If you hit something that looks like a hot-swap glitch we haven't listed, **plea
 3. **Tell us your browser + OS** — especially relevant after this beta document.
 4. **If audio sounds wrong**, click ⏺ Rec, ⏺ Save, and attach the WAV. Audio bugs are 10× faster to fix when we can hear what you heard.
 
-We use the project board at <https://github.com/MrityunjayBhardwaj/SonicPi.js/projects> to triage. Bugs with clear repros usually land a fix within a few days.
+For the full triage workflow — severity ladder, label scheme, what makes a bug land fast — see [`TRIAGE.md`](./TRIAGE.md).
+
+We use the project board at <https://github.com/MrityunjayBhardwaj/SonicPi.js/projects> to track active work. Bugs with clear repros usually land a fix within a few days.
 
 ---
 
