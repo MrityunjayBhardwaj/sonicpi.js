@@ -30,6 +30,7 @@
  */
 
 import { theme } from './theme'
+import { createLogo } from './Logo'
 
 interface PreloadStep {
   /** Visible label, 4 words or less. */
@@ -61,15 +62,15 @@ export class Preloader {
       transition: opacity 0.25s ease-out;
     `
 
-    const title = document.createElement('div')
-    title.textContent = 'Sonic Pi Web'
-    title.style.cssText = `
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: ${theme.accent};
-      letter-spacing: 0.04em;
-    `
-    this.overlay.appendChild(title)
+    // Shared logo block — same DOM Toolbar uses, so the wordmark stays
+    // visually consistent between preloader and the live app chrome.
+    // Bumped slightly larger here for the splash context.
+    const logo = createLogo()
+    const logoIcon = logo.firstChild as HTMLElement
+    const logoText = logo.lastChild as HTMLElement
+    if (logoIcon) logoIcon.style.fontSize = '1.8rem'
+    if (logoText) logoText.style.fontSize = '1.15rem'
+    this.overlay.appendChild(logo)
 
     const tagline = document.createElement('div')
     tagline.textContent = 'Live coding music in the browser'
