@@ -100,6 +100,23 @@ export class Recorder {
     this.processor.connect(this.silentSink)
     this.silentSink.connect(this.audioCtx.destination)
 
+    // Diagnostic — Playwright reads __recorderTrace to inspect the graph.
+    // Inert in production: the global is never set unless a test sets it.
+    if (typeof globalThis !== 'undefined' && (globalThis as Record<string, unknown>).__recorderTrace) {
+      ;(globalThis as Record<string, unknown>).__recorderTraceEvents ??= []
+      ;((globalThis as Record<string, unknown>).__recorderTraceEvents as unknown[]).push({
+        event: 'start',
+        t: performance.now(),
+        ctxState: this.audioCtx.state,
+        ctxTime: this.audioCtx.currentTime,
+        silentSinkGain: this.silentSink.gain.value,
+        sourceCtor: this.source.constructor.name,
+        ctxDestinationMaxChannelCount: this.audioCtx.destination.maxChannelCount,
+        ctxDestinationNumberOfInputs: this.audioCtx.destination.numberOfInputs,
+      })
+      ;(globalThis as Record<string, unknown>).__lastRecorder = this
+    }
+
     this._state = 'recording'
   }
 
@@ -109,22 +126,67 @@ export class Recorder {
       throw new Error('Not recording')
     }
 
-    // Pull one final scheduled callback to flush in-flight buffers, then
-    // detach. ScriptProcessor delivers chunks on its own cadence; a single
-    // microtask wait is enough to drain the last queued buffer.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    const processor = this.processor
+    const silentSink = this.silentSink
+    const source = this.source
 
-    this.processor.onaudioprocess = null
-    try { this.source.disconnect(this.processor) } catch { /* ok */ }
-    try { this.processor.disconnect() } catch { /* ok */ }
-    if (this.silentSink) {
-      try { this.silentSink.disconnect() } catch { /* ok */ }
+    // Diagnostic breakpoint — visible to Playwright as a trace event.
+    if (typeof globalThis !== 'undefined' && (globalThis as Record<string, unknown>).__recorderTrace) {
+      ;(globalThis as Record<string, unknown>).__recorderTraceEvents ??= []
+      const evs = (globalThis as Record<string, unknown>).__recorderTraceEvents as unknown[]
+      evs.push({
+        event: 'stop:enter',
+        t: performance.now(),
+        ctxState: this.audioCtx.state,
+        ctxTime: this.audioCtx.currentTime,
+        silentSinkGain: silentSink ? silentSink.gain.value : null,
+      })
     }
+
+    // Wait for one more onaudioprocess to fire so the in-flight buffer
+    // (~bufferSize / sampleRate ≈ 85 ms at 4096 / 48 kHz) is captured
+    // before we tear the graph down. setTimeout(0) is not enough — the
+    // audio thread runs on its own cadence, not the JS event loop.
+    const tailMs = (SCRIPT_PROCESSOR_BUFFER_SIZE / this.audioCtx.sampleRate) * 1000
+    await new Promise<void>((resolve) => {
+      const prev = processor.onaudioprocess
+      let done = false
+      const finish = () => { if (done) return; done = true; resolve() }
+      processor.onaudioprocess = (e) => {
+        prev?.call(processor, e)
+        finish()
+      }
+      // Hard cap in case the audio thread is suspended (hidden tab, etc.)
+      setTimeout(finish, tailMs + 50)
+    })
+
+    // Detach graph BEFORE nulling the handler. The opposite order leaves
+    // a window where the source still pumps audio into a node whose
+    // outputBuffer behavior is implementation-defined when the script is
+    // null — the recorder branch can briefly become non-silent.
+    try { source.disconnect(processor) } catch { /* ok */ }
+    try { processor.disconnect() } catch { /* ok */ }
+    if (silentSink) {
+      try { silentSink.disconnect() } catch { /* ok */ }
+    }
+    processor.onaudioprocess = null
     this.processor = null
     this.silentSink = null
 
     const wavBlob = this.encodeWav(this.chunks, this.audioCtx.sampleRate)
     this._state = 'stopped'
+
+    if (typeof globalThis !== 'undefined' && (globalThis as Record<string, unknown>).__recorderTrace) {
+      const evs = (globalThis as Record<string, unknown>).__recorderTraceEvents as unknown[]
+      evs.push({
+        event: 'stop:exit',
+        t: performance.now(),
+        wavSize: wavBlob.size,
+        ctxState: this.audioCtx.state,
+        ctxTime: this.audioCtx.currentTime,
+      })
+    }
+
     return wavBlob
   }
 
@@ -140,7 +202,18 @@ export class Recorder {
    * can be invoked separately from `recording_stop` (#228).
    */
   static saveBlobToDownload(blob: Blob, filename?: string): void {
-    const url = URL.createObjectURL(blob)
+    // Re-wrap the blob with a non-audio MIME for the download. Firefox honors
+    // the user's "Applications" handler for `audio/wav` blob: URLs even with
+    // `<a download>` set — if the user has WAV configured to open in a media
+    // viewer, the click navigates instead of downloading and the viewer
+    // autoplays the file (sounding like a duplicate of the music we just
+    // recorded). `application/octet-stream` forces Firefox down the download
+    // path. The file on disk is still a valid WAV — only the transport MIME
+    // changes.
+    const downloadBlob = blob.type === 'audio/wav'
+      ? new Blob([blob], { type: 'application/octet-stream' })
+      : blob
+    const url = URL.createObjectURL(downloadBlob)
     const a = document.createElement('a')
     a.href = url
     a.download = filename ?? `sonicpi-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.wav`
