@@ -263,14 +263,24 @@ export class SonicPiEngine {
     }
 
     try {
+      // No-op Update short-circuit: if the user clicks Update without
+      // changing a single character, hot-swap is pure churn — it would kill
+      // every running synth, recreate FX, and restart loop iterations even
+      // though the new code is identical to the old. The audible result is
+      // a perceived "the music changed" glitch even though nothing should
+      // have. Detect the no-op case and return early. Music continues
+      // seamlessly. Matches the desktop SP "no-change Run is invisible" feel.
+      const isReEvaluate = this.scheduler !== null && this.playing
+      if (isReEvaluate && code === this.currentCode) {
+        return {}
+      }
+
       this.currentCode = code
       this.currentStratum = detectStratum(code)
       // Reset clamp-warning dedup so re-pressing Run re-surfaces clamp messages
       // (the user may have changed the offending value, and they shouldn't be
       // forever-silenced because we already showed the warning once).
       this.warnDedup.clear()
-
-      const isReEvaluate = this.scheduler !== null && this.playing
 
       // First run or after stop: create fresh scheduler
       if (!isReEvaluate) {
@@ -1379,6 +1389,17 @@ export class SonicPiEngine {
       const prevInTopLevelEval = this.inTopLevelEval
       this.inTopLevelEval = true
       try {
+        // On hot-swap, clear FX-scope mappings BEFORE the DSL re-execution
+        // repopulates them via wrappedLiveLoop (line ~822-824). Clearing AFTER
+        // execute() would wipe the new mappings, leaving every loop wrapped
+        // in a top-level `with_fx` block silently un-routed (task.outBus stays
+        // default, audio bypasses the FX chain entirely). Symptom: kicks
+        // (no FX) play normally, FX-wrapped loops lose all FX-processed
+        // mid-content on Update.
+        if (isReEvaluate) {
+          this.loopFxScope.clear()
+          this.fxScopeChains.clear()
+        }
         await sandbox.execute(...dslValues)
       } finally {
         this.inTopLevelEval = prevInTopLevelEval
@@ -1389,6 +1410,23 @@ export class SonicPiEngine {
         const removedLoops = oldLoops.filter(name => !pendingLoops.has(name))
         const hasNewLoops = [...pendingLoops.keys()].some(name => !oldLoops.includes(name))
 
+        // Per-loop state cleanup for removed loops. Without this, if a loop is
+        // removed (e.g. user clears the buffer and Updates) and then re-added
+        // later, the stale state survives:
+        //   - loopSynced.has(name) → true → restored loop SKIPS waiting for
+        //     its `sync:` target → starts at registerLoop's getAudioTime()
+        //     instead of the next met1 cue → music drifts out of phase.
+        //   - loopTicks/loopBeats/loopSeeds → tick state resumes from where
+        //     it left off pre-removal → wrong notes from .tick/.shuffle/etc.
+        //   - loopBuilders → stale closure could be re-invoked from edge paths.
+        for (const name of removedLoops) {
+          this.loopBuilders.delete(name)
+          this.loopSeeds.delete(name)
+          this.loopTicks.delete(name)
+          this.loopBeats.delete(name)
+          this.loopSynced.delete(name)
+        }
+
         // Pause ticking so no old events fire during transition
         scheduler.pauseTick()
 
@@ -1396,13 +1434,13 @@ export class SonicPiEngine {
         if (this.bridge) {
           this.bridge.freeAllNodes()
           this.nodeRefMap.clear()
-          // Clear persistent FX — freeAllNodes killed the FX nodes in group 101.
-          // They will be recreated on the next iteration of each loop.
-          // loopFxScope/fxScopeChains are repopulated by the DSL re-execution above.
+          // Clear persistent FX node tracking — freeAllNodes killed the FX
+          // nodes in group 101. They'll be recreated immediately below
+          // (eager) so in-flight iterations of long-cycle loops don't write
+          // /s_new to dead buses for several seconds while waiting for
+          // their next iteration to lazy-create FX.
           this.persistentFx.clear()
           this.reusableFx.clear()
-          this.loopFxScope.clear()
-          this.fxScopeChains.clear()
         }
 
         // Commit: hot-swap same-named, stop removed, start new
@@ -1580,6 +1618,17 @@ export class SonicPiEngine {
   setVolume(volume: number): void {
     this.pendingVolume = volume
     this.bridge?.setMasterVolume(volume)
+  }
+
+  /** Set mixer amp (0.5–6 typical). Live — propagates to scsynth /n_set
+   *  immediately if the bridge is up; otherwise queued for next mixer init. */
+  setMixerAmp(amp: number): void {
+    this.bridge?.setMixerAmp(amp)
+  }
+
+  /** Set mixer pre_amp baseline. Effective wire pre_amp = volume × pre_amp. */
+  setMixerPreAmp(preAmp: number): void {
+    this.bridge?.setMixerPreAmp(preAmp)
   }
 
   /** Get a friendly version of the last error (for display in a log pane). */

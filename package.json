@@ -30,6 +30,7 @@
     "test:e2e": "playwright test",
     "test:all": "vitest run && playwright test",
     "test:watch": "vitest",
+    "test:update-fx-parity": "npx tsx tools/test-update-fx-parity.ts",
     "typecheck": "tsc --noEmit",
     "dev": "vite",
     "build": "vite build",

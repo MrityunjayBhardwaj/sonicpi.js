@@ -81,12 +81,6 @@ export class Scope {
     this.rebuildCanvases()
   }
 
-  /** Set exactly which modes are active */
-  setModes(modes: ScopeMode[]): void {
-    this.activeModes = new Set(modes.length > 0 ? modes : ['spectrum'])
-    this.rebuildCanvases()
-  }
-
   /** Set waveform line width (1-6). */
   setLineWidth(w: number): void { this._lineWidth = w }
 
@@ -98,11 +92,6 @@ export class Scope {
 
   /** Set hue shift in degrees (0-360). Rotates all scope colors. */
   setHueShift(deg: number): void { this._hueShift = deg }
-
-  /** Get current visual parameters. */
-  getVisualParams(): { lineWidth: number; glow: number; trail: number; hueShift: number } {
-    return { lineWidth: this._lineWidth, glow: this._glow, trail: this._trail, hueShift: this._hueShift }
-  }
 
   rebuildCanvases(): void {
     // Clear everything — canvases AND their wrapper divs
