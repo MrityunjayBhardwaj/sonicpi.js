@@ -4,6 +4,7 @@
 
 import { examples, getExamplesByDifficulty, type Example } from '../engine/examples'
 import { theme } from './theme'
+import { createLogo } from './Logo'
 
 export interface MidiDeviceInfo {
   id: string
@@ -54,31 +55,9 @@ export class Toolbar {
     const topRow = this.topRow
     topRow.style.borderBottom = `1px solid ${theme.border}`
 
-    // Logo
-    const logo = document.createElement('div')
-    logo.style.cssText = `
-      display: flex; align-items: center; gap: 0.5rem;
-      margin-right: 1rem; user-select: none;
-    `
-    const logoIcon = document.createElement('span')
-    logoIcon.textContent = '\u266B'
-    logoIcon.style.cssText = `
-      font-size: 1.3rem; color: ${theme.accent};
-      text-shadow: 0 0 12px ${theme.accentHover};
-    `
-    const logoText = document.createElement('span')
-    logoText.textContent = 'Sonic Pi'
-    logoText.style.cssText = `
-      font-weight: 700; font-size: 0.95rem; color: ${theme.fg};
-      letter-spacing: 0.5px;
-    `
-    const logoSub = document.createElement('span')
-    logoSub.textContent = 'Web'
-    logoSub.style.cssText = `
-      font-size: 0.65rem; color: ${theme.comment}; font-weight: 400;
-      margin-left: 0.2rem; letter-spacing: 1px; text-transform: uppercase;
-    `
-    logo.append(logoIcon, logoText, logoSub)
+    // Logo \u2014 shared with Preloader via createLogo() so both stay in sync.
+    const logo = createLogo()
+    logo.style.marginRight = '1rem'
     topRow.appendChild(logo)
 
     // Separator
