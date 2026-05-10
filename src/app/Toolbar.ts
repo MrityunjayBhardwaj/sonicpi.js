@@ -20,7 +20,7 @@ export interface ToolbarCallbacks {
   onBufferSelect: (index: number) => void
   onVolumeChange: (vol: number) => void
   onMidiDeviceToggle?: (deviceId: string, type: 'input' | 'output', selected: boolean) => void
-  getMidiDevices?: () => MidiDeviceInfo[]
+  getMidiDevices?: () => Promise<MidiDeviceInfo[]> | MidiDeviceInfo[]
   onOpenSampleBrowser?: () => void
   onFontSizeChange?: (delta: number) => void
   onSave?: () => void
@@ -41,7 +41,6 @@ export class Toolbar {
   private activeBuffer = 0
   private playing = false
   private recording = false
-  private bpmLabel: HTMLElement
   private midiDropdown: HTMLElement | null = null
   private midiOutsideClickHandler: ((e: MouseEvent) => void) | null = null
 
@@ -158,16 +157,6 @@ export class Toolbar {
     volWrap.append(volIcon, volSlider)
     topRow.appendChild(volWrap)
 
-    // BPM display
-    this.bpmLabel = document.createElement('span')
-    this.bpmLabel.style.cssText = `
-      font-size: 0.7rem; color: ${theme.fgMuted};
-      user-select: none; white-space: nowrap;
-      margin-left: 0.25rem;
-    `
-    this.bpmLabel.textContent = '120 BPM'
-    topRow.appendChild(this.bpmLabel)
-
     topRow.appendChild(this.separator())
 
     // Font size buttons
@@ -202,14 +191,27 @@ export class Toolbar {
 
     topRow.appendChild(this.separator())
 
-    // MIDI button
+    // MIDI button — Chromium-family browsers only. Firefox / Safari either
+    // lack Web MIDI entirely or enumerate zero devices in practice (their
+    // requestMIDIAccess implementation differs from Chrome's). Disabling at
+    // the button level avoids the confusing "No MIDI devices found"
+    // dropdown and points the user at a browser that works.
+    const ua = navigator.userAgent
+    const isChromiumFamily = /Chrome\//.test(ua) && !/Firefox\//.test(ua)
     const midiBtn = this.iconButton(
       '\u{1F3B9}', 'MIDI',
-      () => this.toggleMidiDropdown(midiBtn),
+      () => isChromiumFamily ? this.toggleMidiDropdown(midiBtn) : undefined,
       { bg: theme.comment, hover: theme.fgMuted }
     )
-    midiBtn.title = 'MIDI Devices'
-    midiBtn.style.opacity = '0.7'
+    if (isChromiumFamily) {
+      midiBtn.title = 'MIDI Devices'
+      midiBtn.style.opacity = '0.7'
+    } else {
+      midiBtn.title = 'MIDI is unsupported in this browser. Try Chrome, Edge, Brave, or Opera.'
+      midiBtn.style.opacity = '0.35'
+      midiBtn.style.cursor = 'not-allowed'
+      midiBtn.disabled = true
+    }
     topRow.appendChild(midiBtn)
 
     // Samples button
@@ -362,10 +364,6 @@ export class Toolbar {
     if (label) label.textContent = recording ? 'Save' : 'Rec'
   }
 
-  setBpm(bpm: number): void {
-    this.bpmLabel.textContent = `${Math.round(bpm)} BPM`
-  }
-
   private selectBuffer(index: number): void {
     this.bufferBtns[this.activeBuffer].style.color = theme.comment
     this.bufferBtns[this.activeBuffer].style.fontWeight = '400'
@@ -463,10 +461,12 @@ export class Toolbar {
     dropdown.style.left = `${rect.left}px`
     dropdown.style.top = `${rect.bottom + 4}px`
 
-    this.buildMidiDropdownContent(dropdown)
-
     document.body.appendChild(dropdown)
     this.midiDropdown = dropdown
+    // Async — populates with "Loading…" then real devices once permission
+    // is granted. Must run AFTER setting this.midiDropdown so the staleness
+    // guard inside buildMidiDropdownContent sees the right reference.
+    void this.buildMidiDropdownContent(dropdown)
 
     // Close on outside click
     this.midiOutsideClickHandler = (e: MouseEvent) => {
@@ -490,8 +490,17 @@ export class Toolbar {
     }
   }
 
-  private buildMidiDropdownContent(dropdown: HTMLElement): void {
+  private async buildMidiDropdownContent(dropdown: HTMLElement): Promise<void> {
     dropdown.innerHTML = ''
+
+    // Check for Web MIDI support BEFORE asking the host. In Firefox stock the
+    // pref is enabled but the implementation may not enumerate devices that
+    // Chrome would — we still want to show the more accurate "not supported"
+    // message when the API isn't there at all.
+    if (!navigator.requestMIDIAccess) {
+      this.addMidiMessage(dropdown, 'MIDI not supported in this browser')
+      return
+    }
 
     const getMidiDevices = this.callbacks.getMidiDevices
     if (!getMidiDevices) {
@@ -499,13 +508,27 @@ export class Toolbar {
       return
     }
 
-    const devices = getMidiDevices()
+    // Render a loading state while requestMIDIAccess prompts for permission
+    // (the FIRST call awaits the user's grant). Without this we'd show the
+    // stale "no devices" text and the user would never know permission was
+    // pending or that init was async. Firefox especially: the prompt is the
+    // sole signal that anything happened.
+    this.addMidiMessage(dropdown, 'Loading MIDI devices…')
 
-    // Check for Web MIDI support
-    if (!navigator.requestMIDIAccess) {
-      this.addMidiMessage(dropdown, 'MIDI not supported in this browser')
-      return
+    let devices: MidiDeviceInfo[] = []
+    try {
+      const result = getMidiDevices()
+      devices = result instanceof Promise ? await result : result
+    } catch {
+      devices = []
     }
+
+    // The dropdown may have been closed during the await (user clicked away,
+    // pressed Esc, or opened a different one). Bail out — the next open will
+    // re-render fresh.
+    if (this.midiDropdown !== dropdown || !dropdown.isConnected) return
+
+    dropdown.innerHTML = ''
 
     if (devices.length === 0) {
       this.addMidiMessage(dropdown, 'No MIDI devices found')
@@ -525,7 +548,7 @@ export class Toolbar {
     if (outputs.length > 0) {
       if (inputs.length > 0) {
         const sep = document.createElement('div')
-        sep.style.cssText = 'height: 1px; background: ${theme.border}; margin: 0.3rem 0;'
+        sep.style.cssText = `height: 1px; background: ${theme.border}; margin: 0.3rem 0;`
         dropdown.appendChild(sep)
       }
       this.addMidiSectionHeader(dropdown, 'Outputs')
