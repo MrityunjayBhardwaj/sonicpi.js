@@ -1,9 +1,9 @@
-# SonicPi.js
+# Sonic Pi Web
 
 **Your Sonic Pi code, now portable.**
 
 <p align="center">
-  <img src="assets/hero.jpg" alt="Sonic Pi Web — live coding in the browser" width="100%">
+  <img src="assets/sonicpi_screenshot.png" alt="Sonic Pi Web — live coding in the browser" width="100%">
 </p>
 
 [![CI](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions/workflows/ci.yml/badge.svg)](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions/workflows/ci.yml)
@@ -17,7 +17,7 @@
 
 ## Make music with code. In your browser.
 
-SonicPi.js is a browser-native reimplementation of [Sonic Pi](https://sonic-pi.net/)'s live coding engine. Same Ruby DSL. Same synths. Same samples. No install.
+Sonic Pi Web is a browser-native reimplementation of [Sonic Pi](https://sonic-pi.net/)'s live coding engine. Same Ruby DSL. Same synths. Same samples. No install.
 
 I built this because Sonic Pi changed how I think about music and code, and I wanted that experience to be one click away for anyone with a browser.
 
