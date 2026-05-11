@@ -84,8 +84,14 @@ export class SonicPiEngine {
   private schedAheadTime: number
   /** Maps DSL nodeRef → SuperSonic nodeId for control messages */
   private nodeRefMap = new Map<number, number>()
-  /** Reusable inner FX nodes — persists across loop iterations. See issue #70. */
-  private reusableFx = new Map<string, { bus: number; groupId: number; nodeId: number; outBus: number }>()
+  /** Reusable inner FX nodes — persists across loop iterations. See issue #70.
+   *  `killTimer` is the pending `setTimeout` handle that frees this FX 1s after
+   *  its last iteration if no follow-up iteration cancels it. On hot-swap /
+   *  stop we MUST clearTimeout these before dropping the map entries, otherwise
+   *  the stale timer fires later and calls freeBus/freeGroup on what are by
+   *  then NEW live FX resources — corrupting the bus pool and silently killing
+   *  groups (issue #290). */
+  private reusableFx = new Map<string, { bus: number; groupId: number; nodeId: number; outBus: number; killTimer?: ReturnType<typeof setTimeout> }>()
   /** Pending volume to apply when bridge initializes */
   private pendingVolume: number | null = null
   /** Stored builder functions for capture/query path */
@@ -1440,6 +1446,18 @@ export class SonicPiEngine {
           // /s_new to dead buses for several seconds while waiting for
           // their next iteration to lazy-create FX.
           this.persistentFx.clear()
+          // Cancel pending FX-kill setTimeouts BEFORE dropping the map.
+          // Each per-iteration with_fx schedules a 1s killTimer (AudioInterpreter
+          // ~line 286/325) that frees its bus + group. /g_freeAll already killed
+          // the scsynth-side nodes, so the kill is redundant, but its freeBus()
+          // would push a stale bus index back into freeBuses[] and the freeGroup
+          // would /n_free a group that may now belong to a freshly-allocated FX.
+          // Without this clearTimeout, the stale timer fires ~1s post-hot-swap
+          // and corrupts pool state, producing audible "snare band growth" and
+          // reproducible track drops (issue #290).
+          for (const state of this.reusableFx.values()) {
+            if (state.killTimer) clearTimeout(state.killTimer)
+          }
           this.reusableFx.clear()
         }
 
@@ -1521,6 +1539,12 @@ export class SonicPiEngine {
     this.definedFns.clear()
     this.defonceCache.clear()
     this.persistentFx.clear()
+    // Same as hot-swap path: cancel pending FX-kill setTimeouts BEFORE dropping
+    // the map. Without this, a Stop followed by a quick re-Run would have stale
+    // timers fire ~1s later on freshly-allocated FX (issue #290).
+    for (const state of this.reusableFx.values()) {
+      if (state.killTimer) clearTimeout(state.killTimer)
+    }
     this.reusableFx.clear()
     this.loopFxScope.clear()
     this.fxScopeChains.clear()
