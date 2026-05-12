@@ -8,7 +8,6 @@
 
 [![CI](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions/workflows/ci.yml/badge.svg)](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions/workflows/ci.yml)
 [![Deploy](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions/workflows/deploy.yml/badge.svg)](https://github.com/MrityunjayBhardwaj/SonicPi.js/actions/workflows/deploy.yml)
-[![npm latest](https://img.shields.io/npm/v/@mjayb/sonicpijs?label=npm%20latest)](https://www.npmjs.com/package/@mjayb/sonicpijs)
 [![npm beta](https://img.shields.io/npm/v/@mjayb/sonicpijs/beta?label=npm%20beta&color=orange)](https://www.npmjs.com/package/@mjayb/sonicpijs/v/beta)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
