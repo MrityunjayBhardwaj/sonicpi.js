@@ -1437,43 +1437,63 @@ export class SonicPiEngine {
         // Pause ticking so no old events fire during transition
         scheduler.pauseTick()
 
-        // Free old audio — clean cut on every re-evaluate
+        // SP86 (#296): loop-based reconciliation — preserve in-flight audio
+        // whose shape didn't change. The previous nuclear path (freeAllNodes
+        // + persistentFx.clear + recreate) killed every synth in mid-envelope
+        // and tore down every FX node even when its content-addressed scopeId
+        // was identical in the new program. That's the source of the audible
+        // "click on Run" and the FX-tail accumulation during rapid hot-swap.
+        //
+        // Strategy now:
+        //   1. Synth group 100: untouched. Notes in mid-envelope finish their
+        //      decay naturally (matches Desktop SP behavior).
+        //   2. FX group 101: set-difference between persistentFx.keys() (old)
+        //      and fxScopeChains.keys() (new). Free only orphaned scopes.
+        //      Matching scopes keep their FX node + bus alive — reverb tail
+        //      and echo state persist across Run.
+        //   3. Monitors group 102: free only monitors for removed loops.
+        //      Surviving loops keep their per-track AnalyserNode routing.
+        //   4. reusableFx (per-iteration inner with_fx): always orphaned —
+        //      those FX are tied to a specific iteration's killTimer
+        //      lifecycle. SP82 + SP85 hygiene (cancel timer, free group, free
+        //      bus) still applies here.
         if (this.bridge) {
-          this.bridge.freeAllNodes()
-          this.nodeRefMap.clear()
-          // Clear persistent FX node tracking — freeAllNodes killed the FX
-          // nodes in group 101. They'll be recreated immediately below
-          // (eager) so in-flight iterations of long-cycle loops don't write
-          // /s_new to dead buses for several seconds while waiting for
-          // their next iteration to lazy-create FX.
-          // SP85 (#294): return persistentFx bus indices to the bridge pool
-          // BEFORE dropping the map. freeAllNodes() above killed the scsynth-
-          // side nodes via /g_freeAll, but the JS bus indices were leaked —
-          // nextBusNum then climbed past SuperSonic's numAudioBusChannels=128
-          // default after ~6 changed-code hot-swaps, silencing all FX-routed
-          // audio. /n_free for groups is redundant (already killed) and risks
-          // SP82-class double-allocation, so we only restore the bus pool.
-          for (const state of this.persistentFx.values()) {
+          // (1) Persistent FX scopes: free only those whose scopeId does NOT
+          //     appear in the new program. fxScopeChains was rebuilt during
+          //     sandbox.execute above; persistentFx still holds the prior
+          //     run's allocations. The intersection is what we preserve.
+          const survivingScopes = new Set(this.fxScopeChains.keys())
+          for (const [scopeId, state] of this.persistentFx) {
+            if (survivingScopes.has(scopeId)) continue  // keep alive
+            for (const group of state.groups) this.bridge.freeGroup(group)
             for (const bus of state.buses) this.bridge.freeBus(bus)
+            this.persistentFx.delete(scopeId)
           }
-          this.persistentFx.clear()
-          // Cancel pending FX-kill setTimeouts BEFORE dropping the map.
-          // Each per-iteration with_fx schedules a 1s killTimer (AudioInterpreter
-          // ~line 286/325) that frees its bus + group. /g_freeAll already killed
-          // the scsynth-side nodes, so the kill is redundant, but its freeBus()
-          // would push a stale bus index back into freeBuses[] and the freeGroup
-          // would /n_free a group that may now belong to a freshly-allocated FX.
-          // Without this clearTimeout, the stale timer fires ~1s post-hot-swap
-          // and corrupts pool state, producing audible "snare band growth" and
-          // reproducible track drops (issue #290).
-          // SP85 (#294): the timer body would have called freeBus(state.bus); do
-          // it synchronously here so the bus index returns to the pool instead
-          // of leaking (same root cause as the persistentFx loop above).
+          // (2) Per-iteration inner FX: always disposed across hot-swap. The
+          //     new code's iterations will allocate their own reusableFx
+          //     entries on first execution. Hygiene order matters (SV36 +
+          //     SV38): cancel killTimer before freeing, then /n_free the
+          //     group (live — /g_freeAll isn't called anymore), then return
+          //     the bus index to the pool.
           for (const state of this.reusableFx.values()) {
             if (state.killTimer) clearTimeout(state.killTimer)
+            this.bridge.freeGroup(state.groupId)
             this.bridge.freeBus(state.bus)
           }
           this.reusableFx.clear()
+          // (3) Loop monitors: free only those whose loop disappeared. Kept
+          //     loops re-use their existing monitor (createLoopMonitor is
+          //     idempotent by name).
+          for (const name of removedLoops) {
+            this.bridge.freeLoopMonitor(name)
+          }
+          // (4) nodeRefMap: drop all entries. NodeRefs are build-time symbols
+          //     and the new program built fresh ones; old refs are
+          //     unreachable from user code. Surviving persistent-FX scopes
+          //     re-register through AudioInterpreter on their first new-code
+          //     iteration that re-enters their with_fx Step (existing nodeId
+          //     reused via persistentFx.has(scopeId) short-circuit).
+          this.nodeRefMap.clear()
         }
 
         // Pre-create persistent FX synchronously before reEvaluate. See
