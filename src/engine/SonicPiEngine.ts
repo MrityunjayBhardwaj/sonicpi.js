@@ -1446,6 +1446,16 @@ export class SonicPiEngine {
           // (eager) so in-flight iterations of long-cycle loops don't write
           // /s_new to dead buses for several seconds while waiting for
           // their next iteration to lazy-create FX.
+          // SP85 (#294): return persistentFx bus indices to the bridge pool
+          // BEFORE dropping the map. freeAllNodes() above killed the scsynth-
+          // side nodes via /g_freeAll, but the JS bus indices were leaked —
+          // nextBusNum then climbed past SuperSonic's numAudioBusChannels=128
+          // default after ~6 changed-code hot-swaps, silencing all FX-routed
+          // audio. /n_free for groups is redundant (already killed) and risks
+          // SP82-class double-allocation, so we only restore the bus pool.
+          for (const state of this.persistentFx.values()) {
+            for (const bus of state.buses) this.bridge.freeBus(bus)
+          }
           this.persistentFx.clear()
           // Cancel pending FX-kill setTimeouts BEFORE dropping the map.
           // Each per-iteration with_fx schedules a 1s killTimer (AudioInterpreter
@@ -1456,8 +1466,12 @@ export class SonicPiEngine {
           // Without this clearTimeout, the stale timer fires ~1s post-hot-swap
           // and corrupts pool state, producing audible "snare band growth" and
           // reproducible track drops (issue #290).
+          // SP85 (#294): the timer body would have called freeBus(state.bus); do
+          // it synchronously here so the bus index returns to the pool instead
+          // of leaking (same root cause as the persistentFx loop above).
           for (const state of this.reusableFx.values()) {
             if (state.killTimer) clearTimeout(state.killTimer)
+            this.bridge.freeBus(state.bus)
           }
           this.reusableFx.clear()
         }
@@ -1609,12 +1623,27 @@ export class SonicPiEngine {
     this.globalStore.clear()
     this.definedFns.clear()
     this.defonceCache.clear()
+    // SP85 (#294): return persistentFx bus indices to the bridge pool BEFORE
+    // dropping the map. freeAllNodes() above killed the scsynth-side nodes via
+    // /g_freeAll, but the JS bus indices were leaked — nextBusNum then climbed
+    // past SuperSonic's numAudioBusChannels=128 default after 5-6 Run/Stop
+    // cycles, silencing all FX-routed audio (arp + cymbal tracks dropped to
+    // ~13% of baseline, kick + synthbass invariant because they routed through
+    // master bus 0). /n_free for groups is redundant — /g_freeAll already
+    // killed them — and risks SP82-class double-allocation.
+    for (const state of this.persistentFx.values()) {
+      for (const bus of state.buses) this.bridge?.freeBus(bus)
+    }
     this.persistentFx.clear()
     // Same as hot-swap path: cancel pending FX-kill setTimeouts BEFORE dropping
     // the map. Without this, a Stop followed by a quick re-Run would have stale
     // timers fire ~1s later on freshly-allocated FX (issue #290).
+    // SP85 (#294): the timer body would have called freeBus(state.bus); do it
+    // synchronously here so the bus index returns to the pool instead of
+    // leaking (same root cause as the persistentFx loop above).
     for (const state of this.reusableFx.values()) {
       if (state.killTimer) clearTimeout(state.killTimer)
+      this.bridge?.freeBus(state.bus)
     }
     this.reusableFx.clear()
     this.loopFxScope.clear()
