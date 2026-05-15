@@ -17,7 +17,7 @@ import { CueLog } from './CueLog'
 import { SampleBrowser } from './SampleBrowser'
 import { HelpPanel } from './HelpPanel'
 import { APP_VERSION } from './version'
-import { decodeShareCode, buildShareURL } from './ShareLink'
+import { decodeShareCode, buildShareURL, pickInitialBuffer } from './ShareLink'
 import { theme } from './theme'
 import { track, EVENTS, errorClass, detectBrowserFamily } from './Analytics'
 
@@ -349,6 +349,11 @@ export class App {
   // Buffer management — 10 buffers like Sonic Pi
   private buffers: string[] = Array(BUFFER_COUNT).fill('')
   private activeBuffer = 0
+  /** True when buffer[0] came from a share link (incl. an intentionally
+   *  empty `#c=` payload). Lets init() honor a shared blank buffer instead
+   *  of falling through `|| WELCOME_CODE`. Contract: ShareLink round-trips
+   *  '' → '' (#306/#308). */
+  private loadedFromShare = false
   private eventStreamHandler: ((event: unknown) => void) | null = null
   private recorder: Recorder | null = null
   private isRecording = false
@@ -477,6 +482,7 @@ export class App {
     const shared = decodeShareCode()
     if (shared !== null) {
       this.buffers[0] = shared
+      this.loadedFromShare = true
       try {
         history.replaceState(null, '', location.pathname + location.search)
       } catch { /* history API unavailable — harmless, hash just lingers */ }
@@ -515,7 +521,9 @@ export class App {
   }
 
   async init(): Promise<void> {
-    await this.editor.init(this.buffers[0] || WELCOME_CODE)
+    await this.editor.init(
+      pickInitialBuffer(this.buffers[0], this.loadedFromShare, WELCOME_CODE),
+    )
     this.editor.onRun(() => this.handlePlay())
     this.editor.onStop(() => this.handleStop())
     this.editor.onZen(() => this.toggleZen())

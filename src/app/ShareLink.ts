@@ -52,6 +52,29 @@ export function buildShareURL(code: string, base?: string): string {
 }
 
 /**
+ * Choose what the editor should open with, given the (already-decoded)
+ * first buffer and whether it came from a share link.
+ *
+ * This is the consumer side of the `#c=` → `''` round-trip contract: a
+ * shared buffer — *including an intentionally empty one* — must open
+ * verbatim. Only the non-share path may fall through to the welcome
+ * track. Kept here (not inlined in App) because the empty-buffer
+ * invariant spans encode → decode → this selection: one auditable place
+ * for the whole contract (#306 / #308).
+ *
+ * The bug this guards: `'' || welcome` is truthy-falsy, so an inline
+ * `buffer || welcome` silently replaces a shared blank track with the
+ * welcome code, contradicting `decodeShareCode('#c=') === ''`.
+ */
+export function pickInitialBuffer(
+  buffer: string,
+  fromShare: boolean,
+  welcome: string,
+): string {
+  return fromShare ? buffer : buffer || welcome
+}
+
+/**
  * Decode a share fragment back to code. Returns null when there is no
  * share payload or it is malformed — callers fall back to their normal
  * load path (localStorage / welcome).
