@@ -36,11 +36,15 @@ export const KNOWN_SAMPLES = [
   'perc_bell', 'perc_snap', 'perc_swoosh',
 ]
 
+// `delay` and `chorus` omitted — not shipped in the SuperSonic CDN package
+// (verified 404 across v0.57.0–v0.66.0). See FxNames.ts ALL_FX_NAMES for the
+// canonical list and rationale. Suggesting these names to a user with a typo
+// would lead them to a "FX not found" failure at /s_new dispatch (issue #301).
 export const KNOWN_FX = [
-  'reverb', 'echo', 'delay', 'distortion', 'slicer',
+  'reverb', 'echo', 'distortion', 'slicer',
   'wobble', 'ixi_techno', 'compressor', 'rlpf', 'rhpf',
   'hpf', 'lpf', 'normaliser', 'pan', 'band_eq',
-  'flanger', 'krush', 'bitcrusher', 'ring_mod', 'chorus',
+  'flanger', 'krush', 'bitcrusher', 'ring_mod',
   'octaver', 'vowel', 'tanh', 'gverb', 'pitch_shift',
   'whammy', 'tremolo', 'record', 'sound_out', 'sound_out_stereo',
   'level', 'mono', 'autotuner',

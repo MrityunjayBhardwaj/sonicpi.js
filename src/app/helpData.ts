@@ -799,7 +799,6 @@ const SYNTH_DESCRIPTIONS: Record<string, string> = {
 const FX_DESCRIPTIONS: Record<string, string> = {
   reverb: 'Room reverb — adds space and depth.',
   echo: 'Echo/delay with feedback and decay.',
-  delay: 'Simple delay line.',
   distortion: 'Waveshaping distortion — gritty, overdriven.',
   slicer: 'Amplitude slicer — rhythmic gating.',
   wobble: 'Wobble bass filter — LFO-controlled cutoff.',
@@ -816,7 +815,6 @@ const FX_DESCRIPTIONS: Record<string, string> = {
   krush: 'Lo-fi crusher with filter.',
   bitcrusher: 'Bit depth and sample rate reducer.',
   ring_mod: 'Ring modulation — metallic, bell-like.',
-  chorus: 'Chorus — thickens with modulated delay.',
   octaver: 'Octave doubler — adds sub and super octaves.',
   vowel: 'Vowel formant filter.',
   tanh: 'Hyperbolic tangent distortion — warm saturation.',
