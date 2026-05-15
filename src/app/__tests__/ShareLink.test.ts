@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { encodeShareCode, decodeShareCode, buildShareURL } from '../ShareLink'
+import {
+  encodeShareCode,
+  decodeShareCode,
+  buildShareURL,
+  pickInitialBuffer,
+} from '../ShareLink'
 
 describe('ShareLink', () => {
   const roundtrip = (code: string) => decodeShareCode(encodeShareCode(code))
@@ -55,5 +60,32 @@ describe('ShareLink', () => {
     const url = buildShareURL('play 72', 'https://sonicpi.cc/')
     expect(url).toBe('https://sonicpi.cc/' + encodeShareCode('play 72'))
     expect(decodeShareCode(new URL(url).hash)).toBe('play 72')
+  })
+
+  describe('pickInitialBuffer (#308)', () => {
+    const WELCOME = '# welcome track'
+
+    it('a shared EMPTY buffer opens blank, NOT the welcome track', () => {
+      // The whole point of #308: '' || WELCOME would wrongly pick WELCOME.
+      expect(pickInitialBuffer('', true, WELCOME)).toBe('')
+    })
+
+    it('a shared non-empty buffer opens verbatim', () => {
+      expect(pickInitialBuffer('play 60', true, WELCOME)).toBe('play 60')
+    })
+
+    it('non-share empty first run falls through to the welcome track', () => {
+      expect(pickInitialBuffer('', false, WELCOME)).toBe(WELCOME)
+    })
+
+    it('non-share restored buffer opens verbatim (no welcome override)', () => {
+      expect(pickInitialBuffer('live_loop :a {}', false, WELCOME)).toBe('live_loop :a {}')
+    })
+
+    it('round-trips an empty share through decode → pick', () => {
+      const shared = decodeShareCode('#c=')
+      expect(shared).toBe('')
+      expect(pickInitialBuffer(shared as string, shared !== null, WELCOME)).toBe('')
+    })
   })
 })
