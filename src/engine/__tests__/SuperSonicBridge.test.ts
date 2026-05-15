@@ -144,6 +144,33 @@ describe('SuperSonicBridge', () => {
     expect(bundleStr).toContain('sonic-pi-basic_stereo_player')
   })
 
+  it('SV43: a rejected sample load does not poison subsequent retries (SP90 / #304)', async () => {
+    const { mockSonic } = createMockSuperSonic()
+    ;(globalThis as Record<string, unknown>).SuperSonic = vi.fn(() => mockSonic)
+
+    const bridge = new SuperSonicBridge()
+    await bridge.init()
+
+    // First load rejects — CORS/404 for a typo'd name, or `sample :user_x`
+    // used before registerCustomSample. Every subsequent load resolves
+    // (user fixed the typo, or the sample is now registered).
+    mockSonic.loadSample.mockReset()
+    mockSonic.loadSample
+      .mockRejectedValueOnce(new Error('CORS/404'))
+      .mockResolvedValue(undefined)
+
+    // The failed load must SURFACE as an error, not resolve silently.
+    await expect(bridge.preloadSample('user_typo')).rejects.toThrow()
+
+    // Pre-fix (delete only in .then()): pendingSampleLoads still holds the
+    // rejected promise, so this returns the cached rejection and loadSample
+    // is never called again — silent forever. Post-fix (.finally clears the
+    // entry): the retry re-attempts the load and succeeds.
+    const buf = await bridge.preloadSample('user_typo')
+    expect(typeof buf).toBe('number')
+    expect(mockSonic.loadSample).toHaveBeenCalledTimes(2)
+  })
+
   it('caches loaded SynthDefs', async () => {
     const { mockSonic } = createMockSuperSonic()
     ;(globalThis as Record<string, unknown>).SuperSonic = vi.fn(() => mockSonic)

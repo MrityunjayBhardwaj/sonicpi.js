@@ -585,10 +585,24 @@ export class SuperSonicBridge {
     const bufNum = this.nextBufNum++
     const p = this.sonic.loadSample(bufNum, `${name}.flac`).then(() => {
       this.loadedSamples.set(name, bufNum)
-      this.pendingSampleLoads.delete(name)
       this.fetchSampleDuration(name).catch(err =>
         console.warn(`[SonicPi] Could not determine duration for ${name}: ${err.message}`))
       return bufNum
+    }).finally(() => {
+      // SV43: clear the in-flight dedup entry whether the load RESOLVES OR
+      // REJECTS. The old code deleted only inside .then(), so a failed load
+      // (CORS/404 for a typo'd name, or `sample :user_x` before
+      // registerCustomSample) left a permanently-rejecting promise cached
+      // here — every later sample :name returned that rejection and was
+      // silent forever, no error surfaced (SP90 / #304). Clearing on reject
+      // lets a later retry (typo fixed, or sample now registered) re-attempt
+      // the load instead of replaying the dead rejection.
+      //
+      // The consumed bufNum is intentionally NOT recycled on reject: this
+      // matches the existing freeSample design decision (~line 1142) — slot
+      // recycling would require ref-tracking, and the cost of a skipped int
+      // on a failed load is the same accepted one-int cost.
+      this.pendingSampleLoads.delete(name)
     })
     this.pendingSampleLoads.set(name, p)
     return p
