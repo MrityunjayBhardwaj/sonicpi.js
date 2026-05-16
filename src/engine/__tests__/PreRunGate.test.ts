@@ -9,7 +9,11 @@ import { SonicPiEngine } from '../SonicPiEngine'
  * cases don't regress.
  */
 
-function mockSuperSonic(failSynthDefs: Set<string>, failSamples: Set<string>) {
+function mockSuperSonic(
+  failSynthDefs: Set<string>,
+  failSamples: Set<string>,
+  hangSamples: Set<string> = new Set(),
+) {
   const mockSonic = {
     init: vi.fn().mockResolvedValue(undefined),
     send: vi.fn(),
@@ -19,7 +23,11 @@ function mockSuperSonic(failSynthDefs: Set<string>, failSamples: Set<string>) {
     ),
     loadSynthDefs: vi.fn().mockResolvedValue(undefined),
     loadSample: vi.fn((_b: number, path: string) =>
-      failSamples.has(path) ? Promise.reject(new Error('CORS/404')) : Promise.resolve(undefined),
+      hangSamples.has(path)
+        ? new Promise<undefined>(() => { /* never settles — simulates a hung CDN fetch */ })
+        : failSamples.has(path)
+          ? Promise.reject(new Error('CORS/404'))
+          : Promise.resolve(undefined),
     ),
     sync: vi.fn().mockResolvedValue(undefined),
     nextNodeId: (() => { let i = 1000; return vi.fn(() => i++) })(),
@@ -94,5 +102,27 @@ describe('pre-Run component gate (#318.3 / #323)', () => {
     const r = await engine.evaluate('# use_synth :hollow\nplay 60')
     expect(r.error).toBeUndefined()
     engine.dispose()
+  })
+
+  it('#330: a hung CDN fetch does not hang Run-start — preflight times out, proceeds with a warning', async () => {
+    mockSuperSonic(new Set(), new Set(), new Set(['hang_sample.flac']))
+    const engine = new SonicPiEngine()
+    await engine.init() // init under real timers (only mock-promise awaits)
+
+    const prints: string[] = []
+    engine.setPrintHandler((m) => prints.push(m))
+
+    vi.useFakeTimers()
+    try {
+      const p = engine.evaluate('sample :hang_sample')
+      // Past PREFLIGHT_TIMEOUT_MS (5000) — the race resolves to 'timeout'.
+      await vi.advanceTimersByTimeAsync(5001)
+      const r = await p
+      expect(r.error).toBeUndefined() // proceeded, did NOT refuse on a timeout
+      expect(prints.some((m) => m.includes('preflight timed out'))).toBe(true)
+    } finally {
+      vi.useRealTimers()
+      engine.dispose()
+    }
   })
 })

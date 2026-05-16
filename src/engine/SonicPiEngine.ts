@@ -22,6 +22,11 @@ import { initTreeSitter } from './TreeSitterTranspiler'
  * to surface each unique line once per evaluation (issue #202, G4).
  */
 const CLAMP_WARN_RE = /clamped to .+ \((min|max)\)$/
+/** #330: cap the pre-Run component preflight so a hung/slow CDN fetch
+ *  can't hang Run-start. On timeout the engine proceeds (lazy-load +
+ *  SV43 self-heal), it does not refuse — a timeout is not a definitive
+ *  miss. 5s is well past a healthy unpkg fetch, short enough to feel. */
+const PREFLIGHT_TIMEOUT_MS = 5000
 import { friendlyError, formatFriendlyError, type FriendlyError } from './FriendlyErrors'
 import { scanComponentNames } from './ComponentScan'
 import { resolveComponentManifest } from './ComponentResolver'
@@ -310,21 +315,46 @@ export class SonicPiEngine {
         // literal names only; runtime-computed names still lazy-load.
         if (this.bridge) {
           const manifest = scanComponentNames(code)
-          const { hardMisses, warnings } = await resolveComponentManifest(manifest, {
-            sample: (n) => this.bridge!.preloadSample(n),
-            synth: (n) => this.bridge!.preloadSynth(n),
-            fx: (n) => this.bridge!.preloadFx(n),
+          // #330: a hung / very slow CDN fetch must not hang Run-start
+          // forever. Race the preflight against a bounded timeout. A
+          // timeout is NOT a definitive "missing" — so on timeout we
+          // PROCEED with a warning and let playback lazy-load (post-#320
+          // self-heal covers transient failures). Block ONLY on a
+          // definitive hard miss, which a timeout is not. Refusing Run on
+          // a slow network would be worse UX than the silent-drop #318
+          // fixed.
+          let timer: ReturnType<typeof setTimeout> | undefined
+          const timeout = new Promise<'timeout'>((resolve) => {
+            timer = setTimeout(() => resolve('timeout'), PREFLIGHT_TIMEOUT_MS)
           })
-          for (const w of warnings) {
+          const resolved = await Promise.race([
+            resolveComponentManifest(manifest, {
+              sample: (n) => this.bridge!.preloadSample(n),
+              synth: (n) => this.bridge!.preloadSynth(n),
+              fx: (n) => this.bridge!.preloadFx(n),
+            }),
+            timeout,
+          ])
+          if (timer) clearTimeout(timer)
+          if (resolved === 'timeout') {
             if (this.printHandler) {
               this.printHandler(
-                `[Warning] sample :${w} isn't loaded yet — it will play once registered`,
+                '[Warning] component preflight timed out — starting anyway; any missing sounds will load when available',
               )
             }
-          }
-          if (hardMisses.length > 0) {
-            const list = hardMisses.map((n) => `:${n}`).join(', ')
-            return { error: new Error(`Couldn't load: ${list}`) }
+          } else {
+            const { hardMisses, warnings } = resolved
+            for (const w of warnings) {
+              if (this.printHandler) {
+                this.printHandler(
+                  `[Warning] sample :${w} isn't loaded yet — it will play once registered`,
+                )
+              }
+            }
+            if (hardMisses.length > 0) {
+              const list = hardMisses.map((n) => `:${n}`).join(', ')
+              return { error: new Error(`Couldn't load: ${list}`) }
+            }
           }
         }
 
