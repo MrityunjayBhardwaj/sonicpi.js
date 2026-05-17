@@ -1,0 +1,25 @@
+Adapted from the Sonic Pi tutorial, © Sam Aaron, licensed CC BY-SA 4.0.
+Source: github.com/sonic-pi-net/sonic-pi @ abc844fade22463fa6533215dc9f14ba4710079e
+Modified for the web port (see the "What's different on the web" overlay).
+Per-file `# coded by` attributions preserved where present upstream.
+
+------------------------------------------------------------------------
+ShareAlike scope
+------------------------------------------------------------------------
+The markdown files in this directory, and the prose carried from them into
+the generated src/tutorial/tutorialData.ts, are licensed CC BY-SA 4.0.
+This does NOT relicense the Sonic Pi Web engine or application code —
+CC BY-SA 4.0 attaches to the tutorial content only (T0 determination,
+issue #310).
+
+Full licence text: https://creativecommons.org/licenses/by-sa/4.0/
+
+------------------------------------------------------------------------
+Provenance
+------------------------------------------------------------------------
+These files are a curated subset (~12 chapters, one representative chapter
+per web-applicable top-level section) of etc/doc/tutorial/ from the pinned
+upstream commit above. They are a build INPUT to tools/ingest-tutorial.ts,
+which bakes them into src/tutorial/tutorialData.ts. The raw markdown is
+never shipped to the runtime. Re-running the ingester against this pinned
+content is deterministic.
