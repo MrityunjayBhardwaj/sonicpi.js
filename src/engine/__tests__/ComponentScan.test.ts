@@ -76,6 +76,20 @@ describe('scanComponentNames (#318.3 / #323 static extractor)', () => {
     })
   })
 
+  it('resolves synth aliases so the preflight loads the real synthdef (SP89 / #337)', () => {
+    // `:sine` has no `sonic-pi-sine.scsyndef` in the CDN package — it aliases
+    // to `beep`. The preflight resolver consumes this scan; keeping the raw
+    // name fetches a 404 (SP89 CORS-masquerade) and the 5s preflight
+    // spuriously times out on every `:sine` Run. SV14.
+    expect(s('use_synth :sine\nplay :a3')).toMatchObject({ synths: ['beep'] })
+    expect(s('synth :mod_beep, note: 60')).toMatchObject({ synths: ['mod_sine'] })
+    // Non-aliased synths pass through; samples/FX have no alias layer.
+    expect(s('use_synth :prophet\nwith_fx :reverb do\nend')).toMatchObject({
+      synths: ['prophet'],
+      fx: ['reverb'],
+    })
+  })
+
   it('empty / component-free code yields empty sets', () => {
     expect(s('play 60\nsleep 1')).toEqual({ samples: [], fx: [], synths: [] })
     expect(s('')).toEqual({ samples: [], fx: [], synths: [] })

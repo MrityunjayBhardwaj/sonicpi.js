@@ -25,6 +25,7 @@
  */
 
 import type { Program } from './Program'
+import { resolveSynthName } from './SoundLayer'
 
 export interface ComponentManifest {
   samples: Set<string>
@@ -46,7 +47,15 @@ export function collectComponentManifest(
       case 'play':
         // `synth` is optional on the type but ProgramBuilder always stamps
         // it; guard defensively rather than assume.
-        if (step.synth) into.synths.add(step.synth)
+        //
+        // Resolve the alias (`:sine`→`beep`, `:mod_beep`→`mod_sine`) HERE so
+        // the manifest reports the synthdef the runtime will actually load.
+        // AudioInterpreter applies resolveSynthName at /s_new time
+        // (AudioInterpreter.ts:110); the preflight resolver must agree or it
+        // fetches `sonic-pi-sine.scsyndef` — a name the CDN package never
+        // ships → 404 (SP89, the CORS-masquerade) + a spurious preflight
+        // timeout. SV14: symbol references resolve before normalization.
+        if (step.synth) into.synths.add(resolveSynthName(step.synth))
         break
       case 'sample':
         into.samples.add(step.name)

@@ -105,6 +105,22 @@ describe('collectComponentManifest (#318.1 / #321)', () => {
     expect(m.samples.size + m.fx.size + m.synths.size).toBe(0)
   })
 
+  it('resolves synth aliases so the preflight loads the real synthdef (SP89 / #337)', () => {
+    // `:sine` has no `sonic-pi-sine.scsyndef` in the CDN package — it aliases
+    // to `beep` (SoundLayer.resolveSynthName, applied at /s_new time in
+    // AudioInterpreter). The manifest must agree or the preflight resolver
+    // fetches a 404 (SP89 CORS-masquerade) + spuriously times out.
+    const p: Program = [
+      { tag: 'play', note: 57, opts: {}, synth: 'sine' },
+      { tag: 'play', note: 60, opts: {}, synth: 'mod_beep' },
+      { tag: 'play', note: 62, opts: {}, synth: 'prophet' },
+    ]
+    const m = collectComponentManifest(p)
+    expect([...m.synths].sort()).toEqual(['beep', 'mod_sine', 'prophet'])
+    expect(m.synths.has('sine')).toBe(false)
+    expect(m.synths.has('mod_beep')).toBe(false)
+  })
+
   it('accumulates into a caller-provided manifest (multi-loop aggregation)', () => {
     const acc = { samples: new Set<string>(), fx: new Set<string>(), synths: new Set<string>() }
     collectComponentManifest([{ tag: 'play', note: 60, opts: {}, synth: 'beep' }], acc)

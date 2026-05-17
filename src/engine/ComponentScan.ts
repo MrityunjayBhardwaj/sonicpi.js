@@ -27,6 +27,7 @@
  */
 
 import type { ComponentManifest } from './ComponentManifest'
+import { resolveSynthName } from './SoundLayer'
 
 /**
  * Strip Ruby comments so a commented-out `sample :typo` cannot false-block
@@ -77,7 +78,16 @@ export function scanComponentNames(code: string): ComponentManifest {
   for (const [bucket, re] of PATTERNS) {
     re.lastIndex = 0
     let m: RegExpExecArray | null
-    while ((m = re.exec(src)) !== null) manifest[bucket].add(m[1])
+    while ((m = re.exec(src)) !== null) {
+      // SV14: resolve the synth alias (`:sine`→`beep`, `:mod_beep`→`mod_sine`)
+      // at scan time so the preflight loads the synthdef the runtime will
+      // actually /s_new (AudioInterpreter.ts:110 resolves identically). The
+      // CDN package ships no `sonic-pi-sine.scsyndef`; without this the
+      // preflight resolver fetches a 404 (SP89 CORS-masquerade) and the
+      // 5s preflight spuriously times out on every `:sine` Run. Samples/FX
+      // have no alias layer — pass through unchanged.
+      manifest[bucket].add(bucket === 'synths' ? resolveSynthName(m[1]) : m[1])
+    }
   }
   return manifest
 }
