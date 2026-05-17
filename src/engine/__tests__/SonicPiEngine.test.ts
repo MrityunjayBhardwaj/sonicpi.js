@@ -731,4 +731,53 @@ end
 
     engine.dispose()
   })
+
+  it('Time State (set/get) persists across Stop, matching desktop Sonic Pi (#336)', async () => {
+    const engine = new SonicPiEngine()
+    await engine.init()
+
+    // Run 1: a piece that sets shared state (the :director role in Solar Flare).
+    await engine.evaluate('set :section, 41')
+
+    // Stop — desktop SP does NOT clear @event_history on Stop; `get` is
+    // documented deterministic across Runs. Our engine used to wipe it here.
+    engine.stop()
+
+    // Run 2: a fragment that only READS the state (the extracted :arp role).
+    const events: SoundEvent[] = []
+    engine.components.streaming!.eventStream.on((e) => events.push(e))
+    await engine.evaluate('play get[:section]')
+
+    const scheduler = (engine as unknown as { scheduler: { tick: (t: number) => void } }).scheduler
+    scheduler.tick(100)
+    await new Promise((r) => setTimeout(r, 50))
+
+    // get[:section] must still be 41 (survived Stop) → play emits midiNote 41.
+    // Pre-fix: globalStore.clear() in stop() wiped it → get[:section] === null
+    // → play(null) → no 41 note → :arp-class silence.
+    expect(events.some((e) => e.midiNote === 41)).toBe(true)
+
+    engine.dispose()
+  })
+
+  it('Time State IS cleared on dispose (session end ≈ Sonic Pi app restart) (#336)', async () => {
+    const engine = new SonicPiEngine()
+    await engine.init()
+    await engine.evaluate('set :section, 41')
+    engine.dispose()
+
+    // Fresh engine after dispose: state must NOT leak in.
+    const engine2 = new SonicPiEngine()
+    await engine2.init()
+    const events: SoundEvent[] = []
+    engine2.components.streaming!.eventStream.on((e) => events.push(e))
+    await engine2.evaluate('play (get[:section] || 99)')
+    const scheduler = (engine2 as unknown as { scheduler: { tick: (t: number) => void } }).scheduler
+    scheduler.tick(100)
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(events.some((e) => e.midiNote === 99)).toBe(true)
+    expect(events.some((e) => e.midiNote === 41)).toBe(false)
+    engine2.dispose()
+  })
 })

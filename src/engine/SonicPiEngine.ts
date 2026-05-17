@@ -1736,7 +1736,14 @@ export class SonicPiEngine {
     this.loopTicks.clear()
     this.loopBeats.clear()
     this.loopSynced.clear()
-    this.globalStore.clear()
+    // Time State (set/get) intentionally NOT cleared on Stop. Desktop Sonic
+    // Pi creates @event_history once per session (runtime.rb:1450) and never
+    // clears it on Stop — `get` is documented "deterministic across Runs".
+    // The core live-coding workflow (Run a piece that `set`s state → Stop →
+    // Run a fragment that `get`s it) relies on this. Clearing here was an
+    // inception-time "clean slate" assumption (517bf7b), not a debugged
+    // invariant, and diverged from the reference. Cleared only on dispose()
+    // (full engine teardown ≈ Sonic Pi app restart). #336.
     this.definedFns.clear()
     this.defonceCache.clear()
     // SP85 (#294): return persistentFx bus indices to the bridge pool BEFORE
