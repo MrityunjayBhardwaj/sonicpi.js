@@ -679,4 +679,41 @@ describe('ProgramBuilder', () => {
       expect(step.stop).toBeUndefined()
     })
   })
+
+  describe('tick state across block boundaries (#340)', () => {
+    it('with_fx shares the parent tick map — .tick inside advances the live_loop counter', () => {
+      // with_fx is a synchronous same-thread FX wrapper, NOT a forked thread.
+      // .tick inside it must mutate the SAME counter the engine persists via
+      // loopTicks between iterations. Pre-fix the inner builder got a fresh
+      // empty tick map that was discarded → `play notes.tick` inside a
+      // per-iteration with_fx was frozen on index 0 (Solar Flare :arp).
+      const b = new ProgramBuilder()
+      b.with_fx('echo', {}, (inner) => {
+        inner.tick()       // → 0
+        inner.tick()       // → 1
+        return inner
+      })
+      expect(b.getTicks().get('__default')).toBe(1)
+    })
+
+    it('a tick before with_fx continues (not resets) inside it', () => {
+      const b = new ProgramBuilder()
+      b.tick()                                   // outer → 0
+      b.with_fx('reverb', {}, (inner) => {
+        inner.tick()                             // must be 1, not a reset to 0
+        return inner
+      })
+      expect(b.getTicks().get('__default')).toBe(1)
+    })
+
+    it('in_thread does NOT share the tick map (forked thread = independent tick, Sonic Pi semantics)', () => {
+      const b = new ProgramBuilder()
+      b.tick()                                   // outer → 0  (ticks.__default = 0)
+      b.in_thread((inner) => {
+        inner.tick()                             // independent scope
+      })
+      // Outer counter unchanged by the forked thread's tick.
+      expect(b.getTicks().get('__default')).toBe(0)
+    })
+  })
 })
