@@ -309,6 +309,16 @@ export class ProgramBuilder {
     inner._currentBuildSeconds = this._currentBuildSeconds
     inner._currentBeat = this._currentBeat
     inner._schedAheadTime = this._schedAheadTime
+    // Share the SAME tick map (by reference, not a copy). `with_fx` does NOT
+    // fork a thread (unlike in_thread / at, which push {tag:'thread'} and
+    // correctly get an independent tick scope) — it is a synchronous FX
+    // wrapper in the same thread, so `.tick`/`.look` inside it must advance
+    // the live_loop's persistent counter. Without this, every iteration's
+    // `inner` got a fresh empty tick map that was discarded after build(),
+    // so the engine's per-loop loopTicks never saw the advance → `play
+    // notes.tick` inside a per-iteration with_fx was frozen on index 0
+    // (Solar Flare :arp stuck on one note). #340.
+    inner.ticks = this.ticks
     fn(inner, fxRef)
     const fxOpts = !this._argBpmScaling ? { ...opts, _argBpmScaling: 0 } : opts
     this.steps.push({ tag: 'fx', name, opts: fxOpts, body: inner.build(), nodeRef: fxRef })
