@@ -296,29 +296,10 @@ export class ProgramBuilder {
     // Assign a nodeRef so the FX can be targeted by control()
     const fxRef = this.nextRef++
     this._lastRef = fxRef
-    const inner = new ProgramBuilder(this.rng.next() * 0xFFFFFFFF)
-    inner.currentSynth = this.currentSynth
-    inner.densityFactor = this.densityFactor
-    inner._argBpmScaling = this._argBpmScaling
-    inner._transpose = this._transpose
-    inner._synthDefaults = { ...this._synthDefaults }
-    inner._sampleDefaults = { ...this._sampleDefaults }
-    // Inherit iteration introspection state so current_time / current_beat
-    // inside with_fx / in_thread / at blocks return the outer's values (#226).
-    inner._iterationStartAudioTime = this._iterationStartAudioTime
-    inner._currentBuildSeconds = this._currentBuildSeconds
-    inner._currentBeat = this._currentBeat
-    inner._schedAheadTime = this._schedAheadTime
-    // Share the SAME tick map (by reference, not a copy). `with_fx` does NOT
-    // fork a thread (unlike in_thread / at, which push {tag:'thread'} and
-    // correctly get an independent tick scope) — it is a synchronous FX
-    // wrapper in the same thread, so `.tick`/`.look` inside it must advance
-    // the live_loop's persistent counter. Without this, every iteration's
-    // `inner` got a fresh empty tick map that was discarded after build(),
-    // so the engine's per-loop loopTicks never saw the advance → `play
-    // notes.tick` inside a per-iteration with_fx was frozen on index 0
-    // (Solar Flare :arp stuck on one note). #340.
-    inner.ticks = this.ticks
+    // with_fx is a synchronous same-thread FX wrapper — tick map AND random
+    // stream continue through it (#340/#341 + #343 Defect C). forkBuilder is
+    // the single source of truth for sub-builder state threading.
+    const inner = this.forkBuilder('same-thread')
     fn(inner, fxRef)
     const fxOpts = !this._argBpmScaling ? { ...opts, _argBpmScaling: 0 } : opts
     this.steps.push({ tag: 'fx', name, opts: fxOpts, body: inner.build(), nodeRef: fxRef })
@@ -326,19 +307,10 @@ export class ProgramBuilder {
   }
 
   in_thread(buildFn: (b: ProgramBuilder) => void): this {
-    const inner = new ProgramBuilder(this.rng.next() * 0xFFFFFFFF)
-    inner.currentSynth = this.currentSynth
-    inner.densityFactor = this.densityFactor
-    inner._argBpmScaling = this._argBpmScaling
-    inner._transpose = this._transpose
-    inner._synthDefaults = { ...this._synthDefaults }
-    inner._sampleDefaults = { ...this._sampleDefaults }
-    // Inherit iteration introspection state so current_time / current_beat
-    // inside with_fx / in_thread / at blocks return the outer's values (#226).
-    inner._iterationStartAudioTime = this._iterationStartAudioTime
-    inner._currentBuildSeconds = this._currentBuildSeconds
-    inner._currentBeat = this._currentBeat
-    inner._schedAheadTime = this._schedAheadTime
+    // in_thread forks a thread → fresh tick scope + re-seeded rng, but
+    // inherits a snapshot of thread-locals (synth/bpm/transpose/density/
+    // defaults/iteration introspection). #343 Defect: _currentBpm now threads.
+    const inner = this.forkBuilder('forked')
     buildFn(inner)
     this.steps.push({ tag: 'thread', body: inner.build() })
     return this
@@ -348,18 +320,61 @@ export class ProgramBuilder {
     for (let i = 0; i < times.length; i++) {
       const offset = times[i]
       const val = values ? values[i % values.length] : i
-      const inner = new ProgramBuilder(this.rng.next() * 0xFFFFFFFF)
-      inner.currentSynth = this.currentSynth
-      inner.densityFactor = this.densityFactor
-      inner._argBpmScaling = this._argBpmScaling
-      inner._transpose = this._transpose
-      inner._synthDefaults = { ...this._synthDefaults }
-      inner._sampleDefaults = { ...this._sampleDefaults }
+      // `at` forks a thread per time like in_thread. forkBuilder also threads
+      // iteration introspection (#226 Defect B — `at` used to drop it) and
+      // _currentBpm (#343 Defect A).
+      const inner = this.forkBuilder('forked')
       if (offset > 0) inner.sleep(offset)
       buildFn(inner, val)
       this.steps.push({ tag: 'thread', body: inner.build() })
     }
     return this
+  }
+
+  /**
+   * Single source of truth for which per-thread / per-build state threads into
+   * a nested block's sub-builder. Replaces three hand-maintained copies that
+   * had drifted (#343). Desktop SP semantics (ref/sources/desktop-sp):
+   *  - 'same-thread' (with_fx): no thread fork → ALL thread-locals continue,
+   *    including the tick map and the random STREAM, shared by reference.
+   *  - 'forked' (in_thread / at): forks a thread → inherits a SNAPSHOT of
+   *    thread-locals but gets a FRESH tick scope and a RE-SEEDED rng
+   *    (runtime.rb:1062-1067 only re-seeds on a new thread).
+   */
+  private forkBuilder(mode: 'same-thread' | 'forked'): ProgramBuilder {
+    // 'forked' re-seeds the rng from the parent stream (deterministic fork);
+    // 'same-thread' shares the parent rng instance (set below) so the seed
+    // here is irrelevant and must NOT consume from the parent stream.
+    const inner = mode === 'forked'
+      ? new ProgramBuilder(this.rng.next() * 0xFFFFFFFF)
+      : new ProgramBuilder()
+    // Common — inherited by every sub-builder regardless of mode.
+    inner.currentSynth = this.currentSynth
+    inner.densityFactor = this.densityFactor
+    inner._argBpmScaling = this._argBpmScaling
+    inner._transpose = this._transpose
+    inner._synthDefaults = { ...this._synthDefaults }
+    inner._sampleDefaults = { ...this._sampleDefaults }
+    // #343 Defect A: use_bpm is thread-local in desktop SP (runtime.rb:155).
+    // with_fx (same thread) continues it; in_thread/at snapshot it at fork.
+    // Previously NO sub-builder inherited it → silent 2× tempo error.
+    inner._currentBpm = this._currentBpm
+    // Iteration introspection (#226) so current_time / current_beat inside
+    // with_fx / in_thread / at return the outer's values. #343 Defect B:
+    // `at` used to drop these.
+    inner._iterationStartAudioTime = this._iterationStartAudioTime
+    inner._currentBuildSeconds = this._currentBuildSeconds
+    inner._currentBeat = this._currentBeat
+    inner._schedAheadTime = this._schedAheadTime
+    if (mode === 'same-thread') {
+      // with_fx forks no thread: tick map AND random stream continue. Sharing
+      // the tick Map by reference is the #340/#341 fix; sharing the rng
+      // instance is its seed-fork analog (#343 Defect C). 'forked' leaves
+      // inner.ticks a fresh Map and inner.rng the re-seeded generator.
+      inner.ticks = this.ticks
+      inner.rng = this.rng
+    }
+    return inner
   }
 
   live_audio(name: string, optsOrStop?: Record<string, number> | 'stop', maybeOpts?: Record<string, number>): this {
