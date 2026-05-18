@@ -716,4 +716,92 @@ describe('ProgramBuilder', () => {
       expect(b.getTicks().get('__default')).toBe(0)
     })
   })
+
+  describe('sub-builder state threading — forkBuilder(mode) (#343)', () => {
+    // Desktop SP: with_fx forks no thread → random STREAM continues (the
+    // seed-fork analog of the #340 tick fix). in_thread/at fork → re-seeded.
+    // `rng` is private — read it through a structural cast (same pattern the
+    // #340 block uses for _currentBuildSeconds).
+    const rngOf = (b: ProgramBuilder) => (b as unknown as { rng: { next(): number } }).rng
+
+    it('Defect C: with_fx continues the parent random stream (does not re-fork)', () => {
+      const flat = new ProgramBuilder()
+      flat.use_random_seed(42)
+      const baseline = [rngOf(flat).next(), rngOf(flat).next(), rngOf(flat).next(), rngOf(flat).next()]
+
+      const b = new ProgramBuilder()
+      b.use_random_seed(42)
+      const seq: number[] = [rngOf(b).next()]
+      b.with_fx('reverb', {}, (inner) => {
+        seq.push(rngOf(inner).next())
+        seq.push(rngOf(inner).next())
+        return inner
+      })
+      seq.push(rngOf(b).next())
+      expect(seq).toEqual(baseline)
+    })
+
+    it('in_thread re-forks the rng (forked thread = independent stream)', () => {
+      const flat = new ProgramBuilder()
+      flat.use_random_seed(42)
+      const baseline = [rngOf(flat).next(), rngOf(flat).next()]
+
+      const b = new ProgramBuilder()
+      b.use_random_seed(42)
+      rngOf(b).next()                            // parent pos0
+      let innerFirst = -1
+      b.in_thread((inner) => { innerFirst = rngOf(inner).next() })
+      // Forked: inner's first draw is NOT the parent's next stream position.
+      expect(innerFirst).not.toBeCloseTo(baseline[1], 9)
+    })
+
+    it('Defect A: use_bpm threads into with_fx (same-thread tempo continues)', () => {
+      const b = new ProgramBuilder()
+      b.use_bpm(120)
+      let beatSecs = -1
+      b.with_fx('reverb', {}, (inner) => {
+        const before = (inner as unknown as { _currentBuildSeconds: number })._currentBuildSeconds
+        inner.sleep(1)
+        beatSecs = (inner as unknown as { _currentBuildSeconds: number })._currentBuildSeconds - before
+        return inner
+      })
+      expect(beatSecs).toBeCloseTo(0.5, 9)       // 1 beat @ bpm120, not 1.0s @ bpm60
+    })
+
+    it('Defect A: use_bpm snapshots into in_thread/at at fork', () => {
+      const bt = new ProgramBuilder()
+      bt.use_bpm(120)
+      let inThreadBeat = -1
+      bt.in_thread((inner) => {
+        const before = (inner as unknown as { _currentBuildSeconds: number })._currentBuildSeconds
+        inner.sleep(1)
+        inThreadBeat = (inner as unknown as { _currentBuildSeconds: number })._currentBuildSeconds - before
+      })
+      expect(inThreadBeat).toBeCloseTo(0.5, 9)
+
+      const ba = new ProgramBuilder()
+      ba.use_bpm(120)
+      let atBeat = -1
+      ba.at([0], null, (inner) => {
+        const before = (inner as unknown as { _currentBuildSeconds: number })._currentBuildSeconds
+        inner.sleep(1)
+        atBeat = (inner as unknown as { _currentBuildSeconds: number })._currentBuildSeconds - before
+      })
+      expect(atBeat).toBeCloseTo(0.5, 9)
+    })
+
+    it('Defect B: at inherits iteration introspection (#226), like with_fx/in_thread', () => {
+      const b = new ProgramBuilder()
+      ;(b as unknown as { _currentBuildSeconds: number })._currentBuildSeconds = 9.5
+      ;(b as unknown as { _currentBeat: number })._currentBeat = 3
+      let seenSecs = -1
+      let seenBeat = -1
+      b.at([0], null, (inner) => {
+        seenSecs = (inner as unknown as { _currentBuildSeconds: number })._currentBuildSeconds
+        seenBeat = (inner as unknown as { _currentBeat: number })._currentBeat
+      })
+      expect(seenSecs).toBe(9.5)
+      expect(seenBeat).toBe(3)
+    })
+  })
 })
