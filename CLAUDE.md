@@ -97,42 +97,37 @@ Global AnviDev workflow applies. These are the project-specific additions:
 
 ## Testing Protocol — This Project's Observation Hierarchy
 
-There are THREE levels of observation. Each level catches bugs the previous cannot.
-**You must reach Level 3 before declaring anything "works."**
+Levels 1–2 are INFERENCE; Level 3 (audio) is OBSERVATION. **You must reach Level 3 before declaring anything "works."** Never say "verified ✓" from the event log alone — the event log is a plan, not proof.
+
+- **Level 1 — Unit tests:** `npx vitest run` (all pass) + `npx tsc --noEmit` (zero errors).
+- **Level 2 — Event log:** `npx tsx tools/capture.ts --file x.rb --duration 15000` (Chromium; `--firefox` = headless, no audio).
+- **Level 3 — Audio:** `npx tsx tools/compare-desktop-vs-web.ts --file x.rb` (desktop SP via OSC + web + analysis) or `tools/capture.ts` for web-only WAV. **Diagnostic tools:** `tools/pitchtrack.py <wav>` (Tier-1 sequence), `tools/diagnose-audio.ts` (expected vs actual events), `tools/spectrogram.ts` (⚠ event log, not audio).
+
+### MANDATORY: The 6-Tier Audio Analysis Standard (issue #346, vyapti SV46)
+
+**Every Level-3 audio analysis MUST cover all six tiers. No silent omission — a tier the tool can't compute prints `not analysed` explicitly.** `compare-desktop-vs-web.ts` emits all six.
 
 ```
-Level 1: Unit tests (Vitest)         — "Did the code I expected to run, run?"
-Level 2: Event log (capture tool)    — "Did the engine schedule the right events?"
-Level 3: Audio WAV analysis          — "Did scsynth actually produce the right sound?"
+Tier 0  Validity gates   HARD fail (missing WAV / SR mismatch) ⇒ verdict INVALID,
+                          pitch unreliable. SOFT fail (window misalign >0.5s) ⇒
+                          Tier-3 + onset-count unreliable; Tier-1 pitch STILL VALID
+                          (it is prefix-compared, robust to misalignment).
+Tier 1  Musical correctness — THE VERDICT. Pitch-track / note progression, tempo
+                          (inter-onset), rhythm, note duration, polyphony,
+                          determinism. Energy/MFCC are BLIND to wrong melody (SP93).
+Tier 2  Spectral/timbral (SUPPORTING ONLY). mel-L2, MFCC (mandatory caveat:
+                          confounded by ~0.5× gain + reverb tail), per-band, peak
+                          freq, spectral TEMPORAL pattern (echo ms reveals FX bpm).
+Tier 3  Level/gain (reported, NOT a musical blocker). RMS/peak/clip + ratios,
+                          per-beat gain. Ref: RMS≈0.19, clip<0.1%.
+Tier 4  FX/routing. Tail decay, FX timing ms (bpm-scaled), accumulation-vs-
+                          suppression 200ms boundary scan, per-FX-scope energy.
+Tier 5  Stability/lifecycle. Run/Stop/hot-swap, cold-start, long-run drift.
 ```
 
-**Level 1 and 2 are INFERENCE. Level 3 is OBSERVATION.**
+**The iron rule (the SP93 / #344 lesson):** Tier 1 is the verdict. **Tiers 2–3 may NEVER override Tier 1.** A high MFCC with a Tier-1 PITCH-MATCH means timbre/gain, not wrong notes — report it as such, never as "unrelated / different synth." Tier 0 + Tier 1 are mandatory for *every* audio analysis; Tiers 4–5 mandatory when FX / multi-cycle is in scope.
 
-**Rule: Never say "verified ✓" from the event log alone. The event log is a plan, not proof.**
-
-### Level 1: Unit tests
-- `npx vitest run` — 638+ tests, all must pass
-- `npx tsc --noEmit` — zero type errors
-
-### Level 2: Event log capture
-- `npx tsx tools/capture.ts "code"` — Chromium headed, captures events + screenshots + audio WAV
-- `npx tsx tools/capture.ts --file path/to/code.rb --duration 15000`
-- `npx tsx tools/capture.ts --firefox` — Firefox headless fallback (no audio capture)
-
-### Level 3: Audio WAV analysis (THE REAL TEST)
-The capture tool records audio via Rec button in Chromium and analyzes the WAV:
-- Duration, Peak, RMS, Clipping % — compare against original Sonic Pi (RMS ≈ 0.19, clipping < 0.1%)
-- Per-beat frequency analysis — ZCR detects kick (low freq) vs snare (bright)
-
-**Reference values (original Sonic Pi, DJ Dave kick+clap code):**
-- RMS: 0.19, Peak: 1.0, Clipping: 0.01%
-- Kick peak: 0.44, Snare peak: 0.47
-- Snare/Kick ratio: 1.06x (snare LEADS)
-- Snare-present beats: 13/13 (100%)
-
-### Other tools
-- `npx tsx tools/diagnose-audio.ts "code"` — QueryInterpreter (expected) vs browser (actual), diffs events
-- `npx tsx tools/spectrogram.ts "code"` — event stream timing analysis. **WARNING:** reads event log, not audio.
+**Reference values (original Sonic Pi, DJ Dave kick+clap):** RMS 0.19 · Peak 1.0 · Clip 0.01% · Kick peak 0.44 · Snare peak 0.47 · Snare/Kick 1.06× (snare LEADS) · Snare-present 13/13.
 
 ---
 
