@@ -150,13 +150,20 @@ interface SpectrogramMetrics {
   per_beat: PerBeatMetrics | null
 }
 
+interface PitchTrack {
+  count: number
+  median_spacing_s: number
+  midi: (number | null)[]
+  names: (string | null)[]
+}
+
 interface ComparisonResult {
   timestamp: string
   code: string
   duration: number
   name: string
-  desktop: { wavPath: string | null; stats: AudioStats | null; rawStdout: string; ok: boolean }
-  web:     { wavPath: string | null; stats: AudioStats | null; rawStdout: string; ok: boolean }
+  desktop: { wavPath: string | null; stats: AudioStats | null; rawStdout: string; ok: boolean; pitch: PitchTrack | null }
+  web:     { wavPath: string | null; stats: AudioStats | null; rawStdout: string; ok: boolean; pitch: PitchTrack | null }
   spectrogram: SpectrogramMetrics | null
   spectrogramError: string | null
   reportPath: string
@@ -209,36 +216,100 @@ function writeComparisonReport(r: ComparisonResult): void {
   lines.push(`| Channels | ${dStats?.channels ?? '—'} | ${wStats?.channels ?? '—'} | — |`)
   lines.push('')
 
-  // Verdict — compare key metrics with simple thresholds
-  lines.push('## Verdict')
-  const verdicts: string[] = []
-  if (!dStats) verdicts.push(`✗ Desktop produced no WAV — see desktop tool stdout in this report`)
-  if (!wStats) verdicts.push(`✗ Web produced no WAV — see web tool stdout in this report`)
+  // ── 6-Tier Audio Analysis Standard (issue #346, vyapti SV46) ───────────────
+  // Tier 0 = validity gates (fail ⇒ INVALID, no verdict). Tier 1 = musical
+  // correctness = THE verdict. Tiers 2–3 supporting, may NEVER override Tier 1
+  // (SP93). Tiers the comparator can't compute print "not analysed" explicitly.
+
+  // Tier 0 — Validity gates. Two severities:
+  //  • HARD (invalid): makes the pitch sequence itself unreliable → no Tier-1
+  //    verdict possible (missing WAV, SR mismatch needing resample).
+  //  • SOFT (aggregatesUnreliable): only invalidates COUNTS & AGGREGATES
+  //    (Tier 3 ratios, onset count). Tier 1 pitch-track is prefix-compared and
+  //    robust to window misalignment by construction — it must NOT be nuked by
+  //    a duration delta (that delta is intrinsic: scsynth warm-up + reverb
+  //    tail). Over-blocking here would flag correct PITCH-MATCH runs as
+  //    INVALID and train readers to ignore the gate.
+  const t0: string[] = []
+  let invalid = false
+  let aggregatesUnreliable = false
+  const fail = (m: string) => { t0.push(`- ✗ ${m}  **(HARD — verdict INVALID)**`); invalid = true }
+  const soft = (m: string) => { t0.push(`- ⚠ ${m}  **(SOFT — Tier 3 + 1.3 unreliable; Tier 1 pitch still valid)**`); aggregatesUnreliable = true }
+  const passG = (m: string) => t0.push(`- ✓ ${m}`)
+  if (!dStats) fail('Desktop produced no WAV — see desktop tool stdout below')
+  if (!wStats) fail('Web produced no WAV — see web tool stdout below')
+  let durDelta = 0
   if (dStats && wStats) {
-    if (dStats.sampleRate !== wStats.sampleRate) {
-      verdicts.push(`⚠ Sample-rate mismatch (${dStats.sampleRate} vs ${wStats.sampleRate} Hz) — RMS / peak / spectrum comparisons are at-source only, not resampled`)
-    }
-    const rmsRatio = dStats.rms > 0 ? wStats.rms / dStats.rms : 0
-    if (rmsRatio < 0.5 || rmsRatio > 2.0) {
-      verdicts.push(`⚠ RMS ratio web/desktop = ${rmsRatio.toFixed(2)}× — significant level divergence`)
-    } else {
-      verdicts.push(`✓ RMS ratio web/desktop = ${rmsRatio.toFixed(2)}× (within 0.5×–2× tolerance)`)
-    }
-    const peakRatio = dStats.peak > 0 ? wStats.peak / dStats.peak : 0
-    if (peakRatio < 0.5 || peakRatio > 2.0) {
-      verdicts.push(`⚠ Peak ratio web/desktop = ${peakRatio.toFixed(2)}× — significant peak divergence`)
-    } else {
-      verdicts.push(`✓ Peak ratio web/desktop = ${peakRatio.toFixed(2)}× (within 0.5×–2× tolerance)`)
-    }
-    if (dStats.clipping > 1 || wStats.clipping > 1) {
-      verdicts.push(`⚠ Clipping detected (desktop ${dStats.clipping}%, web ${wStats.clipping}%)`)
-    }
-    const durDelta = Math.abs(dStats.duration - wStats.duration)
-    if (durDelta > 1.0) {
-      verdicts.push(`⚠ Duration delta ${durDelta.toFixed(2)}s — captures may not have aligned windows`)
-    }
+    if (dStats.sampleRate !== wStats.sampleRate)
+      fail(`0.1 Sample-rate mismatch (${dStats.sampleRate} vs ${wStats.sampleRate} Hz) — SV29: cross-SR compare invalid`)
+    else passG(`0.1 Sample rate consistent (${dStats.sampleRate} Hz)`)
+    durDelta = Math.abs(dStats.duration - wStats.duration)
+    if (durDelta > 0.5)
+      soft(`0.2 Capture-window misaligned (Δ ${durDelta.toFixed(2)}s > 0.5s) — note-count / level aggregates unreliable`)
+    else passG(`0.2 Capture windows aligned (Δ ${durDelta.toFixed(2)}s)`)
   }
-  for (const v of verdicts) lines.push(`- ${v}`)
+  t0.push('- ◦ 0.3 equal preconditions / 0.4 lossless capture / 0.5 routing sanity — not auto-checked; ensure SP.app reset + raw-float32 + FX-bus wired (SV31/SV27/SV30)')
+
+  // Tier 1 — Musical correctness (THE verdict)
+  const dp = r.desktop.pitch, wp = r.web.pitch
+  const t1: string[] = []
+  let pitchVerdict = 'not analysed'
+  if (dp && wp) {
+    const ds = dp.midi.filter(x => x !== null) as number[]
+    const ws = wp.midi.filter(x => x !== null) as number[]
+    const n = Math.min(ds.length, ws.length)
+    let mismatch = -1
+    for (let i = 0; i < n; i++) if (ds[i] !== ws[i]) { mismatch = i; break }
+    if (n === 0) pitchVerdict = '⚠ no notes detected on one/both sides'
+    else if (mismatch < 0) pitchVerdict = `✓ PITCH-MATCH — note sequences identical over ${n} notes`
+    else pitchVerdict = `✗ PITCH DIVERGENCE at note ${mismatch} (desktop ${ds[mismatch]} vs web ${ws[mismatch]})`
+    const dt = dp.median_spacing_s, wt = wp.median_spacing_s
+    const tempoOk = dt > 0 && Math.abs(dt - wt) / dt < 0.1
+    t1.push(`- **1.1 Note progression:** ${pitchVerdict}`)
+    t1.push(`  - desktop: \`${dp.midi.slice(0, 24).join(',')}\``)
+    t1.push(`  - web&nbsp;&nbsp;&nbsp;: \`${wp.midi.slice(0, 24).join(',')}\``)
+    t1.push(`- **1.2 Tempo (inter-onset):** ${tempoOk ? '✓' : '✗'} desktop ${dt.toFixed(3)}s · web ${wt.toFixed(3)}s/note`)
+    t1.push(`- **1.3 Onset count:** desktop ${dp.count} · web ${wp.count}${durDelta > 0.5 ? ' (Δ explained by Tier-0 window misalignment)' : ''}`)
+    t1.push('- ◦ 1.4 note duration / 1.5 polyphony / 1.6 determinism — not auto-tracked here (unit tests cover determinism; see SV24/SV45)')
+  } else {
+    t1.push(`- ⚠ pitch-track unavailable (desktop=${dp ? 'ok' : 'none'}, web=${wp ? 'ok' : 'none'}) — Tier 1 verdict cannot be formed`)
+  }
+
+  // Headline verdict
+  const softNote = aggregatesUnreliable ? '  · ⚠ Tier-0 SOFT: level/count aggregates unreliable (Tier 1 pitch unaffected)' : ''
+  lines.push('## Verdict')
+  if (invalid) {
+    lines.push(`### ❌ INVALID — Tier 0 HARD gate failed. The pitch sequence itself is unreliable; no verdict until fixed.`)
+  } else if (pitchVerdict.startsWith('✓')) {
+    lines.push(`### ✅ Tier 1 ${pitchVerdict}  (the musical-correctness verdict)${softNote}`)
+  } else if (pitchVerdict.startsWith('✗')) {
+    lines.push(`### ❌ Tier 1 ${pitchVerdict}  (musical correctness FAILED — Tier 2/3 cannot override this)`)
+  } else {
+    lines.push(`### ⚠ Tier 1 inconclusive — ${pitchVerdict}${softNote}`)
+  }
+  lines.push('')
+  lines.push('### Tier 0 — Validity gates')
+  for (const v of t0) lines.push(v)
+  lines.push('')
+  lines.push('### Tier 1 — Musical correctness (THE verdict — energy/MFCC may never override)')
+  for (const v of t1) lines.push(v)
+  lines.push('')
+  lines.push('### Tier 3 — Level / gain (reported; NOT a musical-correctness blocker — known ~0.5× web gain-staging)')
+  if (aggregatesUnreliable) lines.push('> ⚠ Tier-0 SOFT failed — these ratios span misaligned windows; treat as indicative only.')
+  if (dStats && wStats) {
+    const rmsRatio = dStats.rms > 0 ? wStats.rms / dStats.rms : 0
+    const peakRatio = dStats.peak > 0 ? wStats.peak / dStats.peak : 0
+    lines.push(`- 3.1 RMS ratio web/desktop = ${rmsRatio.toFixed(2)}× ${rmsRatio >= 0.5 && rmsRatio <= 2 ? '(within 0.5–2× band)' : '(outside band — tracked separately, not a Tier-1 fail)'}`)
+    lines.push(`- 3.2 Peak ratio web/desktop = ${peakRatio.toFixed(2)}×`)
+    lines.push(`- 3.3 Clipping: desktop ${dStats.clipping}% · web ${wStats.clipping}% ${(dStats.clipping > 1 || wStats.clipping > 1) ? '⚠' : '✓ (< 1%)'}`)
+  } else {
+    lines.push('- not analysed (WAV missing)')
+  }
+  lines.push('')
+  lines.push('### Tier 2 — Spectral / timbral (supporting only) · Tier 4 — FX/routing · Tier 5 — lifecycle')
+  lines.push('- Tier 2: see **Spectrogram comparison** section below (MFCC carries its mandatory caveat there).')
+  lines.push('- Tier 4 (FX accumulation/suppression 200ms scan, per-FX-scope energy): **not analysed** by this tool — use the FX-sweep / boundary-scan tools when FX is in scope.')
+  lines.push('- Tier 5 (Run/Stop/hot-swap, cold-start, long-run drift): **not analysed** — single capture; use `tools/test-run-stop-cycle.ts` for lifecycle.')
   lines.push('')
 
   lines.push('## Source WAVs')
@@ -255,6 +326,7 @@ function writeComparisonReport(r: ComparisonResult): void {
     lines.push('|---|---|---|')
     lines.push(`| L2 distance (mel-dB) | ${sp.l2_mel_db.toFixed(2)} | < 10 = very close · 10–25 = similar shape · > 25 = divergent |`)
     lines.push(`| MFCC distance (timbre) | ${sp.mfcc_distance.toFixed(2)} | < 30 = similar · 30–80 = noticeably different · > 80 = unrelated |`)
+    lines.push(`| ↳ MFCC caveat | — | **Tier-2 supporting only.** Confounded by the known ~0.5× web gain ratio + desktop reverb-tail length; **never overrides Tier 1** (SP93). A high MFCC with a Tier-1 PITCH-MATCH means timbre/gain, not wrong notes. |`)
     lines.push(`| Frames compared | ${sp.frames_compared} | overlapping window after length-aligning |`)
     lines.push(`| Peak freq desktop | ${sp.desktop_peak_freq_hz.toFixed(1)} Hz | dominant frequency |`)
     lines.push(`| Peak freq web | ${sp.web_peak_freq_hz.toFixed(1)} Hz | dominant frequency |`)
@@ -263,7 +335,7 @@ function writeComparisonReport(r: ComparisonResult): void {
       lines.push(`⚠ Spectral L2 ${sp.l2_mel_db.toFixed(2)} indicates divergent spectral content — inspect the diff panel of the PNG above.`)
     }
     if (sp.mfcc_distance > 80) {
-      lines.push(`⚠ MFCC distance ${sp.mfcc_distance.toFixed(2)} indicates unrelated timbre — likely different synth or sample chain firing.`)
+      lines.push(`⚠ MFCC distance ${sp.mfcc_distance.toFixed(2)} is high — **check Tier 1 first**: if pitch-track matched, this is timbre/gain (the known 0.5× + reverb tail), NOT wrong notes. Only treat as "different synth/sample chain" when Tier 1 also diverges.`)
     }
 
     if (sp.per_beat) {
@@ -427,13 +499,26 @@ async function main(): Promise<void> {
     }
   }
 
+  // Tier 1 — pitch-track (the musical-correctness verdict). Run for each WAV
+  // independently so a missing one still yields the other's sequence.
+  const runPitch = async (wav: string | null): Promise<PitchTrack | null> => {
+    if (!wav) return null
+    try {
+      const py = await runChild('python3', ['tools/pitchtrack.py', '--json', wav])
+      if (py.exitCode !== 0) return null
+      const d = JSON.parse(py.stdout.trim().split('\n').pop() as string)
+      return { count: d.count, median_spacing_s: d.median_spacing_s, midi: d.midi, names: d.names }
+    } catch { return null }
+  }
+  const [desktopPitch, webPitch] = await Promise.all([runPitch(desktopWav), runPitch(webWav)])
+
   const result: ComparisonResult = {
     timestamp: new Date().toISOString(),
     code: args.code,
     duration: args.duration,
     name: args.name,
-    desktop: { wavPath: desktopWav, stats: desktopStats, rawStdout: desktop.stdout, ok: desktop.exitCode === 0 },
-    web:     { wavPath: webWav,     stats: webStats,     rawStdout: web.stdout,     ok: web.exitCode === 0 },
+    desktop: { wavPath: desktopWav, stats: desktopStats, rawStdout: desktop.stdout, ok: desktop.exitCode === 0, pitch: desktopPitch },
+    web:     { wavPath: webWav,     stats: webStats,     rawStdout: web.stdout,     ok: web.exitCode === 0, pitch: webPitch },
     spectrogram,
     spectrogramError,
     reportPath,
