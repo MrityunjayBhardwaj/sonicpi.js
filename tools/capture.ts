@@ -56,6 +56,10 @@ interface CaptureResult {
 
   // Audio capture (WAV file)
   audioPath: string | null
+  // Diagnostic — populated when audioPath is null. Lets downstream consumers
+  // (the comparator) distinguish "engine produced no audio" from "capture
+  // tool failed to resolve the blob in time" — see #358.
+  audioPathReason: string | null
   audioStats: { duration: number; peak: number; rms: number; clipping: number } | null
 
   // Derived
@@ -136,6 +140,59 @@ async function captureRun(
 
   const context = await browser.newContext({
     acceptDownloads: true,
+  })
+  // #358 fix: install the URL.createObjectURL / anchor-click patch via
+  // addInitScript so it runs BEFORE any page script on every navigation.
+  // Previous attempt used page.evaluate after page.goto, which (a) could miss
+  // a createObjectURL call from module-level code, and (b) the patched globals
+  // could be wiped if the page navigates / Vite HMR refreshes after Run.
+  // addInitScript is the bulletproof way to monkey-patch globals in Playwright.
+  await context.addInitScript(() => {
+    ;(window as any).__capturedWavBlob = null
+    ;(window as any).__captureDiag = {
+      createObjectURLCalls: 0,
+      blobsTracked: 0,
+      anchorClicksTotal: 0,
+      anchorClicksWavBlob: 0,
+      blobLookupHits: 0,
+      blobLookupMisses: 0,
+      initScriptRan: true,
+    }
+    const blobMap: Map<string, Blob> = new Map()
+    const origCreate = URL.createObjectURL.bind(URL)
+    const origRevoke = URL.revokeObjectURL.bind(URL)
+    URL.createObjectURL = function (obj: Blob | MediaSource): string {
+      const url = origCreate(obj)
+      ;(window as any).__captureDiag.createObjectURLCalls++
+      if (obj instanceof Blob) {
+        blobMap.set(url, obj)
+        ;(window as any).__captureDiag.blobsTracked++
+      }
+      return url
+    }
+    URL.revokeObjectURL = function (url: string): void {
+      origRevoke(url)
+      // Side-map entry kept alive — Recorder.ts:223 revokes synchronously after
+      // a.click(); the click interceptor still needs to resolve the Blob.
+    }
+    const origClick = HTMLAnchorElement.prototype.click
+    HTMLAnchorElement.prototype.click = function () {
+      ;(window as any).__captureDiag.anchorClicksTotal++
+      if (this.href?.startsWith('blob:') && this.download?.endsWith('.wav')) {
+        ;(window as any).__captureDiag.anchorClicksWavBlob++
+        const blob = blobMap.get(this.href)
+        if (blob) {
+          ;(window as any).__captureDiag.blobLookupHits++
+          ;(window as any).__capturedWavBlob = blob
+        } else {
+          ;(window as any).__captureDiag.blobLookupMisses++
+          // Fallback — should not fire when the createObjectURL patch is live.
+          fetch(this.href).then(r => r.blob()).then(b => { (window as any).__capturedWavBlob = b }).catch(() => {})
+        }
+      } else {
+        origClick.call(this)
+      }
+    }
   })
   const page = await context.newPage()
 
@@ -244,21 +301,14 @@ async function captureRun(
 
   // Start audio recording via Rec button (Chromium captures real audio)
   let audioPath: string | null = null
+  // Diagnostic — set when audioPath stays null so the report can distinguish
+  // "engine produced no audio" from "tool failed to resolve the blob in time".
+  // Surfaced by the comparator as TOOL-FAIL vs INVALID (#358).
+  let audioPathReason: string | null = null
   const isChromium = browser.browserType().name() === 'chromium'
   if (isChromium) {
-    // Intercept blob download — Recorder creates <a href="blob:..."> and clicks it
-    await page.evaluate(() => {
-      const origClick = HTMLAnchorElement.prototype.click
-      ;(window as any).__capturedWavBlob = null
-      HTMLAnchorElement.prototype.click = function () {
-        if (this.href?.startsWith('blob:') && this.download?.endsWith('.wav')) {
-          fetch(this.href).then(r => r.blob()).then(b => { (window as any).__capturedWavBlob = b })
-        } else {
-          origClick.call(this)
-        }
-      }
-    })
-
+    // #358: blob interception is now installed via context.addInitScript above —
+    // bulletproof against ordering / hot-reload. No per-run page.evaluate needed.
     const recBtn = page.locator('button').filter({ hasText: 'Rec' }).first()
     const hasRec = await recBtn.count()
     // If the user code itself drives recording (recording_start / _stop /
@@ -278,10 +328,36 @@ async function captureRun(
       }
       await page.waitForTimeout(1500) // blob flush margin (matches desktop capture-desktop.ts +2500 minus blob-extract overhead)
     } else {
-      // DSL-driven recording: the user code's recording_stop fires at user-code
-      // t=duration. Wait that long plus a blob flush margin for MediaRecorder
-      // + WAV encode to land in __capturedWavBlob before extraction.
-      await page.waitForTimeout(duration + 1500)
+      // DSL-driven recording (#228 + #358): the user code's `recording_stop` /
+      // `recording_save` fires at user-code t=duration. Wait that long, then
+      // POLL for the blob — fixed `waitForTimeout(duration + 1500)` was the
+      // #358 bug: heavy multi-loop snippets queue WAV encoding behind the
+      // engine work on the main thread, the 1.5s margin races the encode, and
+      // __capturedWavBlob stays null even though the engine rendered audio.
+      // Polling waits exactly as long as needed (capped at 12s extra for
+      // pathologically heavy snippets — beyond that, something's broken).
+      await page.waitForTimeout(duration)
+      const startPoll = Date.now()
+      const POLL_INTERVAL_MS = 100
+      // 30s blob-wait — generous enough that heavy multi-loop snippets running
+      // at real-time-bound bpm60 sleeps can land their `recording_save` step
+      // even after extended build/encode delays. Beats 12s (the prior version
+      // raced for FX-heavy chapters). Hard upper: a stuck snippet still bounds
+      // the comparator wall-time at duration + 30s before TOOL-FAIL reports.
+      const POLL_TIMEOUT_MS = 30000
+      let blobReady = false
+      while (Date.now() - startPoll < POLL_TIMEOUT_MS) {
+        blobReady = await page.evaluate(() => (window as any).__capturedWavBlob != null)
+        if (blobReady) break
+        await page.waitForTimeout(POLL_INTERVAL_MS)
+      }
+      if (!blobReady) {
+        const diag = await page.evaluate(() => (window as any).__captureDiag ?? null)
+        const diagStr = diag
+          ? `[diag] createObjectURL=${diag.createObjectURLCalls} blobsTracked=${diag.blobsTracked} anchorClicks=${diag.anchorClicksTotal} wavBlobClicks=${diag.anchorClicksWavBlob} lookupHits=${diag.blobLookupHits} lookupMisses=${diag.blobLookupMisses}`
+          : '[diag unavailable]'
+        audioPathReason = `__capturedWavBlob did not appear within ${POLL_TIMEOUT_MS}ms after recording_stop — ${diagStr}`
+      }
     }
 
     // Extract the captured WAV blob — populated by the click interceptor
@@ -302,6 +378,13 @@ async function captureRun(
     if (wavBase64) {
       audioPath = resolve(CAPTURES_DIR, `${prefix}_audio.wav`)
       writeFileSync(audioPath, Buffer.from(wavBase64, 'base64'))
+    } else if (!audioPathReason) {
+      // Blob extraction returned null but polling didn't time out — the click
+      // interceptor never fired. Either Rec/Save UI flow exited without
+      // triggering a blob, or the page never reached recording_stop. Mark
+      // with a distinct reason so the comparator's TOOL-FAIL vs ENGINE-SILENT
+      // distinction stays meaningful.
+      audioPathReason = 'blob extraction returned null — Recorder.ts may not have produced a blob (Rec/Save UI flow exited without download, or recording_stop never fired)'
     }
   } else {
     // Firefox: just wait (no reliable audio capture in headless)
@@ -416,6 +499,7 @@ async function captureRun(
     screenshotBefore: beforePath,
     screenshotAfter: afterPath,
     audioPath,
+    audioPathReason,
     audioStats,
     errorSummary,
     warningsSummary,
@@ -469,8 +553,13 @@ function writeCaptureReport(result: CaptureResult, outputPath: string): void {
   lines.push('')
 
   // Audio capture
+  // Always emit this section so downstream consumers (the comparator) can
+  // distinguish "engine produced no audio" from "capture tool failed to
+  // resolve the blob" (#358). Previously this section only rendered when
+  // audioPath was set; missing **File:** line meant the comparator
+  // false-classified tool-failure as Tier-0 INVALID.
+  lines.push('## Audio Capture')
   if (result.audioPath) {
-    lines.push('## Audio Capture')
     lines.push(`- **File:** \`${result.audioPath}\``)
     if (result.audioStats) {
       const s = result.audioStats
@@ -482,8 +571,18 @@ function writeCaptureReport(result: CaptureResult, outputPath: string): void {
       if (s.rms > 0.3) lines.push(`- ⚠ **Loud output** — RMS ${s.rms} (original Sonic Pi ≈ 0.19)`)
       if (s.peak < 0.01) lines.push(`- ⚠ **Silent output** — no audio captured`)
     }
-    lines.push('')
+  } else {
+    // Sentinel form — `**File:** none — <reason>`. The comparator's regex
+    // for the resolved-path form (`**File:** \`...wav\``) WILL NOT match
+    // this, so webWav stays null. The comparator's TOOL-FAIL probe then
+    // greps this line to surface a distinct verdict instead of blaming the
+    // engine. #358 / SV27 / SV30 / SP75 family.
+    const reason = result.audioPathReason ?? 'unknown — neither blob extraction nor a polling timeout fired (audio path remained null)'
+    lines.push(`- **File:** none — ${reason}`)
+    lines.push('- ℹ This is a CAPTURE-TOOL failure, not necessarily an engine failure.')
+    lines.push('- ℹ The engine may have produced audio that the tool could not resolve; check the App Console Output below for /s_new activity.')
   }
+  lines.push('')
 
   // App console (engine-level puts hook — issue #221).
   // The previous DOM-textContent slice was unreliable: Console ring buffer

@@ -168,7 +168,10 @@ interface ComparisonResult {
   duration: number
   name: string
   desktop: { wavPath: string | null; stats: AudioStats | null; rawStdout: string; ok: boolean; pitch: PitchTrack | null }
-  web:     { wavPath: string | null; stats: AudioStats | null; rawStdout: string; ok: boolean; pitch: PitchTrack | null }
+  // toolFailReason — populated when capture.ts emitted `**File:** none — <reason>`
+  // (a known capture-pipeline failure as opposed to engine silence). Lets the
+  // Tier-0 line say TOOL-FAIL distinctly from generic INVALID. See #358.
+  web:     { wavPath: string | null; stats: AudioStats | null; rawStdout: string; ok: boolean; pitch: PitchTrack | null; toolFailReason: string | null }
   spectrogram: SpectrogramMetrics | null
   spectrogramError: string | null
   reportPath: string
@@ -242,7 +245,18 @@ function writeComparisonReport(r: ComparisonResult): void {
   const soft = (m: string) => { t0.push(`- ⚠ ${m}  **(SOFT — Tier 3 + 1.3 unreliable; Tier 1 pitch still valid)**`); aggregatesUnreliable = true }
   const passG = (m: string) => t0.push(`- ✓ ${m}`)
   if (!dStats) fail('Desktop produced no WAV — see desktop tool stdout below')
-  if (!wStats) fail('Web produced no WAV — see web tool stdout below')
+  if (!wStats) {
+    // #358: distinguish capture-tool failure (TOOL-FAIL) from engine silence.
+    // The sentinel reason comes from capture.ts emitting `**File:** none — <reason>`
+    // when the blob never resolved. Without this distinction the verdict line
+    // reads as if the engine produced no audio — when in fact the engine may
+    // have rendered audio that the capture tool failed to pick up.
+    if (r.web.toolFailReason) {
+      fail(`Web produced no WAV — TOOL-FAIL (capture-pipeline #358): ${r.web.toolFailReason}. The engine may have produced audio; check the App Console Output in the web report for /s_new activity before concluding ENGINE-SILENT`)
+    } else {
+      fail('Web produced no WAV — see web tool stdout below')
+    }
+  }
   let durDelta = 0
   if (dStats && wStats) {
     if (dStats.sampleRate !== wStats.sampleRate)
@@ -464,13 +478,22 @@ async function main(): Promise<void> {
   // capture-desktop.ts prints: "✓ WAV:    <abs-path>"
   const desktopWav = findWavPath(desktop.stdout, /✓ WAV:\s+(\S+\.wav)/)
   // capture.ts prints: "Capture saved: <abs-path-to-md>". Read that md and
-  // grep for the **File:** line (the audio path inside the report).
+  // grep for the **File:** line. After #358, capture.ts ALWAYS emits **File:**:
+  //   • `**File:** \`<abs-path>\`` — resolved WAV
+  //   • `**File:** none — <reason>`  — sentinel: capture-tool failure (TOOL-FAIL)
+  // Distinguishing the two lets the Tier-0 line say TOOL-FAIL vs ENGINE-SILENT.
   let webWav: string | null = null
+  let webToolFailReason: string | null = null
   const webReportMatch = web.stdout.match(/Capture saved:\s+(\S+\.md)/)
   if (webReportMatch && existsSync(webReportMatch[1])) {
     const md = readFileSync(webReportMatch[1], 'utf8')
     const m = md.match(/\*\*File:\*\*\s+`([^`]+\.wav)`/)
-    if (m) webWav = m[1]
+    if (m) {
+      webWav = m[1]
+    } else {
+      const sentinel = md.match(/\*\*File:\*\*\s+none\s+—\s+(.+)$/m)
+      if (sentinel) webToolFailReason = sentinel[1].trim()
+    }
   }
 
   const desktopStats = desktopWav ? analyzeWav(desktopWav) : null
@@ -539,7 +562,7 @@ async function main(): Promise<void> {
     duration: args.duration,
     name: args.name,
     desktop: { wavPath: desktopWav, stats: desktopStats, rawStdout: desktop.stdout, ok: desktop.exitCode === 0, pitch: desktopPitch },
-    web:     { wavPath: webWav,     stats: webStats,     rawStdout: web.stdout,     ok: web.exitCode === 0, pitch: webPitch },
+    web:     { wavPath: webWav,     stats: webStats,     rawStdout: web.stdout,     ok: web.exitCode === 0, pitch: webPitch, toolFailReason: webToolFailReason },
     spectrogram,
     spectrogramError,
     reportPath,
