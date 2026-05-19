@@ -1327,9 +1327,12 @@ function transpileReceiverMethodCall(
     return `__b.shuffle(${recStr})`
   }
 
-  // .mirror → .mirror()
-  if (method === 'mirror') {
-    return `${recStr}.mirror()`
+  // .mirror(n) / .reflect(n) → thread the optional repeat arg (desktop
+  // core.rb:796-805 both take n=1). #354 — was hardcoded `.mirror()`,
+  // silently dropping `n`.
+  if (method === 'mirror' || method === 'reflect') {
+    const args = argsNode ? transpileArgList(argsNode, ctx) : ''
+    return `${recStr}.${method}(${args})`
   }
 
   // .ramp → .ramp()

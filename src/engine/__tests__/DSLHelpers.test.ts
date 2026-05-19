@@ -109,6 +109,52 @@ describe('Ring', () => {
     const r = ring(1, 2, 3)
     expect([...r]).toEqual([1, 2, 3])
   })
+
+  // #354 — desktop Sonic Pi core.rb:796-805 parity. Previously mirror/reflect
+  // were swapped AND neither matched desktop; `.mirror.tick` produced a
+  // different note sequence than desktop (Tier-1 pitch divergence at note 2).
+  describe('mirror / reflect (#354 desktop parity)', () => {
+    it('mirror duplicates the boundary: [a,b,c] → [a,b,c,c,b,a]', () => {
+      // desktop: (self + self.reverse) * n
+      expect(ring(1, 2, 3).mirror().toArray()).toEqual([1, 2, 3, 3, 2, 1])
+    })
+
+    it('mirror of the #354 reproducer ring is the desktop 8-element shape', () => {
+      // (ring 60,64,67,71).mirror — desktop pitch-track cycle, sampled
+      // every-other onset by .tick at 0.5s: 64,71,67,60 (positions 1,3,5,7).
+      expect(ring(60, 64, 67, 71).mirror().toArray())
+        .toEqual([60, 64, 67, 71, 71, 67, 64, 60])
+    })
+
+    it('reflect is a palindrome with no boundary dup: [a,b,c] → [a,b,c,b,a]', () => {
+      // desktop: self + self.reverse.drop(1)
+      expect(ring(1, 2, 3).reflect().toArray()).toEqual([1, 2, 3, 2, 1])
+      expect(ring(60, 64, 67, 71).reflect().toArray())
+        .toEqual([60, 64, 67, 71, 67, 64, 60])
+    })
+
+    it('mirror(n) repeats the whole mirrored ring', () => {
+      // desktop: (self + self.reverse) * n
+      expect(ring(1, 2, 3).mirror(2).toArray())
+        .toEqual([1, 2, 3, 3, 2, 1, 1, 2, 3, 3, 2, 1])
+      expect(ring(1, 2, 3).mirror(0).toArray()).toEqual([])
+    })
+
+    it('reflect(n) appends res.drop(1) (n-1) times; n<2 unchanged', () => {
+      // desktop: res = self + self.reverse.drop(1);
+      //          res = res + (res.drop(1) * (n-1)) if n > 1
+      expect(ring(1, 2, 3).reflect(2).toArray())
+        .toEqual([1, 2, 3, 2, 1, 2, 3, 2, 1])
+      expect(ring(1, 2, 3).reflect(1).toArray()).toEqual([1, 2, 3, 2, 1])
+    })
+
+    it('single-element and empty rings match desktop', () => {
+      expect(ring(7).mirror().toArray()).toEqual([7, 7])
+      expect(ring(7).reflect().toArray()).toEqual([7])
+      expect(ring<number>().mirror().toArray()).toEqual([])
+      expect(ring<number>().reflect().toArray()).toEqual([])
+    })
+  })
 })
 
 describe('Global tick context (#211 Tier A)', () => {

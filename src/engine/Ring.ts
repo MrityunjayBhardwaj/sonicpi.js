@@ -107,10 +107,19 @@ export class Ring<T> {
     return new Ring([...this.items.slice(offset), ...this.items.slice(0, offset)])
   }
 
-  /** Mirror: [1,2,3] → [1,2,3,2,1] */
-  mirror(): Ring<T> {
-    const mid = this.items.slice(1, -1).reverse()
-    return new Ring([...this.items, ...mid])
+  /**
+   * Mirror: `[a,b,c]` → `[a,b,c,c,b,a]` — endpoints duplicated, length 2N.
+   * Matches desktop Sonic Pi `core.rb:802`: `(self + self.reverse) * n`
+   * (optional `n` repeats the whole mirrored ring). #354 — previously this
+   * dropped the boundary duplication (desktop's `.reflect` shape) and was
+   * swapped with `reflect()`.
+   */
+  mirror(n: number = 1): Ring<T> {
+    const base = [...this.items, ...[...this.items].reverse()]
+    const reps = Math.max(0, Math.floor(n))
+    const out: T[] = []
+    for (let i = 0; i < reps; i++) out.push(...base)
+    return new Ring(out)
   }
 
   /** First element. */
@@ -128,8 +137,24 @@ export class Ring<T> {
     return new Ring([...this.items, ...otherItems])
   }
 
-  /** Reflect: like mirror but no middle duplication for even-length. */
-  reflect(): Ring<T> { return new Ring([...this.items, ...[...this.items].reverse()]) }
+  /**
+   * Reflect: `[a,b,c]` → `[a,b,c,b,a]` — palindrome, NO boundary duplication,
+   * length 2N-1. Matches desktop Sonic Pi `core.rb:796`:
+   * `res = self + self.reverse.drop(1); res += res.drop(1)*(n-1) if n>1`
+   * (`n<2` returns the single palindrome unchanged). #354 — previously this
+   * produced the boundary-duplicated shape (desktop's `.mirror`).
+   */
+  reflect(n: number = 1): Ring<T> {
+    let res = [...this.items, ...[...this.items].reverse().slice(1)]
+    const reps = Math.max(0, Math.floor(n))
+    if (reps > 1) {
+      const tail = res.slice(1)
+      const extra: T[] = []
+      for (let i = 0; i < reps - 1; i++) extra.push(...tail)
+      res = [...res, ...extra]
+    }
+    return new Ring(res)
+  }
 
   /** Last n elements. */
   take_last(n: number): Ring<T> { return new Ring(this.items.slice(-n)) }
