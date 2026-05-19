@@ -171,7 +171,12 @@ interface ComparisonResult {
   // toolFailReason — populated when capture.ts emitted `**File:** none — <reason>`
   // (a known capture-pipeline failure as opposed to engine silence). Lets the
   // Tier-0 line say TOOL-FAIL distinctly from generic INVALID. See #358.
-  web:     { wavPath: string | null; stats: AudioStats | null; rawStdout: string; ok: boolean; pitch: PitchTrack | null; toolFailReason: string | null }
+  // errors — engine errors collected by capture.ts (pageErrors, console.error,
+  // network failures, app-console runtime-pattern hits). Surfaced as a Tier-0
+  // ERROR verdict distinct from DIVERGE/INVALID/TOOL-FAIL — without it, an
+  // example that throws mid-run is indistinguishable from a real parity bug
+  // (silent or partial audio after the throw → false DIVERGE-at-note-0). #371.
+  web:     { wavPath: string | null; stats: AudioStats | null; rawStdout: string; ok: boolean; pitch: PitchTrack | null; toolFailReason: string | null; errors: string[] }
   spectrogram: SpectrogramMetrics | null
   spectrogramError: string | null
   reportPath: string
@@ -240,10 +245,23 @@ function writeComparisonReport(r: ComparisonResult): void {
   //    INVALID and train readers to ignore the gate.
   const t0: string[] = []
   let invalid = false
+  let webEngineError = false
   let aggregatesUnreliable = false
   const fail = (m: string) => { t0.push(`- ✗ ${m}  **(HARD — verdict INVALID)**`); invalid = true }
+  const errFail = (m: string) => { t0.push(`- ✗ ${m}  **(HARD — verdict ERROR; pitch verdict not formed)**`); webEngineError = true }
   const soft = (m: string) => { t0.push(`- ⚠ ${m}  **(SOFT — Tier 3 + 1.3 unreliable; Tier 1 pitch still valid)**`); aggregatesUnreliable = true }
   const passG = (m: string) => t0.push(`- ✓ ${m}`)
+  // #371: engine errors are a Tier-0 outcome distinct from INVALID (no WAV) /
+  // TOOL-FAIL (capture pipeline) / DIVERGE (audio differs). Without this gate
+  // an example whose web engine throws mid-run is misattributed to a parity
+  // bug — silent or partial audio after the throw scores as DIVERGE at note 0.
+  // Runs BEFORE the no-WAV checks so an error+empty-WAV reads as ERROR (root
+  // cause: the throw), not generic INVALID.
+  if (r.web.errors.length > 0) {
+    const first = r.web.errors[0].replace(/\s+/g, ' ').slice(0, 140)
+    const extra = r.web.errors.length > 1 ? ` (+${r.web.errors.length - 1} more)` : ''
+    errFail(`Web engine error during capture: ${first}${extra} — see "Web engine errors" below`)
+  }
   if (!dStats) fail('Desktop produced no WAV — see desktop tool stdout below')
   if (!wStats) {
     // #358: distinguish capture-tool failure (TOOL-FAIL) from engine silence.
@@ -374,7 +392,14 @@ function writeComparisonReport(r: ComparisonResult): void {
   // Headline verdict
   const softNote = aggregatesUnreliable ? '  · ⚠ Tier-0 SOFT: level/count aggregates unreliable (Tier 1 pitch unaffected)' : ''
   lines.push('## Verdict')
-  if (invalid) {
+  if (webEngineError) {
+    // #371: ERROR ranks above INVALID — when the web engine threw, the WAV
+    // (if any) is a partial render and the pitch sequence is meaningless. The
+    // root cause is the throw, not a parity gap. INVALID would let the reader
+    // chase the wrong question.
+    const summary = r.web.errors[0].replace(/\s+/g, ' ').slice(0, 200)
+    lines.push(`### ❌ ERROR — Web engine threw during capture; pitch verdict not formed. \`${summary}\``)
+  } else if (invalid) {
     lines.push(`### ❌ INVALID — Tier 0 HARD gate failed. The pitch sequence itself is unreliable; no verdict until fixed.`)
   } else if (pitchVerdict.startsWith('✓')) {
     lines.push(`### ✅ Tier 1 ${pitchVerdict}  (the musical-correctness verdict)${softNote}`)
@@ -389,6 +414,13 @@ function writeComparisonReport(r: ComparisonResult): void {
   lines.push('### Tier 0 — Validity gates')
   for (const v of t0) lines.push(v)
   lines.push('')
+  if (r.web.errors.length > 0) {
+    // #371: surface the full error list — triage is one-click without having
+    // to chase the capture report file.
+    lines.push('### Web engine errors (Tier-0 ERROR root cause)')
+    for (const e of r.web.errors) lines.push(`- ${e}`)
+    lines.push('')
+  }
   lines.push('### Tier 1 — Musical correctness (THE verdict — energy/MFCC may never override)')
   for (const v of t1) lines.push(v)
   lines.push('')
@@ -555,6 +587,7 @@ async function main(): Promise<void> {
   // Distinguishing the two lets the Tier-0 line say TOOL-FAIL vs ENGINE-SILENT.
   let webWav: string | null = null
   let webToolFailReason: string | null = null
+  let webErrors: string[] = []
   const webReportMatch = web.stdout.match(/Capture saved:\s+(\S+\.md)/)
   if (webReportMatch && existsSync(webReportMatch[1])) {
     const md = readFileSync(webReportMatch[1], 'utf8')
@@ -564,6 +597,20 @@ async function main(): Promise<void> {
     } else {
       const sentinel = md.match(/\*\*File:\*\*\s+none\s+—\s+(.+)$/m)
       if (sentinel) webToolFailReason = sentinel[1].trim()
+    }
+    // #371: extract the `## Errors` section. capture.ts always emits it
+    // (`None.` when empty); a non-empty list means the engine threw / a
+    // runtime-pattern (SyntaxError/TypeError/"not a function"/"Error in
+    // loop"/…) appeared in the App Console. Bullets `- [pageerror @ …] …`,
+    // `- [console.error @ …] …`, `- [network …] …`, `- [app console] …`.
+    const errSection = md.match(/^## Errors\s*\n([\s\S]*?)(?=\n## |\n*$)/m)
+    if (errSection) {
+      const body = errSection[1].trim()
+      if (body && body !== 'None.') {
+        webErrors = body.split('\n')
+          .map(l => l.replace(/^[-*]\s+/, '').trim())
+          .filter(l => l.length > 0 && l !== 'None.')
+      }
     }
   }
 
@@ -633,7 +680,7 @@ async function main(): Promise<void> {
     duration: args.duration,
     name: args.name,
     desktop: { wavPath: desktopWav, stats: desktopStats, rawStdout: desktop.stdout, ok: desktop.exitCode === 0, pitch: desktopPitch },
-    web:     { wavPath: webWav,     stats: webStats,     rawStdout: web.stdout,     ok: web.exitCode === 0, pitch: webPitch, toolFailReason: webToolFailReason },
+    web:     { wavPath: webWav,     stats: webStats,     rawStdout: web.stdout,     ok: web.exitCode === 0, pitch: webPitch, toolFailReason: webToolFailReason, errors: webErrors },
     spectrogram,
     spectrogramError,
     reportPath,
