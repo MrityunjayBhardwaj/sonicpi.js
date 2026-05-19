@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SonicPi.js — Book Examples Sweep (18 curriculum snippets)</title>
+    <style>
+      :root {
+        --bg: #1a1b26;
+        --bg-elev: #1f2335;
+        --bg-row: #16161e;
+        --bg-row-hover: #232540;
+        --bg-row-active: #2a2f4a;
+        --border: #2a2e46;
+        --text: #c0caf5;
+        --text-dim: #7a85b3;
+        --text-mute: #565f89;
+        --accent: #ff1493;
+        --accent-2: #7aa2f7;
+        --pass: #9ece6a;
+        --flag: #e0af68;
+        --fail: #f7768e;
+        --incon: #565f89;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 13px;
+        overflow: hidden;
+      }
+      .app {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        height: calc(100vh - 38px);
+      }
+      .tab-bar {
+        height: 38px;
+        display: flex;
+        align-items: stretch;
+        background: var(--bg-elev);
+        border-bottom: 1px solid var(--border);
+        padding: 0 16px;
+        gap: 4px;
+      }
+      .tab-bar a {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 16px;
+        font-size: 12px;
+        color: var(--text-dim);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        font-family: var(--mono);
+        text-transform: lowercase;
+        letter-spacing: 0.04em;
+      }
+      .tab-bar a:hover { color: var(--text); }
+      .tab-bar a[data-active="1"] { color: var(--accent); border-bottom-color: var(--accent); }
+      .tab-bar a .count {
+        font-size: 10px; color: var(--text-mute);
+        background: rgba(86,95,137,0.2); padding: 1px 6px; border-radius: 999px;
+      }
+      .tab-bar a[data-active="1"] .count { background: rgba(255,20,147,0.15); color: var(--accent); }
+      .tab-bar .spacer { flex: 1; }
+      .tab-bar .meta { align-self: center; font-size: 11px; color: var(--text-mute); font-family: var(--mono); }
+      .tab-bar .meta a { padding: 0; font-size: 11px; }
+
+      .sidebar {
+        background: var(--bg-elev);
+        border-right: 1px solid var(--border);
+        display: flex; flex-direction: column;
+        min-height: 0;
+      }
+      .sidebar-head { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
+      .sidebar-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); font-weight: 600; margin: 0 0 6px; }
+      .sidebar-title strong { color: var(--text); }
+      .summary { font-size: 11px; color: var(--text-dim); font-family: var(--mono); margin-bottom: 10px; line-height: 1.7; }
+      .summary b { color: var(--text); font-weight: 600; }
+      .ratio-good { color: var(--pass); }
+      .ratio-mid { color: var(--flag); }
+      .ratio-bad { color: var(--fail); }
+
+      .context-note { background: var(--bg-row); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 10px 12px; border-radius: 4px; font-size: 11px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.6; }
+      .context-note b { color: var(--text); }
+      .context-note a { color: var(--accent-2); }
+      .context-note code { font-family: var(--mono); font-size: 10px; background: var(--bg-elev); padding: 1px 4px; border-radius: 3px; color: var(--accent-2); }
+
+      .controls { display: flex; flex-direction: column; gap: 6px; }
+      .controls input[type="search"] {
+        background: var(--bg-row); color: var(--text); border: 1px solid var(--border);
+        padding: 6px 10px; border-radius: 4px; font-size: 12px; font-family: var(--mono);
+      }
+      .controls input[type="search"]:focus { outline: 1px solid var(--accent-2); }
+      .filters { display: flex; flex-wrap: wrap; gap: 4px; }
+      .chip {
+        background: var(--bg-row); color: var(--text-dim); border: 1px solid var(--border);
+        padding: 2px 8px; border-radius: 999px; font-size: 10px; font-family: var(--mono);
+        cursor: pointer; user-select: none;
+      }
+      .chip[data-on="1"] { color: var(--text); background: var(--bg-row-active); border-color: var(--accent-2); }
+      .chip[data-on="1"][data-verdict="match"] { color: var(--pass); border-color: var(--pass); }
+      .chip[data-on="1"][data-verdict="diverge"] { color: var(--fail); border-color: var(--fail); }
+      .chip[data-on="1"][data-verdict="prng-variant"] { color: var(--accent-2); border-color: var(--accent-2); }
+      .chip[data-on="1"][data-verdict="invalid"] { color: var(--flag); border-color: var(--flag); }
+      .chip[data-on="1"][data-verdict="inconcl"] { color: var(--incon); border-color: var(--incon); }
+      .controls select {
+        background: var(--bg-row); color: var(--text); border: 1px solid var(--border);
+        padding: 4px 8px; border-radius: 4px; font-size: 11px; font-family: var(--mono);
+      }
+
+      .list { overflow-y: auto; flex: 1; min-height: 0; }
+      .row {
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 2px 8px;
+        align-items: baseline;
+      }
+      .row:hover { background: var(--bg-row-hover); }
+      .row[data-active="1"] { background: var(--bg-row-active); }
+      .row[data-active="1"] .row-name { color: var(--accent); }
+      .row-name { font-family: var(--mono); font-size: 12px; color: var(--text); }
+      .row-cat { font-family: var(--mono); font-size: 10px; color: var(--text-mute); }
+      .row-sub { grid-column: 1 / -1; font-size: 10px; color: var(--text-dim); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+      .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 600; letter-spacing: 0.05em; font-family: var(--mono); }
+      .badge.match { color: var(--pass); background: rgba(158,206,106,0.12); }
+      .badge.diverge { color: var(--fail); background: rgba(247,118,142,0.12); }
+      .badge.prng-variant { color: var(--accent-2); background: rgba(122,162,247,0.12); }
+      .badge.invalid { color: var(--flag); background: rgba(224,175,104,0.12); }
+      .badge.inconcl { color: var(--incon); background: rgba(86,95,137,0.18); }
+      .badge.prng { color: var(--accent-2); background: rgba(122,162,247,0.12); }
+      .badge.heavy { color: var(--flag); background: rgba(224,175,104,0.12); }
+      .badge.real { color: var(--accent); background: rgba(255,20,147,0.12); }
+
+      .detail { overflow-y: auto; padding: 24px 28px 80px; }
+      .detail-empty { color: var(--text-mute); padding: 40px; text-align: center; font-style: italic; }
+      .detail-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+      .detail-head h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; font-family: var(--mono); color: var(--text); }
+      .detail-head .meta { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-left: 6px; }
+      .detail-head .verdict-line { font-size: 11px; color: var(--text-dim); }
+
+      .section-h {
+        font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em;
+        margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+      }
+
+      .tldr-banner {
+        background: linear-gradient(135deg, rgba(247,118,142,0.08), rgba(255,20,147,0.04));
+        border: 1px solid rgba(247,118,142,0.35);
+        border-radius: 6px; padding: 10px 14px; margin: 8px 0 16px;
+        font-size: 12px; line-height: 1.6;
+      }
+      .tldr-banner .label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--fail); font-weight: 600; }
+      .tldr-banner.warn { border-color: rgba(224,175,104,0.35); background: linear-gradient(135deg, rgba(224,175,104,0.08), rgba(255,20,147,0.04)); }
+      .tldr-banner.warn .label { color: var(--flag); }
+      .tldr-banner.pass { border-color: rgba(158,206,106,0.35); background: linear-gradient(135deg, rgba(158,206,106,0.08), rgba(122,162,247,0.04)); }
+      .tldr-banner.pass .label { color: var(--pass); }
+
+      .audio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px; }
+      .audio-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px; }
+      .audio-card h3 { margin: 0 0 6px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+      .audio-card h3 span { color: var(--text-mute); font-weight: 400; text-transform: none; letter-spacing: 0; font-family: var(--mono); font-size: 10px; margin-left: 6px; }
+      .audio-card audio { width: 100%; height: 32px; }
+      .audio-card .missing { color: var(--text-mute); font-style: italic; padding: 8px; font-size: 11px; }
+
+      .sync-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+      .sync-btn {
+        background: var(--accent); color: white; border: 0; padding: 6px 14px;
+        border-radius: 4px; font-family: var(--mono); font-size: 11px; cursor: pointer;
+        text-transform: uppercase; letter-spacing: 0.05em;
+      }
+      .sync-btn:hover { filter: brightness(1.1); }
+      .sync-btn.sec { background: var(--bg-row-active); color: var(--text); }
+
+      .png-block { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 5px; padding: 12px; }
+      .png-block img { width: 100%; display: block; border-radius: 3px; }
+      .png-missing { background: var(--bg-row); border: 1px dashed var(--border); border-radius: 4px; padding: 16px; color: var(--text-mute); text-align: center; font-style: italic; font-size: 11px; }
+
+      pre.snippet { background: var(--bg-row); border: 1px solid var(--border); border-radius: 4px; padding: 12px 16px; font-family: var(--mono); font-size: 11px; color: var(--text); overflow-x: auto; max-height: 280px; }
+      pre.errors { background: rgba(247,118,142,0.05); border: 1px solid rgba(247,118,142,0.25); border-radius: 4px; padding: 10px 14px; font-family: var(--mono); font-size: 11px; color: var(--fail); }
+
+      .pitch-table { width: 100%; font-family: var(--mono); font-size: 11px; }
+      .pitch-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+      .pitch-table td.label { color: var(--text-dim); width: 90px; text-transform: uppercase; font-size: 9px; letter-spacing: 0.08em; }
+      .pitch-table td.seq { color: var(--text); word-break: break-all; }
+      .pitch-table td.seq.diverge { color: var(--fail); }
+
+      table.metrics { width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--mono); }
+      table.metrics th, table.metrics td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+      table.metrics th { color: var(--text-dim); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; background: var(--bg-elev); }
+      table.metrics td.num { text-align: right; }
+      table.metrics .ratio-good { color: var(--pass); }
+      table.metrics .ratio-mid { color: var(--flag); }
+      table.metrics .ratio-bad { color: var(--fail); }
+
+      .tier-list { list-style: none; padding: 0; margin: 0; font-size: 11px; font-family: var(--mono); }
+      .tier-list li { padding: 5px 10px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
+      .tier-list .tname { color: var(--text-dim); min-width: 60px; }
+      .tier-list .tres { color: var(--text); flex: 1; }
+      .tier-list .ok { color: var(--pass); }
+      .tier-list .soft { color: var(--flag); }
+      .tier-list .hard { color: var(--fail); }
+      .tier-list .nm { color: var(--text-mute); }
+
+      .links { margin: 16px 0 0; display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; font-family: var(--mono); }
+      .links a { color: var(--accent-2); text-decoration: none; padding: 3px 8px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 4px; }
+      .links a:hover { color: var(--text); border-color: var(--accent-2); }
+
+      .footer-meta { margin: 28px 0 12px; padding: 10px 14px; background: var(--bg-row); border-radius: 4px; font-size: 10px; color: var(--text-mute); line-height: 1.6; font-family: var(--mono); }
+      .footer-meta strong { color: var(--text-dim); }
+
+      .intro {
+        padding: 8px 0 0;
+      }
+      .intro h1 {
+        font-size: 19px; margin: 0 0 4px; font-family: var(--mono); color: var(--text); letter-spacing: -0.01em;
+      }
+      .intro .sub { color: var(--text-mute); font-size: 12px; font-family: var(--mono); font-weight: 400; margin-left: 4px; }
+      .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0 18px; }
+      .stat { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 5px; padding: 10px 14px; cursor: pointer; transition: border-color .1s; }
+      .stat:hover { border-color: var(--accent-2); }
+      .stat .n { font-size: 24px; font-weight: 600; font-family: var(--mono); }
+      .stat .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+      .stat.match .n { color: var(--pass); }
+      .stat.diverge .n { color: var(--fail); }
+      .stat.prng-variant .n { color: var(--accent-2); }
+      .stat.invalid .n { color: var(--flag); }
+      .stat.inconcl .n { color: var(--incon); }
+      .intro p { margin: 8px 0; color: var(--text-dim); font-size: 13px; line-height: 1.55; }
+      .intro p b { color: var(--text); }
+      .intro a { color: var(--accent-2); }
+      .intro .issue-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12px; }
+      .intro .issue-list li { padding: 4px 0; border-bottom: 1px dashed var(--border); color: var(--text-dim); }
+      .intro .issue-list .num-tag { color: var(--accent); font-family: var(--mono); margin-right: 6px; font-weight: 600; }
+      .intro .issue-list .sev { font-family: var(--mono); font-size: 9px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+      .sev.p2 { color: var(--fail); background: rgba(247,118,142,0.12); }
+      .sev.p3 { color: var(--flag); background: rgba(224,175,104,0.12); }
+      .sev.p4 { color: var(--incon); background: rgba(86,95,137,0.18); }
+      .sev.block { color: var(--accent); background: rgba(255,20,147,0.12); }
+      .sev.merged { color: var(--pass); background: rgba(158,206,106,0.12); }
+    </style>
+  </head>
+  <body>
+    <nav class="tab-bar">
+      <a href="index.html">FX A/B <span class="count">40</span></a>
+      <a href="e2e.html">E2E suite <span class="count">10</span></a>
+      <a href="community.html">community + forum <span class="count">48</span></a>
+      <a href="examples-sweep.html">official examples <span class="count">34</span></a>
+      <a href="book-examples-sweep.html" data-active="1">book examples <span class="count">18</span></a>
+      <span class="spacer"></span>
+      <span class="meta"><a href="raw-lpf.html">raw-lpf investigation</a></span>
+    </nav>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <h2 class="sidebar-title"><strong>Book Examples</strong><span id="count" style="color:var(--text-mute);margin-left:6px"></span></h2>
+          <div class="summary" id="summary"></div>
+          <div class="context-note">
+            <b>Sweep state (2026-05-19):</b> 18 curriculum snippets from <code>tests/book-examples/</code> — Sonic Pi book chapters
+            (<code>ch1_*</code>–<code>ch8_*</code>) and E2E coverage tests (<code>e2e_01_core</code>–<code>e2e_11_hardware_noop</code>).
+            Companion roster to the <a href="examples-sweep.html">official examples</a> sweep — same comparator, same 6-tier verdict per SV46.
+            Same two confounds apply: <b>#1</b> heavy <code>with_fx + live_loop</code> chapters hit the <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/358">#358</a> capture-resolver bug (engine renders, tool can't pick up).
+            <b>#2</b> Cross-engine PRNG divergence on <code>rrand</code>/<code>.choose</code> rows is by-construction.
+            E2E rows are intentionally deterministic — they're the cleanest signal of real parity gaps in this roster.
+          </div>
+          <div class="controls">
+            <input id="search" type="search" placeholder="search examples (e.g. ambient, acid)" autocomplete="off" spellcheck="false" />
+            <div class="filters" id="filters">
+              <button class="chip" data-verdict="match" data-on="1">✅ MATCH</button>
+              <button class="chip" data-verdict="prng-variant" data-on="1">≈ PRNG-VARIANT</button>
+              <button class="chip" data-verdict="diverge" data-on="1">❌ DIVERGE</button>
+              <button class="chip" data-verdict="invalid" data-on="1">⚠ INVALID</button>
+              <button class="chip" data-verdict="inconcl" data-on="1">⚠ INCONCL</button>
+              <button class="chip" data-filter="prng" data-on="1" title="show PRNG-driven rows (cross-engine PRNG divergence — known)">PRNG</button>
+              <button class="chip" data-filter="real" data-on="1" title="show PRNG-free real divergences worth triage">PRNG-free</button>
+            </div>
+            <select id="sort">
+              <option value="order">Sort: original order</option>
+              <option value="verdict">Sort: verdict (match → inconcl)</option>
+              <option value="name">Sort: name (a → z)</option>
+              <option value="category">Sort: category</option>
+            </select>
+          </div>
+        </div>
+        <div class="list" id="list"></div>
+      </aside>
+      <main class="detail" id="detail">
+        <div class="detail-empty">Loading…</div>
+      </main>
+    </div>
+
+    <script>
+      const state = {
+        entries: [],
+        filtered: [],
+        selectedSlug: null,
+        verdicts: { match: true, 'prng-variant': true, diverge: true, invalid: true, inconcl: true },
+        showPrng: true,
+        showReal: true,
+        search: '',
+        sort: 'order',
+        meta: null,
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      async function init() {
+        let data;
+        try {
+          const res = await fetch('book-examples-sweep.json', { cache: 'no-store' });
+          data = await res.json();
+        } catch (e) {
+          const isFile = location.protocol === 'file:';
+          $('detail').innerHTML = isFile
+            ? '<div class="detail-empty">Browsers block <code>fetch()</code> on <code>file://</code>. Serve with <code>npm run inspect</code> or <code>python3 -m http.server -d test_results 8080</code> and open <code>http://localhost:8080/book-examples-sweep.html</code>.</div>'
+            : '<div class="detail-empty">Could not load book-examples-sweep.json — run <code>npx tsx tools/build-examples-sweep.ts --roster book-examples</code> first.</div>';
+          return;
+        }
+        state.entries = data.entries;
+        state.meta = { generatedAt: data.generatedAt, counts: data.counts };
+
+        $('count').textContent = `${data.entries.length} examples`;
+        $('summary').innerHTML = renderSummary(data);
+
+        $('search').addEventListener('input', (e) => { state.search = e.target.value.trim().toLowerCase(); render(); });
+        $('sort').addEventListener('change', (e) => { state.sort = e.target.value; render(); });
+        for (const chip of $('filters').querySelectorAll('.chip')) {
+          chip.addEventListener('click', () => {
+            const v = chip.dataset.verdict;
+            const f = chip.dataset.filter;
+            if (v) {
+              state.verdicts[v] = !state.verdicts[v];
+              chip.dataset.on = state.verdicts[v] ? '1' : '0';
+            } else if (f === 'prng') {
+              state.showPrng = !state.showPrng;
+              chip.dataset.on = state.showPrng ? '1' : '0';
+            } else if (f === 'real') {
+              state.showReal = !state.showReal;
+              chip.dataset.on = state.showReal ? '1' : '0';
+            }
+            render();
+          });
+        }
+        document.addEventListener('keydown', onKey);
+
+        render();
+        const initialSlug = new URLSearchParams(location.search).get('ex');
+        if (initialSlug && state.entries.some(e => e.slug === initialSlug)) {
+          select(initialSlug);
+        } else {
+          renderIntro();
+        }
+        window.addEventListener('popstate', (ev) => {
+          const ex = ev.state?.ex;
+          if (ex && state.entries.some(e => e.slug === ex)) select(ex, { push: false });
+          else renderIntro();
+        });
+      }
+
+      function renderSummary(data) {
+        const c = data.counts;
+        const dt = new Date(data.generatedAt);
+        return `
+          <span><b class="ratio-good">${c.match}</b> match</span> ·
+          <span><b class="ratio-bad">${c.diverge}</b> diverge</span> ·
+          <span><b class="ratio-mid">${c.invalid}</b> invalid</span> ·
+          <span><b>${c.inconcl}</b> incon</span><br>
+          <span title="contain rrand/.choose/.shuffle/use_random_seed">PRNG-driven: <b>${c.prng}</b></span> ·
+          <span>PRNG-free DIVERGE: <b class="ratio-mid">${c.prngFreeReal}</b></span> ·
+          <span>heavy → tool-fail: <b class="ratio-mid">${c.heavy}</b></span><br>
+          <span title="${dt.toISOString()}">· generated ${humanAgo(dt)}</span>
+        `;
+      }
+
+      function humanAgo(dt) {
+        const ms = Date.now() - dt.getTime();
+        const m = Math.round(ms / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return `${m}m ago`;
+        const h = Math.round(m / 60);
+        if (h < 24) return `${h}h ago`;
+        const d = Math.round(h / 24);
+        return `${d}d ago`;
+      }
+
+      function applyFilter() {
+        const q = state.search;
+        let list = state.entries.filter(e => {
+          if (!state.verdicts[e.verdict]) return false;
+          if (q && !(e.path.toLowerCase().includes(q) || e.example.toLowerCase().includes(q) || e.category.toLowerCase().includes(q))) return false;
+          if (!state.showPrng && e.prng) return false;
+          if (!state.showReal && e.prngFreeReal) return false;
+          return true;
+        });
+        const order = { match: 0, 'prng-variant': 1, diverge: 2, inconcl: 3, invalid: 4 };
+        switch (state.sort) {
+          case 'verdict':
+            list.sort((a, b) => order[a.verdict] - order[b.verdict] || a.n - b.n);
+            break;
+          case 'name':
+            list.sort((a, b) => a.example.localeCompare(b.example));
+            break;
+          case 'category':
+            list.sort((a, b) => a.category.localeCompare(b.category) || a.example.localeCompare(b.example));
+            break;
+          default:
+            list.sort((a, b) => a.n - b.n);
+        }
+        state.filtered = list;
+      }
+
+      function render() { applyFilter(); renderList(); }
+
+      function renderList() {
+        const html = state.filtered.map(e => {
+          const tags = [];
+          if (e.prng) tags.push('<span class="badge prng">PRNG</span>');
+          if (e.heavy) tags.push('<span class="badge heavy">heavy</span>');
+          if (e.prngFreeReal) tags.push('<span class="badge real">real</span>');
+          const tempo = e.tempoDesktop && e.tempoWeb
+            ? `D ${e.tempoDesktop.toFixed(2)}s · W ${e.tempoWeb.toFixed(2)}s`
+            : (e.divergeAt || (e.verdict === 'invalid' ? 'no WAV' : ''));
+          return `
+            <div class="row" data-slug="${e.slug}" ${state.selectedSlug === e.slug ? 'data-active="1"' : ''}>
+              <div class="row-name">${e.example}</div>
+              <div class="row-cat">${e.category}</div>
+              <div class="row-sub">
+                <span class="badge ${e.verdict}">${e.verdict.toUpperCase()}</span>
+                ${tags.join(' ')}
+                <span style="color:var(--text-mute);font-family:var(--mono)">${tempo}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+        const list = $('list');
+        list.innerHTML = html || '<div class="png-missing" style="margin:20px">No examples match the current filters.</div>';
+        for (const row of list.querySelectorAll('.row')) {
+          row.addEventListener('click', () => select(row.dataset.slug));
+        }
+      }
+
+      function renderIntro() {
+        state.selectedSlug = null;
+        for (const row of $('list').querySelectorAll('.row')) row.dataset.active = '0';
+        const c = state.meta?.counts ?? { match:0, prngVariant:0, diverge:0, invalid:0, inconcl:0, prng:0, prngFreeReal:0, heavy:0 };
+        $('detail').innerHTML = `
+          <div class="intro">
+            <h1>Book Examples — Desktop ↔ Web Sweep <span class="sub">18 curriculum snippets (ch1–ch8 + e2e_01–e2e_11)</span></h1>
+            <div style="color:var(--text-mute);font-family:var(--mono);font-size:11px;margin:4px 0 18px">
+              Sweep tool <code style="color:var(--accent-2)">tools/compare-desktop-vs-web.ts</code> @ <code style="color:var(--accent-2)">--duration 15000</code> · 90s per-example watchdog ·
+              source <code style="color:var(--accent-2)">tests/book-examples/*.rb</code> · generated 2026-05-19
+            </div>
+            <div class="tldr-banner warn">
+              <div class="label">tl;dr — what this roster adds</div>
+              <div style="margin-top:4px">
+                Companion to the <a href="examples-sweep.html">34 official examples</a>. Two sub-rosters:
+                <b>ch1–ch8</b> are full Sonic Pi book chapters (heavy multi-loop pieces — most hit the <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/358">#358</a> tool-fail confound).
+                <b>e2e_01–e2e_11</b> are deterministic coverage tests crafted to exercise specific DSL surfaces (core / threads / FX / control / data / random / scoping / math / composition / coverage / hardware-noop) —
+                <em>these are the cleanest signal in this roster</em> because they're deliberately deterministic and lightweight.
+                Same two confounds apply (heavy → tool-fail #358; PRNG → known design question).
+              </div>
+            </div>
+            <div class="stat-grid">
+              <div class="stat match" data-only="match"><div class="n">${c.match}</div><div class="label">✅ match</div></div>
+              <div class="stat prng-variant" data-only="prng-variant"><div class="n">${c.prngVariant ?? 0}</div><div class="label">≈ prng-variant</div></div>
+              <div class="stat diverge" data-only="diverge"><div class="n">${c.diverge}</div><div class="label">❌ diverge</div></div>
+              <div class="stat invalid" data-only="invalid"><div class="n">${c.invalid}</div><div class="label">⚠ invalid</div></div>
+              <div class="stat inconcl" data-only="inconcl"><div class="n">${c.inconcl}</div><div class="label">⚠ inconcl</div></div>
+            </div>
+            <div class="section-h">Headline findings (post-fix re-sweep)</div>
+            <p>
+              <b style="color:var(--pass)">2 clean MATCH</b> — <code>e2e_09_composition</code> (deterministic composition coverage) +
+              <code>e2e_11_hardware_noop</code> (hardware-noop coverage; both engines silent → trivial match).<br>
+              <b style="color:var(--accent)">2 PRNG-free genuine divergences worth triage:</b> <code>ch6_binary_bizet</code>
+              and <code>e2e_07_scoping</code> — neither uses <code>rrand</code>/<code>.choose</code>; their pitch-track diverges from
+              desktop for non-PRNG reasons. These deserve per-example investigation.<br>
+              <b style="color:var(--flag)">3 INCONCLUSIVE</b> (<code>ch2_coded_beats</code>, <code>e2e_01_core</code>,
+              <code>e2e_02_threads_loops</code>): pitch-track fell back to contour mode and couldn't form a confident verdict on
+              sustained/dense material — honest degradation (<a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/pull/349">#348/#349</a>).<br>
+              <b style="color:var(--flag)">1 INVALID</b> (<code>e2e_03_fx</code>): <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/358">#358</a> capture-resolver
+              confound — heavy FX chain.<br>
+              <b style="color:var(--text-dim)">10 PRNG-driven DIVERGE</b>: cross-engine PRNG divergence by construction; not 10 bugs.
+            </p>
+            <div class="section-h">Two sub-rosters inside this view</div>
+            <p>
+              <b style="color:var(--accent-2)">ch1–ch8 (7 chapters):</b> faithful Ruby ports of Sonic Pi book lessons — each a full
+              composition with multiple <code>live_loop</code>s + <code>with_fx</code>. <b>All 7 are DIVERGE/INCONCL.</b>
+              Of those, 6/7 use PRNG (only <code>ch6_binary_bizet</code> is PRNG-free; that one is real).
+              These chapters weren't designed for parity measurement — they're learning material.
+              <br><br>
+              <b style="color:var(--accent-2)">e2e_01–e2e_11 (11 coverage tests):</b> deterministic snippets targeting one DSL surface each
+              (core / threads / FX / control + _slide / data / random / scoping / math / composition / missing-coverage / hardware-noop).
+              <b>These are the highest-signal rows.</b> The 2 MATCHes both come from this group.
+              <code>e2e_07_scoping</code> is the real per-row finding here (PRNG-free DIVERGE on a tightly-scoped scoping test).
+            </p>
+            <div class="section-h">Sweep methodology note — SV31 confirmed live</div>
+            <p>
+              First book-examples sweep attempt returned <b>18/18 INVALID</b> — every row failed Tier-0 HARD.
+              Diagnosis: <b>Sonic Pi.app's scsynth had degraded</b> from the back-to-back 34-example sweep that preceded it.
+              <code>~/.sonic-pi/log/spider.log</code> showed cascading <code>PromiseTimeoutError</code>s in <code>Server#buffer_alloc</code> /
+              <code>#buffer_info</code> — the daemon couldn't allocate sample buffers anymore. This is <b>SV31 in action</b>
+              ("long-running sweeps must assume external daemons accumulate state, not maintain steady-state").
+              Fix: hard-killed all SP.app processes (<code>pkill -9</code>), relaunched fresh, then re-swept successfully.
+              The sweep driver now does a mid-sweep health check every 5 examples — if <code>buffer_alloc</code> timeouts appear
+              in spider.log, it tears down SP.app and relaunches automatically.
+            </p>
+            <div class="section-h">Confound carry-over from the official-examples sweep</div>
+            <p>
+              The <a href="examples-sweep.html">official examples</a> sweep established two confounds that also apply here:
+              <b>#1</b> comparator web-WAV resolver fails for heavy multi-loop snippets (filed as
+              <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/358">#358</a>, SV27/SV30 class — only 1/18 hit here vs 6/34 in the official roster).
+              <b>#2</b> Cross-engine PRNG divergence by construction — 10/12 DIVERGE rows here.
+              Click any row in the sidebar to see desktop + web WAVs (sync-play), spectrogram diff, Tier-1 pitch-track, and full stats.
+            </p>
+            <div class="section-h">Issues filed across this session</div>
+            <ul class="issue-list">
+              <li><span class="num-tag">#358</span><span class="sev block">BLOCKER</span> Comparator can't resolve web WAV for heavy examples (SV30/SV27). <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/358">view ↗</a></li>
+              <li><span class="num-tag">#354</span><span class="sev p2">P2</span> <code>Ring#mirror</code> / <code>#reflect</code> three-way divergence vs desktop. <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/354">view ↗</a></li>
+              <li><span class="num-tag">#355</span><span class="sev p2">P2</span> <code>chord_degree</code> returns 3 notes; desktop returns 4 (7th chord). <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/355">view ↗</a></li>
+              <li><span class="num-tag">#357</span><span class="sev p2">P2</span> <code>time_warp</code> sequence + tempo diverges. <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/357">view ↗</a></li>
+              <li><span class="num-tag">#356</span><span class="sev p3">P3</span> <code>with_swing</code> not implemented on web. <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/356">view ↗</a></li>
+              <li><span class="num-tag">#353</span><span class="sev p4">P4</span> <code>currentBuildBuilder</code> osc-target follow-up (SP72 class). <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/353">view ↗</a></li>
+              <li><span class="num-tag">PR #352</span><span class="sev merged">MERGED</span> <code>forkBuilder</code> threads <code>_oscHost</code>/<code>_oscPort</code> (closes #345). <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/pull/352">view ↗</a></li>
+            </ul>
+            <div class="footer-meta">
+              <strong>How to read each row:</strong> click an example in the sidebar to load its desktop ↔ web detail panel —
+              both WAVs (with sync-play), the spectrogram diff PNG, full pitch-track sequences, 6-tier verdict breakdown, RMS/peak/MFCC/L2 stats,
+              and links to the raw artifacts. The Tier-1 verdict (pitch-track) is the musical-correctness gate per SV46;
+              Tier 2 (MFCC) and Tier 3 (RMS) may never override it.
+            </div>
+          </div>
+        `;
+        for (const stat of $('detail').querySelectorAll('.stat[data-only]')) {
+          stat.addEventListener('click', () => {
+            const v = stat.dataset.only;
+            for (const k of Object.keys(state.verdicts)) state.verdicts[k] = (k === v);
+            for (const chip of $('filters').querySelectorAll('.chip[data-verdict]')) {
+              chip.dataset.on = chip.dataset.verdict === v ? '1' : '0';
+            }
+            render();
+          });
+        }
+      }
+
+      function select(slug, opts = { push: true }) {
+        state.selectedSlug = slug;
+        for (const row of $('list').querySelectorAll('.row')) {
+          row.dataset.active = row.dataset.slug === slug ? '1' : '0';
+        }
+        const e = state.entries.find(x => x.slug === slug);
+        if (e) renderDetail(e);
+        if (opts.push !== false) {
+          const url = new URL(location.href);
+          url.searchParams.set('ex', slug);
+          history.pushState({ ex: slug }, '', url);
+        }
+        const row = $('list').querySelector(`.row[data-slug="${slug}"]`);
+        if (row) row.scrollIntoView({ block: 'nearest' });
+      }
+
+      function renderDetail(e) {
+        const a = e.artifacts;
+        const desktopUrl = a.desktopWav ? encodeURI(a.desktopWav) : null;
+        const webUrl = a.webWav ? encodeURI(a.webWav) : null;
+
+        // TLDR banner per row
+        let tldr = '';
+        if (e.verdict === 'match') {
+          tldr = `<div class="tldr-banner pass"><div class="label">trustworthy match</div><div style="margin-top:4px">Tier-1 PITCH-MATCH — pitch sequence identical. Tier-0 SOFT (window misalign) does not affect this verdict. Deterministic example, light enough for the comparator to measure.</div></div>`;
+        } else if (e.verdict === 'prng-variant') {
+          tldr = `<div class="tldr-banner pass"><div class="label">musically equivalent — different random walk</div><div style="margin-top:4px">Pitch sequence diverges, but the pitch-class histogram, tempo, and onset count all match: the SAME composition resolved through a different random stream. Desktop reads a frozen <code>rand-stream.wav</code> table; we use MT19937 — categorically different sequences from the same seed (see <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/364">#364</a>). Cross-engine seed parity is <em>not</em> a v1 goal (<a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/358">#358</a> Option A). NOT a bug.</div></div>`;
+        } else if (e.verdict === 'invalid' && e.heavy) {
+          tldr = `<div class="tldr-banner warn"><div class="label">tool artifact, NOT engine failure</div><div style="margin-top:4px">"Web produced no WAV" — but the engine is rendering. This is the <a href="https://github.com/MrityunjayBhardwaj/SonicPiWeb/issues/358">#358</a> comparator-resolver bug for heavy multi-loop examples. The audio exists; the tool can't resolve it.</div></div>`;
+        } else if (e.verdict === 'diverge' && e.prng && !e.prngFreeReal) {
+          tldr = `<div class="tldr-banner warn"><div class="label">cross-engine PRNG divergence — known</div><div style="margin-top:4px">This example uses PRNG (<code>rrand</code> / <code>.choose</code> / <code>.shuffle</code>). Ruby PRNG ≠ our <code>SeededRandom</code> → different sequences <em>by construction</em>. Not a per-example bug; one open product decision.</div></div>`;
+        } else if (e.verdict === 'diverge' && e.prngFreeReal) {
+          tldr = `<div class="tldr-banner"><div class="label">PRNG-free real divergence — worth triage</div><div style="margin-top:4px">No PRNG involved. Pitch-track sequence genuinely differs. This row deserves per-example investigation.</div></div>`;
+        } else if (e.verdict === 'inconcl') {
+          tldr = `<div class="tldr-banner warn"><div class="label">inconclusive</div><div style="margin-top:4px">Pitch-track couldn't form a confident verdict on one or both sides (sustained/pad material → contour-mode fallback, or onset detection ambiguity).</div></div>`;
+        }
+
+        const audioHtml = `
+          <div class="audio-grid">
+            <div class="audio-card">
+              <h3>Desktop SP ${e.desktopStats ? `<span>${e.desktopStats.duration.toFixed(2)}s · RMS ${e.desktopStats.rms.toFixed(4)} · peak ${e.desktopStats.peak.toFixed(4)}</span>` : ''}</h3>
+              ${desktopUrl
+                ? `<audio id="audio-desktop" controls preload="metadata" src="${desktopUrl}"></audio>`
+                : '<div class="missing">desktop.wav missing</div>'}
+            </div>
+            <div class="audio-card">
+              <h3>SonicPi.js (web) ${e.webStats ? `<span>${e.webStats.duration.toFixed(2)}s · RMS ${e.webStats.rms.toFixed(4)} · peak ${e.webStats.peak.toFixed(4)}</span>` : ''}</h3>
+              ${webUrl
+                ? `<audio id="audio-web" controls preload="metadata" src="${webUrl}"></audio>`
+                : `<div class="missing">web.wav missing${e.heavy ? ' — comparator resolver failed (#358), engine likely rendered audio' : ''}</div>`}
+            </div>
+          </div>
+        `;
+
+        const syncHtml = (desktopUrl && webUrl) ? `
+          <div class="sync-bar">
+            <button class="sync-btn" id="sync-play">▶ Play both</button>
+            <button class="sync-btn sec" id="sync-stop">■ Stop both</button>
+          </div>
+        ` : '';
+
+        const errorsHtml = e.consoleErrors?.length
+          ? `<div class="section-h">Web console errors</div><pre class="errors">${e.consoleErrors.map(escapeHtml).join('\n')}</pre>` : '';
+
+        const spectroHtml = a.spectrogramPng
+          ? `<div class="png-block"><img src="${encodeURI(a.spectrogramPng)}" alt="spectrogram diff" loading="lazy"></div>`
+          : `<div class="png-missing">spectrogram.png missing${e.heavy ? ' — generated only when both WAVs present (see #358)' : ''}</div>`;
+
+        const pitchHtml = (e.pitchDesktop || e.pitchWeb) ? `
+          <table class="pitch-table">
+            <tr><td class="label">desktop</td><td class="seq">${e.pitchDesktop ? `<code>${e.pitchDesktop}</code>` : '—'}</td></tr>
+            <tr><td class="label">web</td><td class="seq ${e.verdict === 'diverge' ? 'diverge' : ''}">${e.pitchWeb ? `<code>${e.pitchWeb}</code>` : '—'}</td></tr>
+            ${e.detectMethodDesktop ? `<tr><td class="label">method</td><td class="seq" style="color:var(--text-mute)">desktop <code>${e.detectMethodDesktop}</code> · web <code>${e.detectMethodWeb}</code>${e.detectMethodDesktop !== e.detectMethodWeb ? ' <span style="color:var(--flag)">(asymmetric)</span>' : ''}</td></tr>` : ''}
+            ${e.tempoDesktop !== null ? `<tr><td class="label">tempo</td><td class="seq">desktop <code>${e.tempoDesktop.toFixed(3)}s</code> · web <code>${e.tempoWeb.toFixed(3)}s</code> ${tempoRatioBadge(e.tempoDesktop, e.tempoWeb)}</td></tr>` : ''}
+            ${e.onsetDesktop !== null ? `<tr><td class="label">onsets</td><td class="seq">desktop <code>${e.onsetDesktop}</code> · web <code>${e.onsetWeb}</code></td></tr>` : ''}
+            ${e.divergeAt ? `<tr><td class="label">diverge at</td><td class="seq diverge">${e.divergeAt}</td></tr>` : ''}
+          </table>
+        ` : '<div class="png-missing">No pitch-track data — sweep produced no Tier-1 sequences for this row.</div>';
+
+        const tier0 = `
+          <ul class="tier-list">
+            <li><span class="tname">Tier 0.1</span><span class="tres ok">✓ Sample rate consistent (48000 Hz)</span></li>
+            <li><span class="tname">Tier 0.2</span><span class="tres ${e.tier0Soft ? 'soft' : 'ok'}">${e.tier0Soft ? '⚠ Capture-window misaligned (SOFT — Tier 1 pitch still valid)' : '✓ Window aligned'}</span></li>
+            ${e.tier0Hard ? `<li><span class="tname">Tier 0.HARD</span><span class="tres hard">✗ ${e.tier0Hard}</span></li>` : ''}
+          </ul>
+        `;
+
+        const statsHtml = e.desktopStats && e.webStats ? `
+          <table class="metrics">
+            <thead><tr><th>Metric</th><th>Desktop SP</th><th>SonicPi.js</th><th>web / desktop</th></tr></thead>
+            <tbody>
+              ${statsRow('Duration (s)', e.desktopStats.duration, e.webStats.duration, 3)}
+              ${statsRow('Peak', e.desktopStats.peak, e.webStats.peak, 4)}
+              ${statsRow('RMS', e.desktopStats.rms, e.webStats.rms, 4)}
+              <tr><td>Clipping (%)</td><td class="num">${e.desktopStats.clipping.toFixed(2)}</td><td class="num">${e.webStats.clipping.toFixed(2)}</td><td class="num">—</td></tr>
+              <tr><td>Sample rate</td><td class="num">${e.desktopStats.sampleRate}</td><td class="num">${e.webStats.sampleRate}</td><td class="num">—</td></tr>
+              ${e.l2MelDb !== null ? `<tr><td>L2 (mel-dB)</td><td class="num" colspan="2" style="text-align:center">${e.l2MelDb.toFixed(2)}</td><td class="num">${l2Cls(e.l2MelDb)}</td></tr>` : ''}
+              ${e.mfccDist !== null ? `<tr><td>MFCC distance</td><td class="num" colspan="2" style="text-align:center">${e.mfccDist.toFixed(2)}</td><td class="num">${mfccCls(e.mfccDist)} <span style="color:var(--text-mute);font-size:9px">Tier-2 only</span></td></tr>` : ''}
+            </tbody>
+          </table>
+        ` : '<div class="png-missing">Stats unavailable — one side produced no WAV.</div>';
+
+        const links = [];
+        if (a.report) links.push(`<a href="${encodeURI(a.report)}" target="_blank">comparator report.md ↗</a>`);
+        if (a.snippet) links.push(`<a href="${encodeURI(a.snippet)}" target="_blank">snippet.rb ↗</a>`);
+        if (desktopUrl) links.push(`<a href="${desktopUrl}" target="_blank">desktop.wav ↗</a>`);
+        if (webUrl) links.push(`<a href="${webUrl}" target="_blank">web.wav ↗</a>`);
+
+        $('detail').innerHTML = `
+          <div class="detail-head">
+            <h1>${e.example}</h1>
+            <span class="badge ${e.verdict}">${e.verdict.toUpperCase()}</span>
+            ${e.prng ? '<span class="badge prng">PRNG-driven</span>' : ''}
+            ${e.heavy ? '<span class="badge heavy">heavy → tool-fail (#358)</span>' : ''}
+            ${e.prngFreeReal ? '<span class="badge real">PRNG-free divergence</span>' : ''}
+            <span class="meta">${e.category} · ${e.path}</span>
+          </div>
+          <div class="verdict-line" style="color:var(--text-dim);margin:4px 0 8px;font-family:var(--mono);font-size:11px">${escapeHtml(e.verdictRaw)}</div>
+          ${tldr}
+
+          ${audioHtml}
+          ${syncHtml}
+          ${errorsHtml}
+
+          <div class="section-h">Reference snippet</div>
+          <pre class="snippet" id="snippet-block">loading…</pre>
+
+          <div class="section-h">Spectrogram comparison (Desktop SP ↔ Web)</div>
+          ${spectroHtml}
+
+          <div class="section-h">Tier 1 — Pitch-track (THE verdict per SV46)</div>
+          ${pitchHtml}
+
+          <div class="section-h">Tier 0 — Validity gates</div>
+          ${tier0}
+
+          <div class="section-h">Stats (Tier 2 / Tier 3 — supporting only, never override Tier 1)</div>
+          ${statsHtml}
+
+          <div class="links">${links.join('')}</div>
+
+          <div class="footer-meta">
+            <strong>How to read this:</strong> Tier-1 pitch-track is the musical-correctness verdict (SV46). Tier-2 (MFCC, L2) and Tier-3 (RMS, peak) are supporting only — a high MFCC with a Tier-1 PITCH-MATCH means timbre/gain (the known ~0.5× web gain ratio + reverb tail), not wrong notes (SP93). MFCC may NEVER override Tier 1.
+            Tier-0 SOFT (window misalignment) does not invalidate Tier 1 (pitch-track is prefix-compared); it only flags Tier-3 + onset-count aggregates as unreliable.
+            <br>Generated 2026-05-18 by <code>tools/build-examples-sweep.ts</code> from <code>.captures/compare_*.md</code>.
+          </div>
+        `;
+
+        if (a.snippet) {
+          fetch(a.snippet).then(r => r.text()).then(t => {
+            const el = $('snippet-block');
+            if (el) el.textContent = t;
+          }).catch(() => {
+            const el = $('snippet-block');
+            if (el) el.textContent = '(could not load snippet — try serving over http)';
+          });
+        }
+
+        wireSyncButtons();
+      }
+
+      function statsRow(label, d, w, decimals) {
+        return `<tr><td>${label}</td><td class="num">${d.toFixed(decimals)}</td><td class="num">${w.toFixed(decimals)}</td><td class="num">${ratioCell(w, d)}</td></tr>`;
+      }
+      function ratioCell(num, denom) {
+        if (!denom || !num) return '—';
+        const r = num / denom;
+        const cls = Math.abs(Math.log2(r)) <= 0.5 ? 'ratio-good' : Math.abs(Math.log2(r)) <= 1 ? 'ratio-mid' : 'ratio-bad';
+        return `<span class="${cls}">${r.toFixed(2)}×</span>`;
+      }
+      function l2Cls(v) {
+        const cls = v < 10 ? 'ratio-good' : v <= 25 ? 'ratio-mid' : 'ratio-bad';
+        const txt = v < 10 ? 'very close' : v <= 25 ? 'similar shape' : 'divergent';
+        return `<span class="${cls}">${txt}</span>`;
+      }
+      function mfccCls(v) {
+        const cls = v <= 80 ? 'ratio-good' : v <= 180 ? 'ratio-mid' : 'ratio-bad';
+        const txt = v <= 30 ? 'similar' : v <= 80 ? 'noticeable' : v <= 180 ? 'different' : 'unrelated';
+        return `<span class="${cls}">${txt}</span>`;
+      }
+      function tempoRatioBadge(d, w) {
+        const r = Math.max(d, w) / Math.min(d, w);
+        if (r < 1.5) return `<span class="badge match">match</span>`;
+        if (r < 3) return `<span class="badge inconcl">${r.toFixed(1)}× drift</span>`;
+        return `<span class="badge diverge">${r.toFixed(1)}× divergent</span>`;
+      }
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+      }
+
+      function wireSyncButtons() {
+        const play = $('sync-play');
+        const stop = $('sync-stop');
+        const desk = $('audio-desktop');
+        const web = $('audio-web');
+        if (!play || !stop) return;
+        play.addEventListener('click', async () => {
+          if (!desk && !web) return;
+          if (desk) desk.currentTime = 0;
+          if (web) web.currentTime = 0;
+          const promises = [];
+          if (desk) promises.push(desk.play());
+          if (web) promises.push(web.play());
+          try { await Promise.all(promises); } catch (err) { console.warn('[sweep] sync play blocked?', err); }
+        });
+        stop.addEventListener('click', () => {
+          if (desk) { desk.pause(); desk.currentTime = 0; }
+          if (web)  { web.pause();  web.currentTime = 0; }
+        });
+      }
+
+      function onKey(ev) {
+        if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLSelectElement) return;
+        const list = state.filtered;
+        if (!list.length) return;
+        const i = list.findIndex(x => x.slug === state.selectedSlug);
+        if (ev.key === 'ArrowDown' || ev.key === 'j') {
+          ev.preventDefault();
+          const next = list[Math.min(list.length - 1, i + 1)] ?? list[0];
+          select(next.slug);
+        } else if (ev.key === 'ArrowUp' || ev.key === 'k') {
+          ev.preventDefault();
+          const prev = list[Math.max(0, i - 1)] ?? list[0];
+          select(prev.slug);
+        } else if (ev.key === ' ') {
+          const btn = $('sync-play');
+          if (btn) { ev.preventDefault(); btn.click(); }
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>

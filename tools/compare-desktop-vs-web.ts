@@ -285,12 +285,61 @@ function writeComparisonReport(r: ComparisonResult): void {
     let mismatch = -1
     for (let i = 0; i < n; i++) if (dSeq[i] !== wSeq[i]) { mismatch = i; break }
     const inconc = dp.inconclusive || wp.inconclusive
+    const dt = dp.median_spacing_s, wt = wp.median_spacing_s
+    const tempoOk = dt > 0 && Math.abs(dt - wt) / dt < 0.1
+    // #358 Option A — PRNG-VARIANT sub-verdict. Cross-engine PRNG parity is
+    // NOT a v1 goal (#364 findings: desktop reads a frozen rand-stream.wav
+    // table, we use MT19937 — categorically different streams, the same seed
+    // yields different sequences). When a PRNG-driven snippet diverges but
+    // both sides walk the SAME musical material (identical note-set, matching
+    // tempo, comparable note count) that's "same composition, different
+    // random walk" — musically equivalent, not a bug. Demoting separates the
+    // ~34 PRNG-noise rows from real parity bugs in the sweep dashboard.
+    //
+    // Requires ALL FOUR uncorrelated signals to coincide (conservative — a
+    // false positive needs a 4-way coincidence):
+    //   1. source contains a PRNG token (PRNG_RE)
+    //   2. unique note-set identical on both sides (scale/bank match)
+    //   3. tempo matches (tempoOk, <10% inter-onset delta)
+    //   4. onset count within ±15%
+    const PRNG_RE = /\b(rrand|rrand_i|rand|rand_i|\.choose|\.shuffle|\.pick|one_in|dice|use_random_seed)\b/
+    let prngVariant = false
+    let prngCos = 0
+    // Observation (Lokayata): exact note-SET equality is too brittle. Pitch
+    // trackers inject octave/harmonic noise that DIFFERS between desktop and
+    // web rendering — a pure `.shuffle` of a 4-note bank produced desktop
+    // set {60,67,72,64,79,91,84,76} (overtones of the pluck synth) vs web
+    // {60,64,67,72}. Set-equality caught ~nothing.
+    //
+    // Robust signature of "same composition, different random walk":
+    // the pitch-class HISTOGRAM is permutation-invariant. A shuffle preserves
+    // it exactly; a few tracker octave-errors perturb it slightly; a real
+    // bug (genuinely wrong notes) shifts it substantially. Cosine similarity
+    // of the 12-bin pitch-class histograms ≥ 0.92, combined with the four
+    // independent guards (PRNG token in source · tempo match · count within
+    // ±15% · genuine pitch divergence), is the PRNG-VARIANT signature.
+    const pcHist = (seq: number[]): number[] => {
+      const h = new Array(12).fill(0)
+      for (const v of seq) h[((Math.round(v) % 12) + 12) % 12]++
+      return h
+    }
+    const cosine = (a: number[], b: number[]): number => {
+      let dot = 0, na = 0, nb = 0
+      for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i] }
+      return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0
+    }
+    if (mismatch >= 0 && !inconc && n > 0 && tempoOk && PRNG_RE.test(r.code)) {
+      prngCos = cosine(pcHist(dSeq.slice(0, n)), pcHist(wSeq.slice(0, n)))
+      const countRatio = Math.min(dp.count, wp.count) / Math.max(dp.count, wp.count)
+      if (prngCos >= 0.92 && countRatio >= 0.85) prngVariant = true
+    }
     if (inconc) pitchVerdict = `⚠ INCONCLUSIVE — contour-low confidence (desktop ${dp.method}/${dp.confidence}, web ${wp.method}/${wp.confidence}); sustained/noisy material, no Tier-1 verdict`
     else if (n === 0) pitchVerdict = '⚠ no notes detected on one/both sides'
     else if (mismatch < 0) pitchVerdict = `✓ PITCH-MATCH — ${unit} identical over ${n}`
+    else if (prngVariant) {
+      pitchVerdict = `≈ pitch-class histogram cos=${prngCos.toFixed(3)} (≥0.92), tempo match, count within ±15%, PRNG token in source; same composition, different random walk (cross-engine seed parity is not a v1 goal — #358/#364)`
+    }
     else pitchVerdict = `✗ PITCH DIVERGENCE at ${pcMode ? 'pc' : 'note'} ${mismatch} (desktop ${dSeq[mismatch]} vs web ${wSeq[mismatch]})`
-    const dt = dp.median_spacing_s, wt = wp.median_spacing_s
-    const tempoOk = dt > 0 && Math.abs(dt - wt) / dt < 0.1
     t1.push(`- **1.1 Note progression:** ${pitchVerdict}`)
     t1.push(`  - method: desktop \`${dp.method}\` (conf ${dp.confidence}) · web \`${wp.method}\` (conf ${wp.confidence})${pcMode ? ' · compared octave-invariant' : ''}`)
     t1.push(`  - desktop: \`${(pcMode ? dp.pc : dp.midi).slice(0, 24).join(',')}\``)
@@ -309,6 +358,8 @@ function writeComparisonReport(r: ComparisonResult): void {
     lines.push(`### ❌ INVALID — Tier 0 HARD gate failed. The pitch sequence itself is unreliable; no verdict until fixed.`)
   } else if (pitchVerdict.startsWith('✓')) {
     lines.push(`### ✅ Tier 1 ${pitchVerdict}  (the musical-correctness verdict)${softNote}`)
+  } else if (pitchVerdict.startsWith('≈')) {
+    lines.push(`### ≈ Tier 1 PRNG-VARIANT — musically equivalent (same composition, different random walk). ${pitchVerdict.slice(2)}${softNote}`)
   } else if (pitchVerdict.startsWith('✗')) {
     lines.push(`### ❌ Tier 1 ${pitchVerdict}  (musical correctness FAILED — Tier 2/3 cannot override this)`)
   } else {
