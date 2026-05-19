@@ -72,6 +72,20 @@ export class SonicPiEngine {
   private eventStream = new SoundEventStream()
   private initialized = false
   private playing = false
+  /**
+   * Origin for top-level `current_time` rebase (#364 item 4). Desktop SP resets
+   * `spider_time` to 0 at every job start (`runtime.rb:120,939`
+   * `__init_spider_time_and_beat!`). Our `scheduler.audioTime` is a live read
+   * of the monotonic `AudioContext.currentTime` clock, which only resets when
+   * the context is closed. `stop()` correctly preserves the bridge for reuse,
+   * so without this rebase a fresh Run after Stop reports prior session time
+   * (verified: V1=1.616, V2 after 5s wait + Run=8.677, Δ=+7.061s).
+   *
+   * Internal scheduling MUST keep using absolute `audioCtx.currentTime` (sleep
+   * queues, cue timestamps, /s_new timetags all interact with audioCtx). Only
+   * the user-visible top-level `current_time` reader subtracts this origin.
+   */
+  private _spiderTimeOrigin = 0
   private runtimeErrorHandler: ((err: Error) => void) | null = null
   private printHandler: ((msg: string) => void) | null = null
   private cueHandler: ((name: string, time: number) => void) | null = null
@@ -363,6 +377,14 @@ export class SonicPiEngine {
         }
 
         const audioCtx = this.bridge?.audioContext
+        // #364 item 4 — desktop's `__init_spider_time_and_beat!`
+        // (runtime.rb:120,939) resets `spider_time = 0` at every job start.
+        // We rebase here on every fresh Run (NOT hot-swap; hot-swap correctly
+        // preserves the same scheduler so live-coding `current_time` keeps
+        // advancing — there's no session-restart marker for live coding).
+        // Verified: V1=1.616s on first Run, V2=8.677s on Run after Stop+5s
+        // wait, Δ=+7.061s (`tools/test_current_time_reset.ts`).
+        this._spiderTimeOrigin = audioCtx?.currentTime ?? 0
         this.scheduler = new VirtualTimeScheduler({
           getAudioTime: () => audioCtx?.currentTime ?? 0,
           schedAheadTime: this.schedAheadTime,
@@ -726,8 +748,15 @@ export class SonicPiEngine {
           // loopBeats persists current_beat across iterations like loopTicks does.
           // task.bpm seeds the builder's bpm so current_beat_duration reflects a
           // top-level use_bpm; user's own use_bpm inside the body overrides.
+          // #364 item 4 — rebase task.virtualTime against _spiderTimeOrigin so
+          // `current_time` inside live_loops (incl. the synthetic `__run_once`
+          // wrapper for bare top-level code) reads per-Run elapsed seconds,
+          // not absolute audioCtx wall clock. task.virtualTime advances by
+          // sleep durations from iteration start, so subtracting the per-Run
+          // origin yields desktop-equivalent semantics
+          // (runtime.rb:120,939 `__init_spider_time_and_beat!`).
           builder.setIterationContext(
-            task.virtualTime,
+            task.virtualTime - this._spiderTimeOrigin,
             this.loopBeats.get(name) ?? 0,
             this.schedAheadTime,
             task.bpm,
@@ -1199,7 +1228,7 @@ export class SonicPiEngine {
         // BUILDER_METHODS so __b.current_* gives per-task reads.
         () => 0,                                                    // current_beat: top-level has no beat counter
         () => 60 / defaultBpm,                                       // current_beat_duration
-        () => scheduler.audioTime,                                   // current_time: audio-context wall clock at top level
+        () => scheduler.audioTime - this._spiderTimeOrigin,          // current_time: rebased per-Run (#364 item 4)
         () => this.schedAheadTime,                                   // current_sched_ahead_time
         // Tier B — PRNG inspection (#227). Top-level mutates topLevelBuilder's
         // RNG; inside live_loops these route to __b.* for per-loop RNG.
@@ -1431,10 +1460,11 @@ export class SonicPiEngine {
         // Tier C PR #3 — vt / bt / rt (#255). Pure BPM math + virtual-time
         // alias. At top level use_bpm only updates `defaultBpm` (it does not
         // call topLevelBuilder.use_bpm), and `current_time` reads
-        // scheduler.audioTime (line 1051) — so we mirror those sources here.
-        // Inside live_loops the transpiler routes through __b via
-        // BUILDER_METHODS, where per-task _currentBpm and _audioTime are correct.
-        () => scheduler.audioTime,                                   // vt: thread's local virtual run time
+        // scheduler.audioTime rebased per-Run (#364 item 4) — so we mirror
+        // those sources here. Inside live_loops the transpiler routes through
+        // __b via BUILDER_METHODS, where per-task _currentBpm and _audioTime
+        // are correct.
+        () => scheduler.audioTime - this._spiderTimeOrigin,          // vt: thread's local virtual run time (rebased)
         (t: number) => t * 60 / defaultBpm,                          // bt: beats → seconds at current bpm
         (t: number) => t * defaultBpm / 60,                          // rt: seconds → beats (bypasses bpm scaling)
       ]
